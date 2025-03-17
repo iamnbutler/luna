@@ -622,8 +622,10 @@ dependencies = [
 name = "canvas"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "gpui",
  "serde",
+ "uuid",
 ]
 
 [[package]]

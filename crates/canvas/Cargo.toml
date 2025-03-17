@@ -9,5 +9,7 @@ name = "canvas"
 path = "src/canvas.rs"
 
 [dependencies]
+anyhow.workspace = true
 gpui.workspace = true
 serde.workspace = true
+uuid.workspace = true

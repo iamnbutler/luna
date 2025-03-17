@@ -1,7 +1,8 @@
+use canvas::{Canvas, LunaElement};
 use gpui::*;
 
 struct Luna {
-    text: SharedString,
+    canvas: Entity<Canvas>,
 }
 
 impl Render for Luna {
@@ -14,16 +15,23 @@ impl Render for Luna {
             .items_center()
             .text_xl()
             .text_color(rgb(0xffffff))
-            .child(format!("Hello, {}!", &self.text))
+            .child(self.canvas.clone())
     }
 }
 
 fn main() {
     Application::new().run(|cx: &mut App| {
         cx.open_window(WindowOptions::default(), |_, cx| {
-            cx.new(|_cx| Luna {
-                text: "World".into(),
-            })
+            let canvas = cx.new(|_cx| Canvas::default());
+            let element_1 = LunaElement::default();
+            let element_2 = LunaElement::default();
+
+            canvas.update(cx, |canvas, _| {
+                canvas.add_element(element_1, point(px(0.), px(0.)));
+                canvas.add_element(element_2, point(px(300.), px(300.)));
+            });
+
+            cx.new(|_cx| Luna { canvas })
         })
         .unwrap();
     });
