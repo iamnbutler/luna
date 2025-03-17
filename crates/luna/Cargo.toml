@@ -1,0 +1,13 @@
+[package]
+name = "luna"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "luna"
+path = "src/luna.rs"
+
+[dependencies]
+gpui.workspace = true
+canvas.workspace = true

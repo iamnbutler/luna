@@ -1,0 +1,13 @@
+[package]
+name = "canvas"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "canvas"
+path = "src/canvas.rs"
+
+[dependencies]
+gpui.workspace = true
+serde.workspace = true
