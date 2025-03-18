@@ -249,17 +249,31 @@ impl Canvas {
     fn handle_mouse_down(
         &mut self,
         event: &MouseDownEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let current_modifiers = window.modifiers();
+        let meta_pressed = current_modifiers.alt;
         let position = event.position;
-        if let Some((id, _)) = self.element_at_position(position, cx) {
-            self.dragged_element = Some((id, position));
-        } else {
-            self.is_dragging_canvas = true;
-            self.drag_start = Some(position);
+        let element_at_position = self.element_at_position(position, cx);
+
+        match (event.button, meta_pressed) {
+            (MouseButton::Left, true) => {
+                if element_at_position.is_none() {
+                    self.is_dragging_canvas = true;
+                    self.drag_start = Some(position);
+                }
+                cx.notify();
+            }
+            (MouseButton::Left, _) => {
+                if let Some(element) = element_at_position {
+                    let element_id = element.0;
+                    self.dragged_element = Some((element_id, position));
+                }
+                cx.notify();
+            }
+            _ => {}
         }
-        cx.notify();
     }
 
     fn handle_mouse_move(
@@ -414,6 +428,8 @@ impl Focusable for Canvas {
     }
 }
 
+const TITLEBAR_HEIGHT: f32 = 24.0;
+
 struct Luna {
     titlebar: Entity<Titlebar>,
     canvas: Entity<Canvas>,
@@ -428,8 +444,18 @@ impl Render for Luna {
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
+            .child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .size_full()
+                    .overflow_hidden()
+                    .child(self.canvas.clone()),
+            )
             .child(self.titlebar.clone())
-            .child(div().size_full().flex_1().child(self.canvas.clone()))
     }
 }
 
@@ -449,7 +475,7 @@ impl Render for Titlebar {
         div()
             .flex()
             .w_full()
-            .h(px(28.))
+            .h(px(TITLEBAR_HEIGHT))
             .border_b_1()
             .border_color(rgb(0x3F434C))
             .bg(rgb(0x2A2C31))
