@@ -11,12 +11,6 @@ use uuid::Uuid;
 
 use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 
-impl_actions!(element, [SelectElement]);
-
-pub enum Event {
-    ElementSelected { id: LunaElementId },
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct SelectElement {
     pub id: LunaElementId,
@@ -108,8 +102,6 @@ impl Focusable for LunaElement {
         self.focus_handle.clone()
     }
 }
-
-impl EventEmitter<Event> for LunaElement {}
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ElementStyle {
@@ -276,21 +268,24 @@ impl Canvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some((id, start_pos)) = self.dragged_element {
-            let delta = event.position - start_pos;
-            if let Some(old_pos) = self.element_positions.get(&id) {
-                let new_pos = self.clamp_element_position(*old_pos + delta, id, cx);
-                self.move_element(id, new_pos, cx);
-                self.dragged_element = Some((id, event.position));
-            }
-        } else if self.is_dragging_canvas {
-            if let Some(start_pos) = self.drag_start {
+        if let Some(left_button) = event.pressed_button {
+            if let Some((id, start_pos)) = self.dragged_element {
                 let delta = event.position - start_pos;
-                self.canvas_offset = self.clamp_canvas_offset(self.canvas_offset + delta, window);
-                self.drag_start = Some(event.position);
+                if let Some(old_pos) = self.element_positions.get(&id) {
+                    let new_pos = self.clamp_element_position(*old_pos + delta, id, cx);
+                    self.move_element(id, new_pos, cx);
+                    self.dragged_element = Some((id, event.position));
+                }
+            } else if self.is_dragging_canvas {
+                if let Some(start_pos) = self.drag_start {
+                    let delta = event.position - start_pos;
+                    self.canvas_offset =
+                        self.clamp_canvas_offset(self.canvas_offset + delta, window);
+                    self.drag_start = Some(event.position);
+                }
             }
+            cx.notify();
         }
-        cx.notify();
     }
 
     fn clamp_element_position(
@@ -394,7 +389,6 @@ impl Render for Canvas {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
-            .on_action(cx.listener(Self::select_element))
             .absolute()
             .w(self.initial_size.width)
             .h(self.initial_size.height)
