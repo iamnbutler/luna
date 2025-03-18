@@ -434,17 +434,59 @@ impl Focusable for Canvas {
 }
 
 struct Luna {
+    titlebar: Entity<Titlebar>,
     canvas: Entity<Canvas>,
 }
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .flex()
+            .flex_col()
             .relative()
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
-            .child(self.canvas.clone())
+            .child(self.titlebar.clone())
+            .child(div().size_full().flex_1().child(self.canvas.clone()))
+    }
+}
+
+struct Titlebar {
+    title: SharedString,
+}
+
+impl Titlebar {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title = "Untitled".into();
+        Titlebar { title }
+    }
+}
+
+impl Render for Titlebar {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .w_full()
+            .h(px(28.))
+            .border_b_1()
+            .border_color(rgb(0x3F434C))
+            .bg(rgb(0x2A2C31))
+            .text_xs()
+            .text_color(rgb(0xA9AFBC))
+            .font_family("Berkeley Mono")
+            .child(div().flex().items_center().h_full().px_2().child("Luna"))
+        // .child(
+        //     div()
+        //         .flex()
+        //         .flex_1()
+        //         .items_center()
+        //         .h_full()
+        //         .w_full()
+        //         .px_2()
+        //         .text_center()
+        //         .child(self.title.clone()),
+        // )
     }
 }
 
@@ -464,7 +506,9 @@ fn main() {
                 canvas.add_element(element_4, point(px(240.), px(550.)), cx);
             });
 
-            cx.new(|_cx| Luna { canvas })
+            let titlebar = cx.new(|cx| Titlebar::new(window, cx));
+
+            cx.new(|_cx| Luna { titlebar, canvas })
         })
         .unwrap();
 
