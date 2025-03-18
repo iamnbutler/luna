@@ -70,6 +70,11 @@ impl Render for LunaElement {
         let style = self.style.clone();
         let id = self.id.clone();
         let position = self.style.position.expect("Canvas must have a position");
+        let dragging = if let Some(canvas) = self.canvas.upgrade() {
+            canvas.read(cx).dragging.is_some()
+        } else {
+            false
+        };
 
         div()
             .id(self.id.element_id())
@@ -85,8 +90,13 @@ impl Render for LunaElement {
             } else {
                 gpui::transparent_black()
             })
-            // todo: not when dragging an element
-            .hover(|this| this.border_color(rgb(0x0C8CE9)))
+            .hover(|this| {
+                if !dragging {
+                    this.border_color(rgb(0x0C8CE9))
+                } else {
+                    this
+                }
+            })
             .child(
                 div()
                     .size_full()
