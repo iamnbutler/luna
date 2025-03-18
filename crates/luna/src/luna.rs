@@ -172,7 +172,7 @@ pub struct Canvas {
     initial_size: Size<Pixels>,
     next_id: usize,
     selected_ids: Vec<LunaElementId>,
-    dragged_element: Option<(LunaElementId, Point<Pixels>)>,
+    dragging: Option<Point<Pixels>>,
     canvas_offset: Point<Pixels>,
     is_dragging_canvas: bool,
     drag_start: Option<Point<Pixels>>,
@@ -191,7 +191,7 @@ impl Canvas {
             },
             next_id: 0,
             selected_ids: Vec::new(),
-            dragged_element: None,
+            dragging: None,
             canvas_offset: Point::default(),
             is_dragging_canvas: false,
             drag_start: None,
@@ -256,27 +256,35 @@ impl Canvas {
         cx: &mut Context<Self>,
     ) {
         let current_modifiers = window.modifiers();
-        let meta_pressed = current_modifiers.alt;
-        let platform_pressed = current_modifiers.platform;
         let position = event.position;
         let element_at_position = self.element_at_position(position, cx);
 
-        match (event.button, meta_pressed) {
-            (MouseButton::Left, true) => {
+        match (event.button, current_modifiers) {
+            (MouseButton::Left, modifiers) if modifiers.alt => {
                 if element_at_position.is_none() {
                     self.is_dragging_canvas = true;
                     self.drag_start = Some(position);
                 }
                 cx.notify();
             }
-            (MouseButton::Left, _) => {
+            (MouseButton::Left, modifiers) => {
                 if let Some(element) = element_at_position {
                     let element_id = element.0;
-                    if !platform_pressed {
-                        self.clear_selection(cx);
+                    if modifiers.shift {
+                        // Toggle selection when shift is pressed
+                        if self.selected_ids.contains(&element_id) {
+                            self.deselect_element(element_id, cx);
+                        } else {
+                            self.select_element(element_id, cx);
+                        }
+                    } else {
+                        // Clear selection only if clicking on an unselected element
+                        if !self.selected_ids.contains(&element_id) {
+                            self.clear_selection(cx);
+                            self.select_element(element_id, cx);
+                        }
                     }
-                    self.select_element(element_id, cx);
-                    self.dragged_element = Some((element_id, position));
+                    self.dragging = Some(position);
                 } else {
                     self.clear_selection(cx);
                 }
@@ -293,13 +301,10 @@ impl Canvas {
         cx: &mut Context<Self>,
     ) {
         if let Some(left_button) = event.pressed_button {
-            if let Some((id, start_pos)) = self.dragged_element {
+            if let Some(start_pos) = self.dragging {
                 let delta = event.position - start_pos;
-                if let Some(old_pos) = self.element_positions.get(&id) {
-                    let new_pos = self.clamp_element_position(*old_pos + delta, id, cx);
-                    self.move_element(id, new_pos, cx);
-                    self.dragged_element = Some((id, event.position));
-                }
+                self.move_selected_elements(delta, cx);
+                self.dragging = Some(event.position);
             } else if self.is_dragging_canvas {
                 if let Some(start_pos) = self.drag_start {
                     let delta = event.position - start_pos;
@@ -343,10 +348,21 @@ impl Canvas {
     }
 
     fn handle_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        self.dragged_element = None;
+        self.dragging = None;
         self.is_dragging_canvas = false;
         self.drag_start = None;
         cx.notify();
+    }
+
+    fn move_selected_elements(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
+        let selected_ids = self.selected_ids.clone();
+
+        for &id in &selected_ids {
+            if let Some(old_pos) = self.element_positions.get(&id) {
+                let new_pos = self.clamp_element_position(*old_pos + delta, id, cx);
+                self.move_element(id, new_pos, cx);
+            }
+        }
     }
 
     fn element_at_position(
