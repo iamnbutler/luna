@@ -12,6 +12,39 @@ use uuid::Uuid;
 use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 
 const EDGE_HITBOX_PADDING: f32 = 6.0;
+const CORNER_HANDLE_SIZE: f32 = 9.0;
+
+const THEME_SELECTED: Rgba = Rgba {
+    r: 12.0,
+    g: 140.0,
+    b: 233.0,
+    a: 1.0,
+};
+
+// TODO: Go update gpui::Corner to derive display/EnumString
+/// Identifies a corner of a 2d box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Corner {
+    /// The top left corner
+    TopLeft,
+    /// The top right corner
+    TopRight,
+    /// The bottom left corner
+    BottomLeft,
+    /// The bottom right corner
+    BottomRight,
+}
+
+impl std::fmt::Display for Corner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Corner::TopLeft => write!(f, "TopLeft"),
+            Corner::TopRight => write!(f, "TopRight"),
+            Corner::BottomLeft => write!(f, "BottomLeft"),
+            Corner::BottomRight => write!(f, "BottomRight"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct LunaElementId(usize);
@@ -63,6 +96,18 @@ impl LunaElement {
             .map(|canvas| canvas.read(cx).selected_ids.contains(&self.id))
             .unwrap_or(false)
     }
+
+    pub fn render_corner_handle(&self, corner: Corner, cx: &mut Context<Self>) -> Stateful<Div> {
+        let id = ElementId::Name(format!("corner-handle-{}", corner).into());
+
+        div()
+            .absolute()
+            .id(id)
+            .size(px(CORNER_HANDLE_SIZE))
+            .border_1()
+            .border_color(THEME_SELECTED)
+            .bg(gpui::white())
+    }
 }
 
 impl Render for LunaElement {
@@ -97,6 +142,14 @@ impl Render for LunaElement {
                     this
                 }
             })
+            .child(
+                div()
+                    .size_full()
+                    .bg(style.background_color)
+                    .border(style.border_width)
+                    .border_color(style.border_color),
+            )
+            // this likely moves to the canvas level
             .child(
                 div()
                     .size_full()
