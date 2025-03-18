@@ -37,28 +37,6 @@ impl Into<ElementId> for LunaElementId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct SerializableElement {
-    id: LunaElementId,
-    name: String,
-    style: ElementStyle,
-}
-
-impl SerializableElement {
-    pub fn new(id: LunaElementId, style: ElementStyle) -> Self {
-        Self {
-            id,
-            name: "Untitled".to_string(),
-            style,
-        }
-    }
-
-    pub fn position(&mut self, position: Point<Pixels>) -> &mut Self {
-        self.style.position = Some(position);
-        self
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct LunaElement {
     id: LunaElementId,
@@ -71,7 +49,7 @@ pub struct LunaElement {
 impl LunaElement {
     pub fn new(
         id: LunaElementId,
-        name: Option<impl Into<SharedString>>,
+        name: Option<SharedString>,
         style: ElementStyle,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -87,7 +65,7 @@ impl LunaElement {
         })
     }
 
-    pub fn selected(mut self, selected: bool) -> Self {
+    pub fn selected(&mut self, selected: bool) -> &mut Self {
         self.selected = selected;
         self
     }
@@ -196,8 +174,8 @@ impl Into<ElementId> for CanvasId {
 
 pub struct Canvas {
     id: CanvasId,
+    elements: HashMap<LunaElementId, Entity<LunaElement>>,
     element_positions: HashMap<LunaElementId, Point<Pixels>>,
-    elements: HashMap<LunaElementId, SerializableElement>,
     focus_handle: FocusHandle,
     initial_size: Size<Pixels>,
     next_id: usize,
@@ -243,22 +221,32 @@ impl Canvas {
 
     pub fn add_element(
         &mut self,
-        element: ElementStyle,
+        style: ElementStyle,
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) -> LunaElementId {
         let id = LunaElementId(self.next_id);
         self.next_id += 1;
 
-        let element = SerializableElement::new(id, element);
+        let mut style = style;
+        style.position = Some(position);
 
+        let element = LunaElement::new(id, None, style, cx);
         self.elements.insert(id, element);
         self.element_positions.insert(id, position);
         id
     }
 
-    pub fn move_element(&mut self, id: LunaElementId, new_position: Point<Pixels>) -> bool {
-        if self.elements.get(&id).is_some() {
+    pub fn move_element(
+        &mut self,
+        id: LunaElementId,
+        new_position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if let Some(element) = self.elements.get(&id) {
+            element.update(cx, |element, _cx| {
+                element.style.position = Some(new_position);
+            });
             self.element_positions.insert(id, new_position);
             true
         } else {
@@ -273,7 +261,7 @@ impl Canvas {
         cx: &mut Context<Self>,
     ) {
         let position = event.position;
-        if let Some((id, _)) = self.element_at_position(position) {
+        if let Some((id, _)) = self.element_at_position(position, cx) {
             self.dragged_element = Some((id, position));
         } else {
             self.is_dragging_canvas = true;
@@ -291,8 +279,8 @@ impl Canvas {
         if let Some((id, start_pos)) = self.dragged_element {
             let delta = event.position - start_pos;
             if let Some(old_pos) = self.element_positions.get(&id) {
-                let new_pos = self.clamp_element_position(*old_pos + delta, id);
-                self.move_element(id, new_pos);
+                let new_pos = self.clamp_element_position(*old_pos + delta, id, cx);
+                self.move_element(id, new_pos, cx);
                 self.dragged_element = Some((id, event.position));
             }
         } else if self.is_dragging_canvas {
@@ -305,9 +293,14 @@ impl Canvas {
         cx.notify();
     }
 
-    fn clamp_element_position(&self, pos: Point<Pixels>, id: LunaElementId) -> Point<Pixels> {
+    fn clamp_element_position(
+        &self,
+        pos: Point<Pixels>,
+        id: LunaElementId,
+        cx: &mut Context<Self>,
+    ) -> Point<Pixels> {
         let element = self.elements.get(&id).unwrap();
-        let element_size = element.style.size;
+        let element_size = element.read(cx).style.size;
 
         let max_x = self.initial_size.width - element_size.width;
         let max_y = self.initial_size.height - element_size.height;
@@ -326,17 +319,17 @@ impl Canvas {
         )
     }
 
-    fn find_element_by_id(&self, id: LunaElementId) -> Option<&LunaElement> {
+    fn find_element_by_id(&self, id: LunaElementId) -> Option<&Entity<LunaElement>> {
         self.elements.get(&id)
     }
 
-    fn select_element_by_id(&mut self, id: LunaElementId) {
+    fn select_element_by_id(&mut self, id: LunaElementId, cx: &mut Context<Self>) {
         if let Some(element) = self.find_element_by_id(id) {
             if let Some(index) = self.selected_ids.iter().position(|&i| i == id) {
                 self.selected_ids.remove(index);
             } else {
                 element.update(cx, |element, cx| {
-                    element.selected(true, cx);
+                    element.selected(true);
                 });
                 self.selected_ids.push(id);
             }
@@ -345,8 +338,8 @@ impl Canvas {
 
     fn handle_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         if self.dragged_element.is_none() {
-            if let Some((id, _)) = self.element_at_position(event.position) {
-                self.select_element_by_id(id);
+            if let Some((id, _)) = self.element_at_position(event.position, cx) {
+                self.select_element_by_id(id, cx);
             } else {
                 self.deselect_all();
             }
@@ -360,16 +353,20 @@ impl Canvas {
     fn element_at_position(
         &self,
         position: Point<Pixels>,
-    ) -> Option<(LunaElementId, &SerializableElement)> {
+        cx: &mut Context<Self>,
+    ) -> Option<(LunaElementId, &Entity<LunaElement>)> {
         let adjusted_position = position - self.canvas_offset;
-        self.elements.iter().find_map(|(id, element)| {
-            let el_pos = self.element_positions.get(id).unwrap();
-            let el_bounds = Bounds {
-                origin: *el_pos,
-                size: element.style.size,
-            };
-            if el_bounds.contains(&adjusted_position) {
-                Some((*id, element))
+        self.element_positions.iter().find_map(|(&id, &pos)| {
+            if let Some(element) = self.elements.get(&id) {
+                let el_bounds = Bounds {
+                    origin: pos,
+                    size: element.read(cx).style.size,
+                };
+                if el_bounds.contains(&adjusted_position) {
+                    Some((id, element))
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -379,24 +376,9 @@ impl Canvas {
     pub fn render_elements(
         &mut self,
         _window: &mut gpui::Window,
-        cx: &mut Context<Self>,
+        _cx: &mut Context<Self>,
     ) -> Vec<Entity<LunaElement>> {
-        let elements = self
-            .elements
-            .iter()
-            .map(|(id, element)| {
-                let position = self
-                    .element_positions
-                    .get(id)
-                    .expect("Element position not found");
-                let mut element = element.clone();
-                element.position(position.clone());
-
-                LunaElement::new(*id, element.name.into(), element.style.clone(), cx)
-            })
-            .collect();
-
-        elements
+        self.elements.values().cloned().collect()
     }
 }
 
@@ -420,6 +402,15 @@ impl Render for Canvas {
             .top(clamped_offset.y)
             .bg(rgb(0x1B1D22))
             .children(self.render_elements(window, cx))
+            .child(
+                div()
+                    .absolute()
+                    .text_xs()
+                    .text_color(gpui::red())
+                    .top_2()
+                    .left_2()
+                    .child(format!("{:?}", self.selected_ids)),
+            )
     }
 }
 
