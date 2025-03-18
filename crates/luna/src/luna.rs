@@ -1,7 +1,7 @@
 #![allow(dead_code, unused)]
 
 //! The Canvas, the heart of Luna.
-use gpui::*;
+use gpui::{prelude::FluentBuilder as _, *};
 
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 
 const EDGE_HITBOX_PADDING: f32 = 6.0;
-const CORNER_HANDLE_SIZE: f32 = 9.0;
+const CORNER_HANDLE_SIZE: f32 = 7.0;
 
 const THEME_SELECTED: Rgba = Rgba {
     r: 12.0,
@@ -23,7 +23,10 @@ const THEME_SELECTED: Rgba = Rgba {
 
 // TODO: Go update gpui::Corner to derive display/EnumString
 /// Identifies a corner of a 2d box.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum Corner {
     /// The top left corner
     TopLeft,
@@ -99,14 +102,36 @@ impl LunaElement {
 
     pub fn render_corner_handle(&self, corner: Corner, cx: &mut Context<Self>) -> Stateful<Div> {
         let id = ElementId::Name(format!("corner-handle-{}", corner).into());
+        let corner_handle_offset = px(CORNER_HANDLE_SIZE / 2.0 - 1.0);
 
-        div()
+        let mut div = div()
             .absolute()
             .id(id)
             .size(px(CORNER_HANDLE_SIZE))
             .border_1()
             .border_color(THEME_SELECTED)
-            .bg(gpui::white())
+            .bg(gpui::white());
+
+        match corner {
+            Corner::TopLeft => {
+                div = div.top(-corner_handle_offset).left(-corner_handle_offset);
+            }
+            Corner::TopRight => {
+                div = div.top(-corner_handle_offset).right(-corner_handle_offset);
+            }
+            Corner::BottomLeft => {
+                div = div
+                    .bottom(-corner_handle_offset)
+                    .left(-corner_handle_offset);
+            }
+            Corner::BottomRight => {
+                div = div
+                    .bottom(-corner_handle_offset)
+                    .right(-corner_handle_offset);
+            }
+        }
+
+        div
     }
 }
 
@@ -120,6 +145,7 @@ impl Render for LunaElement {
         } else {
             false
         };
+        let corner_handle_offset = px(CORNER_HANDLE_SIZE / 2.0 - 1.0);
 
         div()
             .id(self.id.element_id())
@@ -149,14 +175,16 @@ impl Render for LunaElement {
                     .border(style.border_width)
                     .border_color(style.border_color),
             )
-            // this likely moves to the canvas level
-            .child(
-                div()
-                    .size_full()
-                    .bg(style.background_color)
-                    .border(style.border_width)
-                    .border_color(style.border_color),
-            )
+            .when(self.selected(cx), |this| {
+                this
+                    // this likely moves to the canvas level
+                    // as eventually we'll need to draw selection bounds
+                    // around multiple elements
+                    .child(self.render_corner_handle(Corner::TopLeft, cx))
+                    .child(self.render_corner_handle(Corner::TopRight, cx))
+                    .child(self.render_corner_handle(Corner::BottomLeft, cx))
+                    .child(self.render_corner_handle(Corner::BottomRight, cx))
+            })
     }
 }
 

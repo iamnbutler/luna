@@ -16,3 +16,5 @@ schemars_derive.workspace = true
 serde.workspace = true
 uuid.workspace = true
 smallvec.workspace = true
+strum.workspace = true
+strum_macros.workspace = true

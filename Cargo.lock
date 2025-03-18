@@ -1858,7 +1858,7 @@ dependencies = [
  "slotmap",
  "smallvec",
  "smol",
- "strum",
+ "strum 0.26.3",
  "sum_tree",
  "taffy",
  "thiserror",
@@ -2493,6 +2493,8 @@ dependencies = [
  "schemars_derive",
  "serde",
  "smallvec",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "uuid",
 ]
 
@@ -4189,11 +4191,30 @@ dependencies = [
 
 [[package]]
 name = "strum"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
+
+[[package]]
+name = "strum"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 1.0.109",
 ]
 
 [[package]]
