@@ -65,6 +65,7 @@ pub struct LunaElement {
     name: SharedString,
     style: ElementStyle,
     focus_handle: FocusHandle,
+    selected: bool,
 }
 
 impl LunaElement {
@@ -82,24 +83,13 @@ impl LunaElement {
                 .unwrap_or_else(|| SharedString::from("Untitled")),
             style,
             focus_handle,
+            selected: false,
         })
     }
 
-    pub fn handle_press(
-        &mut self,
-        e: &ClickEvent,
-        _window: &mut gpui::Window,
-        cx: &mut Context<Self>,
-    ) {
-        println!("handle_press: Clicked on element with ID: {:?}", self.id);
-        if e.down.button == MouseButton::Right {
-            // just return for now
-            return;
-        } else {
-            cx.dispatch_action(&SelectElement { id: self.id });
-        }
-
-        cx.notify();
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
     }
 }
 
@@ -111,25 +101,27 @@ impl Render for LunaElement {
 
         div()
             .id(self.id.element_id())
-            // .on_click(cx.listener(|this, e: &ClickEvent, window, cx| {
-            //     println!("Element clicked at position: {:?}", e.down.position);
-            //     cx.stop_propagation();
-            // }))
-            .on_click(cx.listener(move |this, e, window, cx| {
-                println!("Clicked on element with ID: {:?}", id);
-                this.handle_press(e, window, cx);
-                cx.stop_propagation();
-            }))
             .track_focus(&self.focus_handle.clone())
-            // .occlude()
             .absolute()
             .top(position.y)
             .left(position.x)
             .w(style.size.width)
             .h(style.size.height)
-            .bg(style.background_color)
-            .border(style.border_width)
-            .border_color(style.border_color)
+            .border_1()
+            .border_color(if self.selected {
+                rgb(0x0C8CE9).into()
+            } else {
+                gpui::transparent_black()
+            })
+            // todo: not when dragging an element
+            .hover(|this| this.border_color(rgb(0x0C8CE9)))
+            .child(
+                div()
+                    .size_full()
+                    .bg(style.background_color)
+                    .border(style.border_width)
+                    .border_color(style.border_color),
+            )
     }
 }
 
@@ -182,26 +174,6 @@ impl From<CanvasId> for Uuid {
     }
 }
 
-pub struct CanvasElements(HashMap<LunaElementId, SerializableElement>);
-
-impl CanvasElements {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&LunaElementId, &SerializableElement)> {
-        self.0.iter()
-    }
-
-    pub fn get(&self, id: &LunaElementId) -> Option<&SerializableElement> {
-        self.0.get(id)
-    }
-
-    pub fn insert(&mut self, id: LunaElementId, element: SerializableElement) {
-        self.0.insert(id, element);
-    }
-}
-
 impl CanvasId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
@@ -225,7 +197,7 @@ impl Into<ElementId> for CanvasId {
 pub struct Canvas {
     id: CanvasId,
     element_positions: HashMap<LunaElementId, Point<Pixels>>,
-    elements: CanvasElements,
+    elements: HashMap<LunaElementId, SerializableElement>,
     focus_handle: FocusHandle,
     initial_size: Size<Pixels>,
     next_id: usize,
@@ -241,7 +213,7 @@ impl Canvas {
         cx.new(|cx| Self {
             id: CanvasId::new(),
             element_positions: HashMap::new(),
-            elements: CanvasElements::new(),
+            elements: HashMap::new(),
             focus_handle: cx.focus_handle(),
             initial_size: Size {
                 width: px(2000.),
@@ -354,7 +326,31 @@ impl Canvas {
         )
     }
 
-    fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn find_element_by_id(&self, id: LunaElementId) -> Option<&LunaElement> {
+        self.elements.get(&id)
+    }
+
+    fn select_element_by_id(&mut self, id: LunaElementId) {
+        if let Some(element) = self.find_element_by_id(id) {
+            if let Some(index) = self.selected_ids.iter().position(|&i| i == id) {
+                self.selected_ids.remove(index);
+            } else {
+                element.update(cx, |element, cx| {
+                    element.selected(true, cx);
+                });
+                self.selected_ids.push(id);
+            }
+        }
+    }
+
+    fn handle_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.dragged_element.is_none() {
+            if let Some((id, _)) = self.element_at_position(event.position) {
+                self.select_element_by_id(id);
+            } else {
+                self.deselect_all();
+            }
+        }
         self.dragged_element = None;
         self.is_dragging_canvas = false;
         self.drag_start = None;
