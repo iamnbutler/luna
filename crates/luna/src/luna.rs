@@ -433,7 +433,7 @@ impl Canvas {
             cx.notify();
         }
 
-        if !self.selected_ids.is_empty() {
+        if !self.selected_ids.is_empty() && self.selected_ids.len() == 1 {
             if let Some(bounds) = self.get_selection_bounds(cx) {
                 let adjusted_position = event.position - self.canvas_offset;
                 self.current_resize_direction = None;
@@ -487,9 +487,12 @@ impl Canvas {
                         self.current_resize_direction = Some(ResizeDirection::Bottom);
                     }
                 }
-                cx.notify();
             }
+        } else {
+            self.current_resize_direction = None;
         }
+
+        cx.notify();
     }
 
     fn clamp_element_position(
@@ -673,7 +676,7 @@ impl Canvas {
     fn render_selection_container(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         self.get_selection_bounds(cx).map(|bounds| {
             let container = SelectionContainer::new(bounds);
-            let empty_selection = self.selected_ids.is_empty();
+            let multiple_selection = self.selected_ids.len() > 1;
             let current_resize_direction = self.current_resize_direction;
 
             div()
@@ -687,7 +690,6 @@ impl Canvas {
                     div()
                         .id("selection-container-border")
                         .absolute()
-                        // .occlude()
                         .top_0()
                         .left_0()
                         .right_0()
@@ -704,23 +706,25 @@ impl Canvas {
                             this.bg(THEME_SELECTED.alpha(0.12))
                         }),
                 )
-                .child(
-                    self.render_resize_control(Corner::TopLeft)
-                        .cursor(CursorStyle::ResizeUpLeftDownRight),
-                )
-                .child(
-                    self.render_resize_control(Corner::TopRight)
-                        .cursor(CursorStyle::ResizeUpRightDownLeft),
-                )
-                .child(
-                    self.render_resize_control(Corner::BottomLeft)
-                        .cursor(CursorStyle::ResizeUpRightDownLeft),
-                )
-                .child(
-                    self.render_resize_control(Corner::BottomRight)
-                        .cursor(CursorStyle::ResizeUpLeftDownRight),
-                )
-                .children(self.render_resize_edge_control(cx))
+                .when(!multiple_selection, |this| {
+                    this.child(
+                        self.render_resize_control(Corner::TopLeft)
+                            .cursor(CursorStyle::ResizeUpLeftDownRight),
+                    )
+                    .child(
+                        self.render_resize_control(Corner::TopRight)
+                            .cursor(CursorStyle::ResizeUpRightDownLeft),
+                    )
+                    .child(
+                        self.render_resize_control(Corner::BottomLeft)
+                            .cursor(CursorStyle::ResizeUpRightDownLeft),
+                    )
+                    .child(
+                        self.render_resize_control(Corner::BottomRight)
+                            .cursor(CursorStyle::ResizeUpLeftDownRight),
+                    )
+                    .children(self.render_resize_edge_control(cx))
+                })
         })
     }
 }
