@@ -438,29 +438,43 @@ impl Canvas {
                 let adjusted_position = event.position - self.canvas_offset;
                 self.current_resize_direction = None;
 
-                if bounds.contains(&adjusted_position) {
+                // ensure that the bounds match doesn't drop off the pixel you
+                // move your mouse beyond the selection's edge
+                let wiggle_room = px(4.0);
+                let expanded_bounds = Bounds {
+                    origin: Point::new(
+                        bounds.origin.x - wiggle_room,
+                        bounds.origin.y - wiggle_room,
+                    ),
+                    size: Size::new(
+                        bounds.size.width + wiggle_room * 2.0,
+                        bounds.size.height + wiggle_room * 2.0,
+                    ),
+                };
+
+                if expanded_bounds.contains(&adjusted_position) {
                     let edge_hitbox = px(EDGE_HITBOX_PADDING);
                     let left_hitbox = Bounds {
-                        origin: bounds.origin,
-                        size: Size::new(edge_hitbox, bounds.size.height),
+                        origin: expanded_bounds.origin,
+                        size: Size::new(edge_hitbox, expanded_bounds.size.height),
                     };
                     let right_hitbox = Bounds {
                         origin: Point::new(
-                            bounds.origin.x + bounds.size.width - edge_hitbox,
-                            bounds.origin.y,
+                            expanded_bounds.origin.x + expanded_bounds.size.width - edge_hitbox,
+                            expanded_bounds.origin.y,
                         ),
-                        size: Size::new(edge_hitbox, bounds.size.height),
+                        size: Size::new(edge_hitbox, expanded_bounds.size.height),
                     };
                     let top_hitbox = Bounds {
-                        origin: bounds.origin,
-                        size: Size::new(bounds.size.width, edge_hitbox),
+                        origin: expanded_bounds.origin,
+                        size: Size::new(expanded_bounds.size.width, edge_hitbox),
                     };
                     let bottom_hitbox = Bounds {
                         origin: Point::new(
-                            bounds.origin.x,
-                            bounds.origin.y + bounds.size.height - edge_hitbox,
+                            expanded_bounds.origin.x,
+                            expanded_bounds.origin.y + expanded_bounds.size.height - edge_hitbox,
                         ),
-                        size: Size::new(bounds.size.width, edge_hitbox),
+                        size: Size::new(expanded_bounds.size.width, edge_hitbox),
                     };
 
                     if left_hitbox.contains(&adjusted_position) {
@@ -632,8 +646,9 @@ impl Canvas {
                 .id("resize-edge-control")
                 .flex()
                 .flex_none()
-                .absolute()
-                .cursor(direction.cursor());
+                .absolute();
+            // need to do this in the expanded hitbox
+            // .cursor(direction.cursor());
 
             if is_horizontal {
                 el = el.h(px(EDGE_HITBOX_PADDING)).top_0().bottom_0().h_full();
