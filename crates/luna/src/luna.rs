@@ -230,6 +230,7 @@ pub struct Canvas {
     initial_size: Size<Pixels>,
     next_id: usize,
     selected_ids: Vec<LunaElementId>,
+    dragged_element: Option<(LunaElementId, Point<Pixels>)>,
 }
 
 impl Canvas {
@@ -245,6 +246,7 @@ impl Canvas {
             },
             next_id: 0,
             selected_ids: Vec::new(),
+            dragged_element: None,
         })
     }
 
@@ -286,6 +288,59 @@ impl Canvas {
         }
     }
 
+    fn handle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let position = event.position;
+        if let Some((id, _)) = self.element_at_position(position) {
+            self.dragged_element = Some((id, position));
+            cx.notify();
+        }
+    }
+
+    fn handle_mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some((id, start_pos)) = self.dragged_element {
+            let delta = event.position - start_pos;
+            if let Some(old_pos) = self.element_positions.get(&id) {
+                let new_pos = *old_pos + delta;
+                self.move_element(id, new_pos);
+                self.dragged_element = Some((id, event.position));
+                cx.notify();
+            }
+        }
+    }
+
+    fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.dragged_element = None;
+        cx.notify();
+    }
+
+    fn element_at_position(
+        &self,
+        position: Point<Pixels>,
+    ) -> Option<(LunaElementId, &SerializableElement)> {
+        self.elements.iter().find_map(|(id, element)| {
+            let el_pos = self.element_positions.get(id).unwrap();
+            let el_bounds = Bounds {
+                origin: *el_pos,
+                size: element.style.size,
+            };
+            if el_bounds.contains(&position) {
+                Some((*id, element))
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn render_elements(
         &mut self,
         _window: &mut gpui::Window,
@@ -318,7 +373,9 @@ impl Render for Canvas {
         div()
             .id(id)
             .track_focus(&focus_handle)
-            .on_click(cx.listener(|_, _, _, _| println!("Clicked Canvas!")))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+            .on_mouse_move(cx.listener(Self::handle_mouse_move))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .on_action(cx.listener(Self::select_element))
             .relative()
             .w(self.initial_size.width)
