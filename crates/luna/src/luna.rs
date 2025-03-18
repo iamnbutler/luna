@@ -313,24 +313,45 @@ impl Canvas {
     fn handle_mouse_move(
         &mut self,
         event: &MouseMoveEvent,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if let Some((id, start_pos)) = self.dragged_element {
             let delta = event.position - start_pos;
             if let Some(old_pos) = self.element_positions.get(&id) {
-                let new_pos = *old_pos + delta;
+                let new_pos = self.clamp_element_position(*old_pos + delta, id);
                 self.move_element(id, new_pos);
                 self.dragged_element = Some((id, event.position));
             }
         } else if self.is_dragging_canvas {
             if let Some(start_pos) = self.drag_start {
                 let delta = event.position - start_pos;
-                self.canvas_offset += delta;
+                self.canvas_offset = self.clamp_canvas_offset(self.canvas_offset + delta, window);
                 self.drag_start = Some(event.position);
             }
         }
         cx.notify();
+    }
+
+    fn clamp_element_position(&self, pos: Point<Pixels>, id: LunaElementId) -> Point<Pixels> {
+        let element = self.elements.get(&id).unwrap();
+        let element_size = element.style.size;
+
+        let max_x = self.initial_size.width - element_size.width;
+        let max_y = self.initial_size.height - element_size.height;
+
+        Point::new(pos.x.clamp(px(0.), max_x), pos.y.clamp(px(0.), max_y))
+    }
+
+    fn clamp_canvas_offset(&self, offset: Point<Pixels>, window: &Window) -> Point<Pixels> {
+        let viewport_size = window.bounds();
+        let max_x = (self.initial_size.width - viewport_size.size.width).max(px(0.));
+        let max_y = (self.initial_size.height - viewport_size.size.height).max(px(0.));
+
+        Point::new(
+            offset.x.clamp(-max_x, px(0.)),
+            offset.y.clamp(-max_y, px(0.)),
+        )
     }
 
     fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -387,6 +408,7 @@ impl Render for Canvas {
     fn render(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
         let id: ElementId = self.id.clone().into();
         let focus_handle = self.focus_handle.clone();
+        let clamped_offset = self.clamp_canvas_offset(self.canvas_offset, window);
 
         div()
             .id(id)
@@ -398,11 +420,9 @@ impl Render for Canvas {
             .absolute()
             .w(self.initial_size.width)
             .h(self.initial_size.height)
-            .left(self.canvas_offset.x)
-            .top(self.canvas_offset.y)
+            .left(clamped_offset.x)
+            .top(clamped_offset.y)
             .bg(rgb(0x1B1D22))
-            .border_color(gpui::red())
-            .border_1()
             .children(self.render_elements(window, cx))
     }
 }
