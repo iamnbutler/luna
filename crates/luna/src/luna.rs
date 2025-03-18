@@ -49,6 +49,68 @@ impl std::fmt::Display for Corner {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+pub enum ResizeDirection {
+    Left,
+    Right,
+    Top,
+    Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl std::fmt::Display for ResizeDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResizeDirection::Left => write!(f, "Left"),
+            ResizeDirection::Right => write!(f, "Right"),
+            ResizeDirection::Top => write!(f, "Up"),
+            ResizeDirection::Bottom => write!(f, "Down"),
+            ResizeDirection::TopLeft => write!(f, "TopLeft"),
+            ResizeDirection::TopRight => write!(f, "TopRight"),
+            ResizeDirection::BottomLeft => write!(f, "BottomLeft"),
+            ResizeDirection::BottomRight => write!(f, "BottomRight"),
+        }
+    }
+}
+
+impl ResizeDirection {
+    pub fn is_edge(&self) -> bool {
+        match self {
+            ResizeDirection::Left
+            | ResizeDirection::Right
+            | ResizeDirection::Top
+            | ResizeDirection::Bottom => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_corner(&self) -> bool {
+        match self {
+            ResizeDirection::TopLeft
+            | ResizeDirection::TopRight
+            | ResizeDirection::BottomLeft
+            | ResizeDirection::BottomRight => true,
+            _ => false,
+        }
+    }
+
+    pub fn cursor(&self) -> CursorStyle {
+        match self {
+            ResizeDirection::Left => CursorStyle::ResizeLeft,
+            ResizeDirection::Right => CursorStyle::ResizeRight,
+            ResizeDirection::Top => CursorStyle::ResizeUp,
+            ResizeDirection::Bottom => CursorStyle::ResizeDown,
+            ResizeDirection::TopLeft => CursorStyle::ResizeUpRightDownLeft,
+            ResizeDirection::TopRight => CursorStyle::ResizeUpLeftDownRight,
+            ResizeDirection::BottomLeft => CursorStyle::ResizeUpLeftDownRight,
+            ResizeDirection::BottomRight => CursorStyle::ResizeUpRightDownLeft,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct LunaElementId(usize);
 
@@ -229,6 +291,7 @@ pub struct Canvas {
     canvas_offset: Point<Pixels>,
     is_dragging_canvas: bool,
     drag_start: Option<Point<Pixels>>,
+    current_resize_direction: Option<ResizeDirection>,
 }
 
 impl Canvas {
@@ -248,6 +311,7 @@ impl Canvas {
             canvas_offset: Point::default(),
             is_dragging_canvas: false,
             drag_start: None,
+            current_resize_direction: None,
         })
     }
 
@@ -512,10 +576,51 @@ impl Canvas {
         })
     }
 
+    fn render_resize_edge_control(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        if let Some(direction) = self.current_resize_direction {
+            if !direction.is_edge() {
+                return None;
+            }
+
+            let is_horizontal = matches!(direction, ResizeDirection::Left | ResizeDirection::Right);
+
+            let mut el = div()
+                .flex()
+                .flex_none()
+                .absolute()
+                .cursor(direction.cursor())
+                .child(div().bg(THEME_SELECTED).map(|this| {
+                    if is_horizontal {
+                        this.h(px(EDGE_HITBOX_PADDING)).w_full().h_px()
+                    } else {
+                        this.w(px(EDGE_HITBOX_PADDING)).h_full().w_px()
+                    }
+                }));
+
+            if is_horizontal {
+                el = el.h(px(EDGE_HITBOX_PADDING)).left_0().right_0();
+            } else {
+                el = el.w(px(EDGE_HITBOX_PADDING)).top_0().bottom_0().flex_col();
+            }
+
+            match direction {
+                ResizeDirection::Right | ResizeDirection::Bottom => {
+                    el = el.items_end();
+                }
+                _ => (),
+            }
+
+            return Some(el);
+        }
+
+        None
+    }
+
     fn render_selection_container(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         self.get_selection_bounds(cx).map(|bounds| {
             let container = SelectionContainer::new(bounds);
             let empty_selection = self.selected_ids.is_empty();
+            let current_resize_direction = self.current_resize_direction;
 
             div()
                 .absolute()
@@ -528,11 +633,16 @@ impl Canvas {
                         .absolute()
                         .size_full()
                         .border_1()
-                        .border_color(THEME_SELECTED)
+                        .border_color(if current_resize_direction.is_some() {
+                            THEME_SELECTED
+                        } else {
+                            THEME_SELECTED.alpha(0.32)
+                        })
                         .when(self.selected_ids.is_empty(), |this| {
                             this.bg(THEME_SELECTED.alpha(0.12))
                         }),
                 )
+                .children(self.render_resize_edge_control(cx))
                 .child(
                     self.render_resize_control(Corner::TopLeft)
                         .cursor(CursorStyle::ResizeUpLeftDownRight),
