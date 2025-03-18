@@ -619,16 +619,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "canvas"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "gpui",
- "serde",
- "uuid",
-]
-
-[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2497,8 +2487,13 @@ dependencies = [
 name = "luna"
 version = "0.1.0"
 dependencies = [
- "canvas",
+ "anyhow",
  "gpui",
+ "schemars",
+ "schemars_derive",
+ "serde",
+ "smallvec",
+ "uuid",
 ]
 
 [[package]]

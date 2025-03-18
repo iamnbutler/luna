@@ -9,5 +9,10 @@ name = "luna"
 path = "src/luna.rs"
 
 [dependencies]
+anyhow.workspace = true
 gpui.workspace = true
-canvas.workspace = true
+schemars.workspace = true
+schemars_derive.workspace = true
+serde.workspace = true
+uuid.workspace = true
+smallvec.workspace = true
