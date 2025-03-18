@@ -111,17 +111,17 @@ impl Render for LunaElement {
 
         div()
             .id(self.id.element_id())
+            // .on_click(cx.listener(|this, e: &ClickEvent, window, cx| {
+            //     println!("Element clicked at position: {:?}", e.down.position);
+            //     cx.stop_propagation();
+            // }))
             .on_click(cx.listener(move |this, e, window, cx| {
                 println!("Clicked on element with ID: {:?}", id);
                 this.handle_press(e, window, cx);
                 cx.stop_propagation();
             }))
-            .on_hover(cx.listener(move |this, e, window, cx| {
-                println!("Hovered over element with ID: {:?}", id);
-                cx.stop_propagation();
-            }))
             .track_focus(&self.focus_handle.clone())
-            .occlude()
+            // .occlude()
             .absolute()
             .top(position.y)
             .left(position.x)
@@ -231,6 +231,9 @@ pub struct Canvas {
     next_id: usize,
     selected_ids: Vec<LunaElementId>,
     dragged_element: Option<(LunaElementId, Point<Pixels>)>,
+    canvas_offset: Point<Pixels>,
+    is_dragging_canvas: bool,
+    drag_start: Option<Point<Pixels>>,
 }
 
 impl Canvas {
@@ -247,6 +250,9 @@ impl Canvas {
             next_id: 0,
             selected_ids: Vec::new(),
             dragged_element: None,
+            canvas_offset: Point::default(),
+            is_dragging_canvas: false,
+            drag_start: None,
         })
     }
 
@@ -297,8 +303,11 @@ impl Canvas {
         let position = event.position;
         if let Some((id, _)) = self.element_at_position(position) {
             self.dragged_element = Some((id, position));
-            cx.notify();
+        } else {
+            self.is_dragging_canvas = true;
+            self.drag_start = Some(position);
         }
+        cx.notify();
     }
 
     fn handle_mouse_move(
@@ -313,13 +322,21 @@ impl Canvas {
                 let new_pos = *old_pos + delta;
                 self.move_element(id, new_pos);
                 self.dragged_element = Some((id, event.position));
-                cx.notify();
+            }
+        } else if self.is_dragging_canvas {
+            if let Some(start_pos) = self.drag_start {
+                let delta = event.position - start_pos;
+                self.canvas_offset += delta;
+                self.drag_start = Some(event.position);
             }
         }
+        cx.notify();
     }
 
     fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.dragged_element = None;
+        self.is_dragging_canvas = false;
+        self.drag_start = None;
         cx.notify();
     }
 
@@ -327,13 +344,14 @@ impl Canvas {
         &self,
         position: Point<Pixels>,
     ) -> Option<(LunaElementId, &SerializableElement)> {
+        let adjusted_position = position - self.canvas_offset;
         self.elements.iter().find_map(|(id, element)| {
             let el_pos = self.element_positions.get(id).unwrap();
             let el_bounds = Bounds {
                 origin: *el_pos,
                 size: element.style.size,
             };
-            if el_bounds.contains(&position) {
+            if el_bounds.contains(&adjusted_position) {
                 Some((*id, element))
             } else {
                 None
@@ -377,9 +395,14 @@ impl Render for Canvas {
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .on_action(cx.listener(Self::select_element))
-            .relative()
+            .absolute()
             .w(self.initial_size.width)
             .h(self.initial_size.height)
+            .left(self.canvas_offset.x)
+            .top(self.canvas_offset.y)
+            .bg(rgb(0x1B1D22))
+            .border_color(gpui::red())
+            .border_1()
             .children(self.render_elements(window, cx))
     }
 }
@@ -397,12 +420,9 @@ struct Luna {
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .flex()
-            .bg(rgb(0x1B1D22))
+            .relative()
+            .bg(rgb(0x3B414D))
             .size_full()
-            .justify_center()
-            .items_center()
-            .text_xl()
             .text_color(rgb(0xffffff))
             .child(self.canvas.clone())
     }
@@ -427,5 +447,7 @@ fn main() {
             cx.new(|_cx| Luna { canvas })
         })
         .unwrap();
+
+        cx.activate(true)
     });
 }
