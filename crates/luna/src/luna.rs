@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 
-const EDGE_HITBOX_PADDING: f32 = 6.0;
+const EDGE_HITBOX_PADDING: f32 = 12.0;
 const CORNER_HANDLE_SIZE: f32 = 7.0;
 
 const THEME_SELECTED: Hsla = Hsla {
@@ -432,6 +432,50 @@ impl Canvas {
             }
             cx.notify();
         }
+
+        if !self.selected_ids.is_empty() {
+            if let Some(bounds) = self.get_selection_bounds(cx) {
+                let adjusted_position = event.position - self.canvas_offset;
+                self.current_resize_direction = None;
+
+                if bounds.contains(&adjusted_position) {
+                    let edge_hitbox = px(EDGE_HITBOX_PADDING);
+                    let left_hitbox = Bounds {
+                        origin: bounds.origin,
+                        size: Size::new(edge_hitbox, bounds.size.height),
+                    };
+                    let right_hitbox = Bounds {
+                        origin: Point::new(
+                            bounds.origin.x + bounds.size.width - edge_hitbox,
+                            bounds.origin.y,
+                        ),
+                        size: Size::new(edge_hitbox, bounds.size.height),
+                    };
+                    let top_hitbox = Bounds {
+                        origin: bounds.origin,
+                        size: Size::new(bounds.size.width, edge_hitbox),
+                    };
+                    let bottom_hitbox = Bounds {
+                        origin: Point::new(
+                            bounds.origin.x,
+                            bounds.origin.y + bounds.size.height - edge_hitbox,
+                        ),
+                        size: Size::new(bounds.size.width, edge_hitbox),
+                    };
+
+                    if left_hitbox.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::Left);
+                    } else if right_hitbox.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::Right);
+                    } else if top_hitbox.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::Top);
+                    } else if bottom_hitbox.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::Bottom);
+                    }
+                }
+                cx.notify();
+            }
+        }
     }
 
     fn clamp_element_position(
@@ -585,35 +629,30 @@ impl Canvas {
             let is_horizontal = matches!(direction, ResizeDirection::Left | ResizeDirection::Right);
 
             let mut el = div()
+                .id("resize-edge-control")
                 .flex()
                 .flex_none()
                 .absolute()
-                .cursor(direction.cursor())
-                .child(div().bg(THEME_SELECTED).map(|this| {
-                    if is_horizontal {
-                        this.h(px(EDGE_HITBOX_PADDING)).w_full().h_px()
-                    } else {
-                        this.w(px(EDGE_HITBOX_PADDING)).h_full().w_px()
-                    }
-                }));
+                .cursor(direction.cursor());
 
             if is_horizontal {
-                el = el.h(px(EDGE_HITBOX_PADDING)).left_0().right_0();
+                el = el.h(px(EDGE_HITBOX_PADDING)).top_0().bottom_0().h_full();
             } else {
-                el = el.w(px(EDGE_HITBOX_PADDING)).top_0().bottom_0().flex_col();
+                el = el.w(px(EDGE_HITBOX_PADDING)).left_0().right_0().w_full();
             }
 
-            match direction {
-                ResizeDirection::Right | ResizeDirection::Bottom => {
-                    el = el.items_end();
-                }
-                _ => (),
-            }
+            el = match direction {
+                ResizeDirection::Left => el.border_l_1().border_color(THEME_SELECTED).left_0(),
+                ResizeDirection::Right => el.border_r_1().border_color(THEME_SELECTED).right_0(),
+                ResizeDirection::Top => el.border_t_1().border_color(THEME_SELECTED).top_0(),
+                ResizeDirection::Bottom => el.border_b_1().border_color(THEME_SELECTED).bottom_0(),
+                _ => el,
+            };
 
-            return Some(el);
+            Some(el)
+        } else {
+            None
         }
-
-        None
     }
 
     fn render_selection_container(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
@@ -623,6 +662,7 @@ impl Canvas {
             let current_resize_direction = self.current_resize_direction;
 
             div()
+                .id("selection-container")
                 .absolute()
                 .left(container.bounds.origin.x - self.canvas_offset.x)
                 .top(container.bounds.origin.y - self.canvas_offset.y)
@@ -630,19 +670,25 @@ impl Canvas {
                 .h(container.bounds.size.height)
                 .child(
                     div()
+                        .id("selection-container-border")
                         .absolute()
-                        .size_full()
+                        // .occlude()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .w(container.bounds.size.width)
+                        .h(container.bounds.size.height)
                         .border_1()
                         .border_color(if current_resize_direction.is_some() {
-                            THEME_SELECTED
+                            THEME_SELECTED.alpha(0.4)
                         } else {
-                            THEME_SELECTED.alpha(0.32)
+                            THEME_SELECTED
                         })
                         .when(self.selected_ids.is_empty(), |this| {
                             this.bg(THEME_SELECTED.alpha(0.12))
                         }),
                 )
-                .children(self.render_resize_edge_control(cx))
                 .child(
                     self.render_resize_control(Corner::TopLeft)
                         .cursor(CursorStyle::ResizeUpLeftDownRight),
@@ -659,6 +705,7 @@ impl Canvas {
                     self.render_resize_control(Corner::BottomRight)
                         .cursor(CursorStyle::ResizeUpLeftDownRight),
                 )
+                .children(self.render_resize_edge_control(cx))
         })
     }
 }
