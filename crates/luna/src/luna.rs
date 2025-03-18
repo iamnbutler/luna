@@ -533,10 +533,22 @@ impl Canvas {
                             this.bg(THEME_SELECTED.alpha(0.12))
                         }),
                 )
-                .child(self.render_resize_control(Corner::TopLeft))
-                .child(self.render_resize_control(Corner::TopRight))
-                .child(self.render_resize_control(Corner::BottomLeft))
-                .child(self.render_resize_control(Corner::BottomRight))
+                .child(
+                    self.render_resize_control(Corner::TopLeft)
+                        .cursor(CursorStyle::ResizeUpLeftDownRight),
+                )
+                .child(
+                    self.render_resize_control(Corner::TopRight)
+                        .cursor(CursorStyle::ResizeUpRightDownLeft),
+                )
+                .child(
+                    self.render_resize_control(Corner::BottomLeft)
+                        .cursor(CursorStyle::ResizeUpRightDownLeft),
+                )
+                .child(
+                    self.render_resize_control(Corner::BottomRight)
+                        .cursor(CursorStyle::ResizeUpLeftDownRight),
+                )
         })
     }
 }
