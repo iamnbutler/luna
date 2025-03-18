@@ -1,9 +1,10 @@
+#![allow(dead_code, unused)]
+
 //! The Canvas, the heart of Luna.
-use gpui::{prelude::FluentBuilder, *};
+use gpui::*;
 
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::hash::Hash;
 use uuid::Uuid;
@@ -39,12 +40,17 @@ impl Into<ElementId> for LunaElementId {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct SerializableElement {
     id: LunaElementId,
+    name: String,
     style: ElementStyle,
 }
 
 impl SerializableElement {
     pub fn new(id: LunaElementId, style: ElementStyle) -> Self {
-        Self { id, style }
+        Self {
+            id,
+            name: "Untitled".to_string(),
+            style,
+        }
     }
 
     pub fn position(&mut self, position: Point<Pixels>) -> &mut Self {
@@ -56,15 +62,24 @@ impl SerializableElement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LunaElement {
     id: LunaElementId,
+    name: SharedString,
     style: ElementStyle,
     focus_handle: FocusHandle,
 }
 
 impl LunaElement {
-    pub fn new(id: LunaElementId, style: ElementStyle, cx: &mut App) -> Entity<Self> {
+    pub fn new(
+        id: LunaElementId,
+        name: Option<impl Into<SharedString>>,
+        style: ElementStyle,
+        cx: &mut App,
+    ) -> Entity<Self> {
         let focus_handle = cx.focus_handle();
         cx.new(|cx| Self {
             id,
+            name: name
+                .map(Into::into)
+                .unwrap_or_else(|| SharedString::from("Untitled")),
             style,
             focus_handle,
         })
@@ -89,7 +104,7 @@ impl LunaElement {
 }
 
 impl Render for LunaElement {
-    fn render(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
         let style = self.style.clone();
         let id = self.id.clone();
         let position = self.style.position.expect("Canvas must have a position");
@@ -139,11 +154,16 @@ impl ElementStyle {
     pub fn new(cx: &mut App) -> Self {
         Self {
             size: Size::new(px(48.), px(48.)),
-            border_width: px(0.),
-            border_color: gpui::transparent_black(),
-            background_color: gpui::red(),
+            border_width: px(1.),
+            border_color: rgb(0x3F434C).into(),
+            background_color: rgb(0x292C32).into(),
             position: None,
         }
+    }
+
+    pub fn size(mut self, size: Size<Pixels>) -> Self {
+        self.size = size;
+        self
     }
 }
 
@@ -213,15 +233,15 @@ pub struct Canvas {
 }
 
 impl Canvas {
-    pub fn new(Window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
             id: CanvasId::new(),
             element_positions: HashMap::new(),
             elements: CanvasElements::new(),
             focus_handle: cx.focus_handle(),
             initial_size: Size {
-                width: px(512.),
-                height: px(512.),
+                width: px(2000.),
+                height: px(2000.),
             },
             next_id: 0,
             selected_ids: Vec::new(),
@@ -282,7 +302,7 @@ impl Canvas {
                 let mut element = element.clone();
                 element.position(position.clone());
 
-                LunaElement::new(*id, element.style.clone(), cx)
+                LunaElement::new(*id, element.name.into(), element.style.clone(), cx)
             })
             .collect();
 
@@ -321,7 +341,7 @@ impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
-            .bg(rgb(0x2e7d32))
+            .bg(rgb(0x1B1D22))
             .size_full()
             .justify_center()
             .items_center()
@@ -336,11 +356,15 @@ fn main() {
         cx.open_window(WindowOptions::default(), |window, cx| {
             let canvas = Canvas::new(window, cx);
             canvas.update(cx, |canvas, cx| {
-                let element_1 = ElementStyle::new(cx);
+                let element_1 = ElementStyle::new(cx).size(size(px(32.), px(128.)));
                 let element_2 = ElementStyle::new(cx);
+                let element_3 = ElementStyle::new(cx).size(size(px(64.), px(64.)));
+                let element_4 = ElementStyle::new(cx).size(size(px(128.), px(128.)));
 
                 canvas.add_element(element_1, point(px(0.), px(0.)), cx);
                 canvas.add_element(element_2, point(px(300.), px(300.)), cx);
+                canvas.add_element(element_3, point(px(600.), px(150.)), cx);
+                canvas.add_element(element_4, point(px(240.), px(550.)), cx);
             });
 
             cx.new(|_cx| Luna { canvas })
