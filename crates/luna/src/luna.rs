@@ -11,10 +11,7 @@ use uuid::Uuid;
 
 use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
-pub struct SelectElement {
-    pub id: LunaElementId,
-}
+const EDGE_HITBOX_PADDING: f32 = 6.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct LunaElementId(usize);
@@ -37,7 +34,7 @@ pub struct LunaElement {
     name: SharedString,
     style: ElementStyle,
     focus_handle: FocusHandle,
-    selected: bool,
+    canvas: WeakEntity<Canvas>,
 }
 
 impl LunaElement {
@@ -45,6 +42,7 @@ impl LunaElement {
         id: LunaElementId,
         name: Option<SharedString>,
         style: ElementStyle,
+        canvas: WeakEntity<Canvas>,
         cx: &mut App,
     ) -> Entity<Self> {
         let focus_handle = cx.focus_handle();
@@ -55,13 +53,15 @@ impl LunaElement {
                 .unwrap_or_else(|| SharedString::from("Untitled")),
             style,
             focus_handle,
-            selected: false,
+            canvas,
         })
     }
 
-    pub fn selected(&mut self, selected: bool) -> &mut Self {
-        self.selected = selected;
-        self
+    pub fn selected(&self, cx: &mut Context<Self>) -> bool {
+        self.canvas
+            .upgrade()
+            .map(|canvas| canvas.read(cx).selected_ids.contains(&self.id))
+            .unwrap_or(false)
     }
 }
 
@@ -80,7 +80,7 @@ impl Render for LunaElement {
             .w(style.size.width)
             .h(style.size.height)
             .border_1()
-            .border_color(if self.selected {
+            .border_color(if self.selected(cx) {
                 rgb(0x0C8CE9).into()
             } else {
                 gpui::transparent_black()
@@ -198,17 +198,19 @@ impl Canvas {
         })
     }
 
-    fn select_element(&mut self, element: &SelectElement, _: &mut Window, cx: &mut Context<Self>) {
-        self.selected_ids.push(element.id);
+    pub fn select_element(&mut self, id: LunaElementId, cx: &mut Context<Self>) {
+        self.selected_ids.push(id);
         cx.notify();
     }
 
-    pub fn deselect_element(&mut self, id: LunaElementId) {
+    pub fn deselect_element(&mut self, id: LunaElementId, cx: &mut Context<Self>) {
         self.selected_ids.retain(|&selected_id| selected_id != id);
+        cx.notify();
     }
 
-    pub fn deselect_all(&mut self) {
+    pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
         self.selected_ids.clear();
+        cx.notify();
     }
 
     pub fn add_element(
@@ -217,13 +219,14 @@ impl Canvas {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) -> LunaElementId {
+        let weak_self = cx.weak_entity();
         let id = LunaElementId(self.next_id);
         self.next_id += 1;
 
         let mut style = style;
         style.position = Some(position);
 
-        let element = LunaElement::new(id, None, style, cx);
+        let element = LunaElement::new(id, None, style, weak_self, cx);
         self.elements.insert(id, element);
         self.element_positions.insert(id, position);
         id
@@ -254,6 +257,7 @@ impl Canvas {
     ) {
         let current_modifiers = window.modifiers();
         let meta_pressed = current_modifiers.alt;
+        let platform_pressed = current_modifiers.platform;
         let position = event.position;
         let element_at_position = self.element_at_position(position, cx);
 
@@ -268,7 +272,13 @@ impl Canvas {
             (MouseButton::Left, _) => {
                 if let Some(element) = element_at_position {
                     let element_id = element.0;
+                    if !platform_pressed {
+                        self.clear_selection(cx);
+                    }
+                    self.select_element(element_id, cx);
                     self.dragged_element = Some((element_id, position));
+                } else {
+                    self.clear_selection(cx);
                 }
                 cx.notify();
             }
@@ -332,27 +342,7 @@ impl Canvas {
         self.elements.get(&id)
     }
 
-    fn select_element_by_id(&mut self, id: LunaElementId, cx: &mut Context<Self>) {
-        if let Some(element) = self.find_element_by_id(id) {
-            if let Some(index) = self.selected_ids.iter().position(|&i| i == id) {
-                self.selected_ids.remove(index);
-            } else {
-                element.update(cx, |element, cx| {
-                    element.selected(true);
-                });
-                self.selected_ids.push(id);
-            }
-        }
-    }
-
     fn handle_mouse_up(&mut self, event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if self.dragged_element.is_none() {
-            if let Some((id, _)) = self.element_at_position(event.position, cx) {
-                self.select_element_by_id(id, cx);
-            } else {
-                self.deselect_all();
-            }
-        }
         self.dragged_element = None;
         self.is_dragging_canvas = false;
         self.drag_start = None;
@@ -415,7 +405,7 @@ impl Render for Canvas {
                     .absolute()
                     .text_xs()
                     .text_color(gpui::red())
-                    .top_2()
+                    .top_16()
                     .left_2()
                     .child(format!("{:?}", self.selected_ids)),
             )
