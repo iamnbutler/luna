@@ -14,10 +14,10 @@ use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
 const EDGE_HITBOX_PADDING: f32 = 6.0;
 const CORNER_HANDLE_SIZE: f32 = 7.0;
 
-const THEME_SELECTED: Rgba = Rgba {
-    r: 12.0,
-    g: 140.0,
-    b: 233.0,
+const THEME_SELECTED: Hsla = Hsla {
+    h: 205.0 / 360.0,
+    s: 0.9,
+    l: 0.48,
     a: 1.0,
 };
 
@@ -99,40 +99,6 @@ impl LunaElement {
             .map(|canvas| canvas.read(cx).selected_ids.contains(&self.id))
             .unwrap_or(false)
     }
-
-    pub fn render_corner_handle(&self, corner: Corner, cx: &mut Context<Self>) -> Stateful<Div> {
-        let id = ElementId::Name(format!("corner-handle-{}", corner).into());
-        let corner_handle_offset = px(CORNER_HANDLE_SIZE / 2.0 - 1.0);
-
-        let mut div = div()
-            .absolute()
-            .id(id)
-            .size(px(CORNER_HANDLE_SIZE))
-            .border_1()
-            .border_color(THEME_SELECTED)
-            .bg(gpui::white());
-
-        match corner {
-            Corner::TopLeft => {
-                div = div.top(-corner_handle_offset).left(-corner_handle_offset);
-            }
-            Corner::TopRight => {
-                div = div.top(-corner_handle_offset).right(-corner_handle_offset);
-            }
-            Corner::BottomLeft => {
-                div = div
-                    .bottom(-corner_handle_offset)
-                    .left(-corner_handle_offset);
-            }
-            Corner::BottomRight => {
-                div = div
-                    .bottom(-corner_handle_offset)
-                    .right(-corner_handle_offset);
-            }
-        }
-
-        div
-    }
 }
 
 impl Render for LunaElement {
@@ -156,11 +122,7 @@ impl Render for LunaElement {
             .w(style.size.width)
             .h(style.size.height)
             .border_1()
-            .border_color(if self.selected(cx) {
-                rgb(0x0C8CE9).into()
-            } else {
-                gpui::transparent_black()
-            })
+            .border_color(gpui::transparent_black())
             .hover(|this| {
                 if !dragging {
                     this.border_color(rgb(0x0C8CE9))
@@ -175,16 +137,6 @@ impl Render for LunaElement {
                     .border(style.border_width)
                     .border_color(style.border_color),
             )
-            .when(self.selected(cx), |this| {
-                this
-                    // this likely moves to the canvas level
-                    // as eventually we'll need to draw selection bounds
-                    // around multiple elements
-                    .child(self.render_corner_handle(Corner::TopLeft, cx))
-                    .child(self.render_corner_handle(Corner::TopRight, cx))
-                    .child(self.render_corner_handle(Corner::BottomLeft, cx))
-                    .child(self.render_corner_handle(Corner::BottomRight, cx))
-            })
     }
 }
 
@@ -252,6 +204,16 @@ impl CanvasId {
 impl Into<ElementId> for CanvasId {
     fn into(self) -> ElementId {
         ElementId::Uuid(self.as_uuid())
+    }
+}
+
+struct SelectionContainer {
+    bounds: Bounds<Pixels>,
+}
+
+impl SelectionContainer {
+    fn new(bounds: Bounds<Pixels>) -> Self {
+        Self { bounds }
     }
 }
 
@@ -486,6 +448,97 @@ impl Canvas {
     ) -> Vec<Entity<LunaElement>> {
         self.elements.values().cloned().collect()
     }
+
+    fn render_resize_control(&self, corner: Corner) -> Stateful<Div> {
+        let id = ElementId::Name(format!("resize-control-{}", corner).into());
+        let corner_handle_offset = px(CORNER_HANDLE_SIZE / 2.0 - 1.0);
+
+        let mut div = div()
+            .absolute()
+            .id(id)
+            .size(px(CORNER_HANDLE_SIZE))
+            .border_1()
+            .border_color(THEME_SELECTED)
+            .bg(gpui::white());
+
+        match corner {
+            Corner::TopLeft => {
+                div = div.top(-corner_handle_offset).left(-corner_handle_offset);
+            }
+            Corner::TopRight => {
+                div = div.top(-corner_handle_offset).right(-corner_handle_offset);
+            }
+            Corner::BottomLeft => {
+                div = div
+                    .bottom(-corner_handle_offset)
+                    .left(-corner_handle_offset);
+            }
+            Corner::BottomRight => {
+                div = div
+                    .bottom(-corner_handle_offset)
+                    .right(-corner_handle_offset);
+            }
+        }
+
+        div
+    }
+
+    fn get_selection_bounds(&self, cx: &Context<Self>) -> Option<Bounds<Pixels>> {
+        if self.selected_ids.is_empty() {
+            return None;
+        }
+
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        for &id in &self.selected_ids {
+            if let Some(element) = self.elements.get(&id) {
+                let style = &element.read(cx).style;
+                let position = style.position.expect("Element must have a position");
+                let size = style.size;
+
+                min_x = min_x.min(position.x.0);
+                min_y = min_y.min(position.y.0);
+                max_x = max_x.max(position.x.0 + size.width.0);
+                max_y = max_y.max(position.y.0 + size.height.0);
+            }
+        }
+
+        Some(Bounds {
+            origin: Point::new(px(min_x), px(min_y)),
+            size: Size::new(px(max_x - min_x), px(max_y - min_y)),
+        })
+    }
+
+    fn render_selection_container(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        self.get_selection_bounds(cx).map(|bounds| {
+            let container = SelectionContainer::new(bounds);
+            let empty_selection = self.selected_ids.is_empty();
+
+            div()
+                .absolute()
+                .left(container.bounds.origin.x - self.canvas_offset.x)
+                .top(container.bounds.origin.y - self.canvas_offset.y)
+                .w(container.bounds.size.width)
+                .h(container.bounds.size.height)
+                .child(
+                    div()
+                        .absolute()
+                        .size_full()
+                        .border_1()
+                        .border_color(THEME_SELECTED)
+                        .when(self.selected_ids.is_empty(), |this| {
+                            this.bg(THEME_SELECTED.alpha(0.12))
+                        }),
+                )
+                .child(self.render_resize_control(Corner::TopLeft))
+                .child(self.render_resize_control(Corner::TopRight))
+                .child(self.render_resize_control(Corner::BottomLeft))
+                .child(self.render_resize_control(Corner::BottomRight))
+        })
+    }
 }
 
 impl Render for Canvas {
@@ -507,6 +560,9 @@ impl Render for Canvas {
             .top(clamped_offset.y)
             .bg(rgb(0x1B1D22))
             .children(self.render_elements(window, cx))
+            .when_some(self.render_selection_container(cx), |this, container| {
+                this.child(container)
+            })
             .child(
                 div()
                     .absolute()
