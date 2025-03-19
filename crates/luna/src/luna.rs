@@ -395,6 +395,13 @@ impl Canvas {
                     }
                 }
 
+                if current_modifiers.alt {
+                    self.is_dragging_canvas = true;
+                    self.drag_start = Some(position);
+                    cx.notify();
+                    return;
+                }
+
                 // Handle element selection if not resizing
                 if let Some(element_id) = element_id {
                     if current_modifiers.shift {
@@ -884,12 +891,27 @@ impl LayerListElement {
     fn new(id: LunaElementId, element: LunaElement) -> Self {
         Self { id, element }
     }
+
+    fn selected(&self, cx: &mut App) -> bool {
+        self.element.canvas.upgrade().map_or(false, |canvas| {
+            canvas.read(cx).selected_ids.contains(&self.id)
+        })
+    }
 }
 
 impl RenderOnce for LayerListElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let name = self.element.name.clone();
-        div().h(px(24.)).child(name)
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .px_1()
+            .h(px(24.))
+            .when(self.selected(cx), |this| {
+                this.bg(THEME_SELECTED.alpha(0.12))
+            })
+            .child(name)
     }
 }
 
@@ -914,10 +936,10 @@ impl Render for LayerList {
             .bg(rgb(0x2A2C31))
             .border_r_1()
             .border_color(rgb(0x3F434C))
-            .p_2()
             .flex()
             .flex_col()
-            .gap_1()
+            // titlebar spacer
+            .child(div().h(px(TITLEBAR_HEIGHT)).w_full())
             .children(elements.iter().map(|(&id, element)| {
                 let element = element.read(cx);
                 LayerListElement::new(id, element.clone())
