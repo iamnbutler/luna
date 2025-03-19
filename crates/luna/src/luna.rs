@@ -885,24 +885,44 @@ impl Focusable for Canvas {
 struct LayerListElement {
     id: LunaElementId,
     element: LunaElement,
+    canvas: WeakEntity<Canvas>,
 }
 
 impl LayerListElement {
-    fn new(id: LunaElementId, element: LunaElement) -> Self {
-        Self { id, element }
+    fn new(id: LunaElementId, element: LunaElement, canvas: WeakEntity<Canvas>) -> Self {
+        Self {
+            id,
+            element,
+            canvas,
+        }
     }
 
     fn selected(&self, cx: &mut App) -> bool {
-        self.element.canvas.upgrade().map_or(false, |canvas| {
+        self.canvas.upgrade().map_or(false, |canvas| {
             canvas.read(cx).selected_ids.contains(&self.id)
         })
+    }
+
+    fn handle_click(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(canvas) = self.canvas.upgrade() {
+            canvas.update(cx, |canvas, cx| {
+                if canvas.selected_ids.contains(&self.id) {
+                    canvas.deselect_element(self.id, cx);
+                } else {
+                    canvas.select_element(self.id, cx);
+                }
+            });
+        }
     }
 }
 
 impl RenderOnce for LayerListElement {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let name = self.element.name.clone();
+        let id = ElementId::Name(format!("layer-{}", self.id.0.to_string()).into());
+        let canvas = self.canvas.upgrade().clone();
         div()
+            .id(id)
             .flex()
             .flex_none()
             .items_center()
@@ -910,6 +930,17 @@ impl RenderOnce for LayerListElement {
             .h(px(24.))
             .when(self.selected(cx), |this| {
                 this.bg(THEME_SELECTED.alpha(0.12))
+            })
+            .when_some(canvas, |this, canvas| {
+                this.on_click(move |_, window, cx| {
+                    canvas.update(cx, |canvas, cx| {
+                        if canvas.selected_ids.contains(&self.id) {
+                            canvas.deselect_element(self.id, cx);
+                        } else {
+                            canvas.select_element(self.id, cx);
+                        }
+                    });
+                })
             })
             .child(name)
     }
@@ -928,6 +959,7 @@ impl LayerList {
 impl Render for LayerList {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let elements = self.canvas.read(cx).elements.iter().collect::<Vec<_>>();
+        let weak_canvas = self.canvas.downgrade().clone();
 
         div()
             .absolute()
@@ -942,7 +974,7 @@ impl Render for LayerList {
             .child(div().h(px(TITLEBAR_HEIGHT)).w_full())
             .children(elements.iter().map(|(&id, element)| {
                 let element = element.read(cx);
-                LayerListElement::new(id, element.clone())
+                LayerListElement::new(id, element.clone(), weak_canvas.clone())
             }))
     }
 }
