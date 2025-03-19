@@ -874,16 +874,71 @@ impl Focusable for Canvas {
     }
 }
 
+#[derive(IntoElement)]
+struct LayerListElement {
+    id: LunaElementId,
+    element: LunaElement,
+}
+
+impl LayerListElement {
+    fn new(id: LunaElementId, element: LunaElement) -> Self {
+        Self { id, element }
+    }
+}
+
+impl RenderOnce for LayerListElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let name = self.element.name.clone();
+        div().h(px(24.)).child(name)
+    }
+}
+
+struct LayerList {
+    canvas: Entity<Canvas>,
+}
+
+impl LayerList {
+    fn new(canvas: Entity<Canvas>, cx: &mut Context<Self>) -> Self {
+        Self { canvas }
+    }
+}
+
+impl Render for LayerList {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let elements = self.canvas.read(cx).elements.iter().collect::<Vec<_>>();
+
+        div()
+            .absolute()
+            .w(px(200.))
+            .h_full()
+            .bg(rgb(0x2A2C31))
+            .border_r_1()
+            .border_color(rgb(0x3F434C))
+            .p_2()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .children(elements.iter().map(|(&id, element)| {
+                let element = element.read(cx);
+                LayerListElement::new(id, element.clone())
+            }))
+    }
+}
+
 const TITLEBAR_HEIGHT: f32 = 24.0;
 
 struct Luna {
     titlebar: Entity<Titlebar>,
     canvas: Entity<Canvas>,
+    element_list: Entity<LayerList>,
 }
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .text_xs()
+            .text_color(rgb(0xA9AFBC))
+            .font_family("Berkeley Mono")
             .flex()
             .flex_col()
             .relative()
@@ -901,6 +956,7 @@ impl Render for Luna {
                     .overflow_hidden()
                     .child(self.canvas.clone()),
             )
+            .child(self.element_list.clone())
             .child(self.titlebar.clone())
     }
 }
@@ -925,9 +981,6 @@ impl Render for Titlebar {
             .border_b_1()
             .border_color(rgb(0x3F434C))
             .bg(rgb(0x2A2C31))
-            .text_xs()
-            .text_color(rgb(0xA9AFBC))
-            .font_family("Berkeley Mono")
             .child(div().flex().items_center().h_full().px_2().child("Luna"))
         // .child(
         //     div()
@@ -960,8 +1013,13 @@ fn main() {
             });
 
             let titlebar = cx.new(|cx| Titlebar::new(window, cx));
+            let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
 
-            cx.new(|_cx| Luna { titlebar, canvas })
+            cx.new(|_cx| Luna {
+                titlebar,
+                canvas,
+                element_list,
+            })
         })
         .unwrap();
 
