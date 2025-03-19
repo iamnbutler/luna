@@ -292,6 +292,7 @@ pub struct Canvas {
     is_dragging_canvas: bool,
     drag_start: Option<Point<Pixels>>,
     current_resize_direction: Option<ResizeDirection>,
+    resize_start: Option<(Point<Pixels>, Size<Pixels>)>,
 }
 
 impl Canvas {
@@ -312,6 +313,7 @@ impl Canvas {
             is_dragging_canvas: false,
             drag_start: None,
             current_resize_direction: None,
+            resize_start: None,
         })
     }
 
@@ -375,19 +377,27 @@ impl Canvas {
         let current_modifiers = window.modifiers();
         let position = event.position;
         let element_at_position = self.element_at_position(position, cx);
+        let resize_from_center = current_modifiers.alt;
+        let element_id = element_at_position.map(|element| element.0);
 
-        match (event.button, current_modifiers) {
-            (MouseButton::Left, modifiers) if modifiers.alt => {
-                if element_at_position.is_none() {
-                    self.is_dragging_canvas = true;
-                    self.drag_start = Some(position);
+        match event.button {
+            MouseButton::Left => {
+                // Handle resizing first
+                if let Some(direction) = self.current_resize_direction {
+                    if self.selected_ids.len() == 1 {
+                        let id = self.selected_ids[0];
+                        if let Some(element) = self.elements.get(&id) {
+                            self.resize_start = Some((position, element.read(cx).style.size));
+                            self.drag_start = Some(position);
+                            cx.notify();
+                            return;
+                        }
+                    }
                 }
-                cx.notify();
-            }
-            (MouseButton::Left, modifiers) => {
-                if let Some(element) = element_at_position {
-                    let element_id = element.0;
-                    if modifiers.shift {
+
+                // Handle element selection if not resizing
+                if let Some(element_id) = element_id {
+                    if current_modifiers.shift {
                         // Toggle selection when shift is pressed
                         if self.selected_ids.contains(&element_id) {
                             self.deselect_element(element_id, cx);
@@ -418,10 +428,16 @@ impl Canvas {
         cx: &mut Context<Self>,
     ) {
         if let Some(left_button) = event.pressed_button {
-            if let Some(start_pos) = self.dragging {
-                let delta = event.position - start_pos;
-                self.move_selected_elements(delta, cx);
-                self.dragging = Some(event.position);
+            if let Some(direction) = self.current_resize_direction {
+                if direction.is_corner() && self.selected_ids.len() == 1 {
+                    let id = self.selected_ids[0];
+                    self.resize_element(id, direction, event.position, cx);
+                    self.dragging = Some(event.position);
+                } else if let Some(start_pos) = self.dragging {
+                    let delta = event.position - start_pos;
+                    self.move_selected_elements(delta, cx);
+                    self.dragging = Some(event.position);
+                }
             } else if self.is_dragging_canvas {
                 if let Some(start_pos) = self.drag_start {
                     let delta = event.position - start_pos;
@@ -477,7 +493,42 @@ impl Canvas {
                         size: Size::new(expanded_bounds.size.width, edge_hitbox),
                     };
 
-                    if left_hitbox.contains(&adjusted_position) {
+                    let corner_size = px(CORNER_HANDLE_SIZE * 2.0);
+                    let top_left = Bounds {
+                        origin: expanded_bounds.origin,
+                        size: Size::new(corner_size, corner_size),
+                    };
+                    let top_right = Bounds {
+                        origin: Point::new(
+                            expanded_bounds.origin.x + expanded_bounds.size.width - corner_size,
+                            expanded_bounds.origin.y,
+                        ),
+                        size: Size::new(corner_size, corner_size),
+                    };
+                    let bottom_left = Bounds {
+                        origin: Point::new(
+                            expanded_bounds.origin.x,
+                            expanded_bounds.origin.y + expanded_bounds.size.height - corner_size,
+                        ),
+                        size: Size::new(corner_size, corner_size),
+                    };
+                    let bottom_right = Bounds {
+                        origin: Point::new(
+                            expanded_bounds.origin.x + expanded_bounds.size.width - corner_size,
+                            expanded_bounds.origin.y + expanded_bounds.size.height - corner_size,
+                        ),
+                        size: Size::new(corner_size, corner_size),
+                    };
+
+                    if top_left.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::TopLeft);
+                    } else if top_right.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::TopRight);
+                    } else if bottom_left.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::BottomLeft);
+                    } else if bottom_right.contains(&adjusted_position) {
+                        self.current_resize_direction = Some(ResizeDirection::BottomRight);
+                    } else if left_hitbox.contains(&adjusted_position) {
                         self.current_resize_direction = Some(ResizeDirection::Left);
                     } else if right_hitbox.contains(&adjusted_position) {
                         self.current_resize_direction = Some(ResizeDirection::Right);
@@ -529,7 +580,53 @@ impl Canvas {
         self.dragging = None;
         self.is_dragging_canvas = false;
         self.drag_start = None;
+        self.resize_start = None;
         cx.notify();
+    }
+
+    fn resize_element(
+        &mut self,
+        id: LunaElementId,
+        direction: ResizeDirection,
+        current_pos: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        if let (Some(element), Some((start_pos, start_size))) =
+            (self.elements.get(&id), self.resize_start)
+        {
+            let delta = current_pos - start_pos;
+            let mut new_size = start_size;
+            let mut new_pos = element.read(cx).style.position.unwrap();
+
+            match direction {
+                ResizeDirection::TopLeft => {
+                    new_size.width = (start_size.width - delta.x).max(px(10.0));
+                    new_size.height = (start_size.height - delta.y).max(px(10.0));
+                    new_pos.x = start_pos.x + start_size.width - new_size.width;
+                    new_pos.y = start_pos.y + start_size.height - new_size.height;
+                }
+                ResizeDirection::TopRight => {
+                    new_size.width = (start_size.width + delta.x).max(px(10.0));
+                    new_size.height = (start_size.height - delta.y).max(px(10.0));
+                    new_pos.y = start_pos.y + start_size.height - new_size.height;
+                }
+                ResizeDirection::BottomLeft => {
+                    new_size.width = (start_size.width - delta.x).max(px(10.0));
+                    new_size.height = (start_size.height + delta.y).max(px(10.0));
+                    new_pos.x = start_pos.x + start_size.width - new_size.width;
+                }
+                ResizeDirection::BottomRight => {
+                    new_size.width = (start_size.width + delta.x).max(px(10.0));
+                    new_size.height = (start_size.height + delta.y).max(px(10.0));
+                }
+                _ => {}
+            }
+
+            element.update(cx, |element, _cx| {
+                element.style.size = new_size;
+                element.style.position = Some(new_pos);
+            });
+        }
     }
 
     fn move_selected_elements(&mut self, delta: Point<Pixels>, cx: &mut Context<Self>) {
@@ -654,9 +751,17 @@ impl Canvas {
             // .cursor(direction.cursor());
 
             if is_horizontal {
-                el = el.h(px(EDGE_HITBOX_PADDING)).top_0().bottom_0().h_full();
+                el = el
+                    .h(px(EDGE_HITBOX_PADDING))
+                    .top(px(CORNER_HANDLE_SIZE))
+                    .bottom(px(CORNER_HANDLE_SIZE))
+                    .h_full();
             } else {
-                el = el.w(px(EDGE_HITBOX_PADDING)).left_0().right_0().w_full();
+                el = el
+                    .w(px(EDGE_HITBOX_PADDING))
+                    .left(px(CORNER_HANDLE_SIZE))
+                    .right(px(CORNER_HANDLE_SIZE))
+                    .w_full();
             }
 
             el = match direction {
