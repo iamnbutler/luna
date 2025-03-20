@@ -4,6 +4,7 @@ mod canvas;
 mod element;
 mod frame;
 mod layer_list;
+mod scene_graph;
 mod titlebar;
 
 use canvas::Canvas;

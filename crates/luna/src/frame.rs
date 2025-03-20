@@ -78,44 +78,44 @@ pub struct FramePrepaintState {
     // layout: LayoutItemsResponse,
 }
 
-impl Element for Frame {
-    type RequestLayoutState = ();
+// impl Element for Frame {
+//     type RequestLayoutState = ();
 
-    type PrepaintState = FramePrepaintState;
+//     type PrepaintState = FramePrepaintState;
 
-    fn id(&self) -> Option<gpui::ElementId> {
-        todo!()
-    }
+//     fn id(&self) -> Option<gpui::ElementId> {
+//         todo!()
+//     }
 
-    fn request_layout(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        todo!()
-    }
+//     fn request_layout(
+//         &mut self,
+//         id: Option<&gpui::GlobalElementId>,
+//         window: &mut gpui::Window,
+//         cx: &mut gpui::App,
+//     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+//         todo!()
+//     }
 
-    fn prepaint(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
-    ) -> Self::PrepaintState {
-        todo!()
-    }
+//     fn prepaint(
+//         &mut self,
+//         id: Option<&gpui::GlobalElementId>,
+//         bounds: gpui::Bounds<gpui::Pixels>,
+//         request_layout: &mut Self::RequestLayoutState,
+//         window: &mut gpui::Window,
+//         cx: &mut gpui::App,
+//     ) -> Self::PrepaintState {
+//         todo!()
+//     }
 
-    fn paint(
-        &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        prepaint: &mut Self::PrepaintState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
-    ) {
-        todo!()
-    }
-}
+//     fn paint(
+//         &mut self,
+//         id: Option<&gpui::GlobalElementId>,
+//         bounds: gpui::Bounds<gpui::Pixels>,
+//         request_layout: &mut Self::RequestLayoutState,
+//         prepaint: &mut Self::PrepaintState,
+//         window: &mut gpui::Window,
+//         cx: &mut gpui::App,
+//     ) {
+//         todo!()
+//     }
+// }
