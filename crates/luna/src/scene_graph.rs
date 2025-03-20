@@ -140,8 +140,46 @@ impl QuadTree {
             && y <= self.boundary.y + self.boundary.half_height
     }
 
-    fn query_range(&self, query_range: Boundary) -> _ {
-        todo!()
+    fn intersects(&self, other: &Boundary) -> bool {
+        !(other.x - other.half_width > self.boundary.x + self.boundary.half_width
+            || other.x + other.half_width < self.boundary.x - self.boundary.half_width
+            || other.y - other.half_height > self.boundary.y + self.boundary.half_height
+            || other.y + other.half_height < self.boundary.y - self.boundary.half_height)
+    }
+
+    fn query_range(&self, query_range: &Boundary) -> Vec<(f32, f32, usize)> {
+        let mut found = Vec::new();
+
+        if !self.intersects(query_range) {
+            return found;
+        }
+
+        for &(x, y, id) in &self.points {
+            if x >= query_range.x - query_range.half_width
+                && x <= query_range.x + query_range.half_width
+                && y >= query_range.y - query_range.half_height
+                && y <= query_range.y + query_range.half_height
+            {
+                found.push((x, y, id));
+            }
+        }
+
+        if self.divided {
+            if let Some(ref quad) = self.northeast {
+                found.extend(quad.query_range(query_range));
+            }
+            if let Some(ref quad) = self.northwest {
+                found.extend(quad.query_range(query_range));
+            }
+            if let Some(ref quad) = self.southeast {
+                found.extend(quad.query_range(query_range));
+            }
+            if let Some(ref quad) = self.southwest {
+                found.extend(quad.query_range(query_range));
+            }
+        }
+
+        found
     }
 }
 
