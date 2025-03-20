@@ -2,6 +2,7 @@
 
 mod canvas;
 mod element;
+mod frame;
 mod layer_list;
 mod titlebar;
 
