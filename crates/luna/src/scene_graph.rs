@@ -251,41 +251,15 @@ impl QuadTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    #[test]
-    fn test_element_bounds() {
-        // Test Rectangle bounds
-        let rect = Element::Rectangle {
-            width: 100.0,
-            height: 50.0,
-        };
-        let rect_transform = Transform {
-            x: 10.0,
-            y: 20.0,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            rotation: 0.0,
-        };
-        let rect_bounds = rect.calculate_bounds(&rect_transform);
-        assert_eq!(rect_bounds.x, 10.0);
-        assert_eq!(rect_bounds.y, 20.0);
-        assert_eq!(rect_bounds.half_width, 50.0);
-        assert_eq!(rect_bounds.half_height, 25.0);
-
-        // Test Circle bounds
-        let circle = Element::Circle { radius: 30.0 };
-        let circle_transform = Transform {
-            x: -10.0,
-            y: -20.0,
-            scale_x: 2.0,
-            scale_y: 2.0,
-            rotation: 0.0,
-        };
-        let circle_bounds = circle.calculate_bounds(&circle_transform);
-        assert_eq!(circle_bounds.x, -10.0);
-        assert_eq!(circle_bounds.y, -20.0);
-        assert_eq!(circle_bounds.half_width, 60.0);
-        assert_eq!(circle_bounds.half_height, 60.0);
+    fn generate_random(min: f32, max: f32) -> f32 {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        let random = (seed as f32 / u32::MAX as f32) * (max - min) + min;
+        random
     }
 
     fn count_points(qt: &QuadTree) -> usize {
@@ -331,35 +305,98 @@ mod tests {
     }
 
     #[test]
+    fn test_element_bounds() {
+        let rect = Element::Rectangle {
+            width: 100.0,
+            height: 50.0,
+        };
+        let rect_transform = Transform {
+            x: 10.0,
+            y: 20.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
+        let rect_bounds = rect.calculate_bounds(&rect_transform);
+        assert_eq!(rect_bounds.x, 10.0);
+        assert_eq!(rect_bounds.y, 20.0);
+        assert_eq!(rect_bounds.half_width, 50.0);
+        assert_eq!(rect_bounds.half_height, 25.0);
+
+        let circle = Element::Circle { radius: 30.0 };
+        let circle_transform = Transform {
+            x: -10.0,
+            y: -20.0,
+            scale_x: 2.0,
+            scale_y: 2.0,
+            rotation: 0.0,
+        };
+        let circle_bounds = circle.calculate_bounds(&circle_transform);
+        assert_eq!(circle_bounds.x, -10.0);
+        assert_eq!(circle_bounds.y, -20.0);
+        assert_eq!(circle_bounds.half_width, 60.0);
+        assert_eq!(circle_bounds.half_height, 60.0);
+    }
+
+    #[test]
     fn test_insert_point_within_boundary() {
-        let mut qt = QuadTree::new(
-            Boundary {
-                x: 0.0,
-                y: 0.0,
-                half_width: 10.0,
-                half_height: 10.0,
-            },
-            4,
-        );
-        let inserted = qt.insert(1.0, 1.0, 1);
-        assert!(inserted);
-        assert_eq!(qt.points.len(), 1);
+        for i in 0..10 {
+            let mut qt = QuadTree::new(
+                Boundary {
+                    x: 0.0,
+                    y: 0.0,
+                    half_width: 10.0,
+                    half_height: 10.0,
+                },
+                4,
+            );
+
+            let x = generate_random(-10.0, 10.0);
+            let y = generate_random(-10.0, 10.0);
+
+            let inserted = qt.insert(x, y, i);
+            assert!(
+                inserted,
+                "Iteration {}: Failed to insert point ({}, {}) within boundary",
+                i, x, y
+            );
+            assert_eq!(qt.points.len(), 1);
+        }
     }
 
     #[test]
     fn test_insert_outside_point_boundary() {
-        let mut qt = QuadTree::new(
-            Boundary {
-                x: 0.0,
-                y: 0.0,
-                half_width: 10.0,
-                half_height: 10.0,
-            },
-            4,
-        );
-        let inserted = qt.insert(20.0, 20.0, 1);
-        assert!(!inserted);
-        assert_eq!(qt.points.len(), 0);
+        for i in 0..10 {
+            let mut qt = QuadTree::new(
+                Boundary {
+                    x: 0.0,
+                    y: 0.0,
+                    half_width: 10.0,
+                    half_height: 10.0,
+                },
+                4,
+            );
+
+            let x = if i % 2 == 0 {
+                generate_random(15.0, 25.0)
+            } else {
+                generate_random(-25.0, -15.0)
+            };
+
+            let y = if (i / 2) % 2 == 0 {
+                generate_random(15.0, 25.0)
+            } else {
+                generate_random(-25.0, -15.0)
+            };
+
+            let inserted = qt.insert(x, y, i);
+            assert!(
+                !inserted,
+                "Iteration {}: Point ({}, {}) outside boundary was incorrectly inserted",
+                i, x, y
+            );
+            assert_eq!(qt.points.len(), 0);
+        }
     }
 
     #[test]
@@ -388,8 +425,6 @@ mod tests {
 
     #[test]
     fn test_complex_division() {
-        // Create a QuadTree covering a 32x32 area (centered at 0,0 with half-dimensions 16)
-        // with a capacity of 4.
         let mut qt = QuadTree::new(
             Boundary {
                 x: 0.0,
@@ -400,30 +435,25 @@ mod tests {
             4,
         );
 
-        // A set of points scattered over the canvas.
-        // They are chosen so that multiple subdivisions will occur.
         let points = vec![
-            (10.0, 10.0, 1),   // Should land in the NE region.
-            (12.0, 12.0, 2),   // Further NE.
-            (-10.0, 10.0, 3),  // NW.
-            (-12.0, 12.0, 4),  // Further NW.
-            (-10.0, -10.0, 5), // SW.
-            (-12.0, -12.0, 6), // Further SW.
-            (10.0, -10.0, 7),  // SE.
-            (12.0, -12.0, 8),  // Further SE.
-            (0.0, 0.0, 9),     // Center.
-            (5.0, 5.0, 10),    // NE but closer to center.
-            (-5.0, 5.0, 11),   // NW but closer.
+            (10.0, 10.0, 1),
+            (12.0, 12.0, 2),
+            (-10.0, 10.0, 3),
+            (-12.0, 12.0, 4),
+            (-10.0, -10.0, 5),
+            (-12.0, -12.0, 6),
+            (10.0, -10.0, 7),
+            (12.0, -12.0, 8),
+            (0.0, 0.0, 9),
+            (5.0, 5.0, 10),
+            (-5.0, 5.0, 11),
         ];
 
         for (x, y, id) in points.iter() {
             qt.insert(*x, *y, *id);
         }
 
-        // Verify that all points are accounted for.
         assert_eq!(count_points(&qt), points.len());
-
-        // Verify that each point is stored within a node that contains it.
         check_node(&qt);
     }
 
@@ -439,7 +469,6 @@ mod tests {
             4,
         );
 
-        // Create a rectangle element
         let rect = Element::Rectangle {
             width: 20.0,
             height: 10.0,
@@ -453,10 +482,8 @@ mod tests {
         };
         let rect_bounds = rect.calculate_bounds(&rect_transform);
 
-        // Insert rectangle
         assert!(qt.insert_with_bounds(&rect_bounds, 1));
 
-        // Create a circle element
         let circle = Element::Circle { radius: 15.0 };
         let circle_transform = Transform {
             x: -20.0,
@@ -467,10 +494,8 @@ mod tests {
         };
         let circle_bounds = circle.calculate_bounds(&circle_transform);
 
-        // Insert circle
         assert!(qt.insert_with_bounds(&circle_bounds, 2));
 
-        // Verify elements were inserted by querying their regions
         let rect_query = qt.query_range(&rect_bounds);
         assert!(rect_query.iter().any(|&(_, _, id)| id == 1));
 
@@ -480,7 +505,6 @@ mod tests {
 
     #[test]
     fn test_scene_node_with_quadtree() {
-        // Create a QuadTree with sufficient size to hold our scene
         let mut qt = QuadTree::new(
             Boundary {
                 x: 0.0,
@@ -491,7 +515,6 @@ mod tests {
             4,
         );
 
-        // Create scene nodes with different elements
         let rect_node = SceneNode {
             id: 1,
             transform: Transform {
@@ -521,7 +544,6 @@ mod tests {
             children: vec![],
         };
 
-        // Calculate bounds and insert elements into QuadTree
         if let Some(ref element) = rect_node.element {
             let bounds = element.calculate_bounds(&rect_node.transform);
             assert!(qt.insert_with_bounds(&bounds, rect_node.id));
@@ -532,7 +554,6 @@ mod tests {
             assert!(qt.insert_with_bounds(&bounds, circle_node.id));
         }
 
-        // Query for elements and verify they're found
         let query_rect = Boundary {
             x: 25.0,
             y: 25.0,
