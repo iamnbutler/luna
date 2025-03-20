@@ -288,7 +288,6 @@ mod tests {
         assert_eq!(circle_bounds.half_height, 60.0);
     }
 
-
     fn count_points(qt: &QuadTree) -> usize {
         let mut count = qt.points.len();
         if qt.divided {
@@ -332,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_within_boundary() {
+    fn test_insert_point_within_boundary() {
         let mut qt = QuadTree::new(
             Boundary {
                 x: 0.0,
@@ -348,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_outside_boundary() {
+    fn test_insert_outside_point_boundary() {
         let mut qt = QuadTree::new(
             Boundary {
                 x: 0.0,
@@ -453,7 +452,7 @@ mod tests {
             rotation: 0.0,
         };
         let rect_bounds = rect.calculate_bounds(&rect_transform);
-        
+
         // Insert rectangle
         assert!(qt.insert_with_bounds(&rect_bounds, 1));
 
@@ -550,7 +549,9 @@ mod tests {
             half_height: 25.0,
         };
         let circle_results = qt.query_range(&query_circle);
-        assert!(circle_results.iter().any(|&(_, _, id)| id == circle_node.id));
+        assert!(circle_results
+            .iter()
+            .any(|&(_, _, id)| id == circle_node.id));
     }
 
     #[test]
