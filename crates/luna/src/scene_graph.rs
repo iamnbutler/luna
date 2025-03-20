@@ -13,6 +13,28 @@ enum Element {
     Circle { radius: f32 },
 }
 
+impl Element {
+    fn calculate_bounds(&self, transform: &Transform) -> Boundary {
+        match self {
+            Element::Rectangle { width, height } => Boundary {
+                x: transform.x,
+                y: transform.y,
+                half_width: width * transform.scale_x * 0.5,
+                half_height: height * transform.scale_y * 0.5,
+            },
+            Element::Circle { radius } => {
+                let scaled_radius = radius * transform.scale_x.max(transform.scale_y);
+                Boundary {
+                    x: transform.x,
+                    y: transform.y,
+                    half_width: scaled_radius,
+                    half_height: scaled_radius,
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct SceneNode {
     id: usize,
@@ -42,6 +64,45 @@ struct QuadTree {
 }
 
 impl QuadTree {
+    fn insert_with_bounds(&mut self, bounds: &Boundary, id: usize) -> bool {
+        if !self.intersects(bounds) {
+            return false;
+        }
+
+        if self.points.len() < self.capacity {
+            // Store the center point of the bounds
+            self.points.push((bounds.x, bounds.y, id));
+            return true;
+        }
+
+        if !self.divided {
+            self.subdivide();
+        }
+
+        // Try to insert into child nodes
+        if let Some(ref mut quad) = self.northeast {
+            if quad.insert_with_bounds(bounds, id) {
+                return true;
+            }
+        }
+        if let Some(ref mut quad) = self.northwest {
+            if quad.insert_with_bounds(bounds, id) {
+                return true;
+            }
+        }
+        if let Some(ref mut quad) = self.southeast {
+            if quad.insert_with_bounds(bounds, id) {
+                return true;
+            }
+        }
+        if let Some(ref mut quad) = self.southwest {
+            if quad.insert_with_bounds(bounds, id) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn new(boundary: Boundary, capacity: usize) -> Self {
         Self {
             boundary,
@@ -103,6 +164,10 @@ impl QuadTree {
         if !self.contains(x, y) {
             return false;
         }
+        self.insert_point(x, y, id)
+    }
+
+    fn insert_point(&mut self, x: f32, y: f32, id: usize) -> bool {
         if self.points.len() < self.capacity {
             self.points.push((x, y, id));
             return true;
@@ -186,6 +251,43 @@ impl QuadTree {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_element_bounds() {
+        // Test Rectangle bounds
+        let rect = Element::Rectangle {
+            width: 100.0,
+            height: 50.0,
+        };
+        let rect_transform = Transform {
+            x: 10.0,
+            y: 20.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
+        let rect_bounds = rect.calculate_bounds(&rect_transform);
+        assert_eq!(rect_bounds.x, 10.0);
+        assert_eq!(rect_bounds.y, 20.0);
+        assert_eq!(rect_bounds.half_width, 50.0);
+        assert_eq!(rect_bounds.half_height, 25.0);
+
+        // Test Circle bounds
+        let circle = Element::Circle { radius: 30.0 };
+        let circle_transform = Transform {
+            x: -10.0,
+            y: -20.0,
+            scale_x: 2.0,
+            scale_y: 2.0,
+            rotation: 0.0,
+        };
+        let circle_bounds = circle.calculate_bounds(&circle_transform);
+        assert_eq!(circle_bounds.x, -10.0);
+        assert_eq!(circle_bounds.y, -20.0);
+        assert_eq!(circle_bounds.half_width, 60.0);
+        assert_eq!(circle_bounds.half_height, 60.0);
+    }
+
 
     fn count_points(qt: &QuadTree) -> usize {
         let mut count = qt.points.len();
@@ -324,6 +426,131 @@ mod tests {
 
         // Verify that each point is stored within a node that contains it.
         check_node(&qt);
+    }
+
+    #[test]
+    fn test_insert_element_with_bounds() {
+        let mut qt = QuadTree::new(
+            Boundary {
+                x: 0.0,
+                y: 0.0,
+                half_width: 100.0,
+                half_height: 100.0,
+            },
+            4,
+        );
+
+        // Create a rectangle element
+        let rect = Element::Rectangle {
+            width: 20.0,
+            height: 10.0,
+        };
+        let rect_transform = Transform {
+            x: 30.0,
+            y: 40.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
+        let rect_bounds = rect.calculate_bounds(&rect_transform);
+        
+        // Insert rectangle
+        assert!(qt.insert_with_bounds(&rect_bounds, 1));
+
+        // Create a circle element
+        let circle = Element::Circle { radius: 15.0 };
+        let circle_transform = Transform {
+            x: -20.0,
+            y: -30.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
+        let circle_bounds = circle.calculate_bounds(&circle_transform);
+
+        // Insert circle
+        assert!(qt.insert_with_bounds(&circle_bounds, 2));
+
+        // Verify elements were inserted by querying their regions
+        let rect_query = qt.query_range(&rect_bounds);
+        assert!(rect_query.iter().any(|&(_, _, id)| id == 1));
+
+        let circle_query = qt.query_range(&circle_bounds);
+        assert!(circle_query.iter().any(|&(_, _, id)| id == 2));
+    }
+
+    #[test]
+    fn test_scene_node_with_quadtree() {
+        // Create a QuadTree with sufficient size to hold our scene
+        let mut qt = QuadTree::new(
+            Boundary {
+                x: 0.0,
+                y: 0.0,
+                half_width: 100.0,
+                half_height: 100.0,
+            },
+            4,
+        );
+
+        // Create scene nodes with different elements
+        let rect_node = SceneNode {
+            id: 1,
+            transform: Transform {
+                x: 25.0,
+                y: 25.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+            },
+            element: Some(Element::Rectangle {
+                width: 30.0,
+                height: 20.0,
+            }),
+            children: vec![],
+        };
+
+        let circle_node = SceneNode {
+            id: 2,
+            transform: Transform {
+                x: -25.0,
+                y: -25.0,
+                scale_x: 2.0,
+                scale_y: 2.0,
+                rotation: 0.0,
+            },
+            element: Some(Element::Circle { radius: 10.0 }),
+            children: vec![],
+        };
+
+        // Calculate bounds and insert elements into QuadTree
+        if let Some(ref element) = rect_node.element {
+            let bounds = element.calculate_bounds(&rect_node.transform);
+            assert!(qt.insert_with_bounds(&bounds, rect_node.id));
+        }
+
+        if let Some(ref element) = circle_node.element {
+            let bounds = element.calculate_bounds(&circle_node.transform);
+            assert!(qt.insert_with_bounds(&bounds, circle_node.id));
+        }
+
+        // Query for elements and verify they're found
+        let query_rect = Boundary {
+            x: 25.0,
+            y: 25.0,
+            half_width: 20.0,
+            half_height: 20.0,
+        };
+        let rect_results = qt.query_range(&query_rect);
+        assert!(rect_results.iter().any(|&(_, _, id)| id == rect_node.id));
+
+        let query_circle = Boundary {
+            x: -25.0,
+            y: -25.0,
+            half_width: 25.0,
+            half_height: 25.0,
+        };
+        let circle_results = qt.query_range(&query_circle);
+        assert!(circle_results.iter().any(|&(_, _, id)| id == circle_node.id));
     }
 
     #[test]
