@@ -27,29 +27,19 @@ impl LocalTransform {
 }
 
 #[derive(Debug)]
-enum Element {
-    Rectangle { width: f32, height: f32 },
-    Circle { radius: f32 },
+struct ElementStyle {
+    width: f32,
+    height: f32,
+    corner_radius: f32,
 }
 
-impl Element {
+impl ElementStyle {
     fn calculate_local_bounds(&self, transform: &LocalTransform) -> BoundingBox {
-        match self {
-            Element::Rectangle { width, height } => BoundingBox {
-                x: transform.position.0,
-                y: transform.position.1,
-                half_width: width * transform.scale_x * 0.5,
-                half_height: height * transform.scale_y * 0.5,
-            },
-            Element::Circle { radius } => {
-                let scaled_radius = radius * transform.scale_x.max(transform.scale_y);
-                BoundingBox {
-                    x: transform.position.0,
-                    y: transform.position.1,
-                    half_width: scaled_radius,
-                    half_height: scaled_radius,
-                }
-            }
+        BoundingBox {
+            x: transform.position.0,
+            y: transform.position.1,
+            half_width: self.width * transform.scale_x * 0.5,
+            half_height: self.height * transform.scale_y * 0.5,
         }
     }
 
@@ -67,7 +57,7 @@ impl Element {
 struct SceneNode {
     id: usize,
     transform: LocalTransform,
-    element: Option<Element>,
+    element: Option<ElementStyle>,
     children: Vec<SceneNode>,
     clip_content: bool,
 }
@@ -424,9 +414,10 @@ mod tests {
 
     #[test]
     fn test_element_bounds() {
-        let rect = Element::Rectangle {
+        let rect = ElementStyle {
             width: 100.0,
             height: 50.0,
+            corner_radius: 0.0,
         };
         let rect_transform = LocalTransform {
             position: LocalPosition(10.0, 20.0),
@@ -440,7 +431,11 @@ mod tests {
         assert_eq!(rect_bounds.half_width, 50.0);
         assert_eq!(rect_bounds.half_height, 25.0);
 
-        let circle = Element::Circle { radius: 30.0 };
+        let circle = ElementStyle {
+            width: 60.0,
+            height: 60.0,
+            corner_radius: 30.0,
+        };
         let circle_transform = LocalTransform {
             position: LocalPosition(-10.0, -20.0),
             scale_x: 2.0,
@@ -585,9 +580,10 @@ mod tests {
             4,
         );
 
-        let rect = Element::Rectangle {
+        let rect = ElementStyle {
             width: 20.0,
             height: 10.0,
+            corner_radius: 0.0,
         };
         let rect_transform = LocalTransform {
             position: LocalPosition(30.0, 40.0),
@@ -599,7 +595,11 @@ mod tests {
 
         assert!(qt.insert_with_bounds(&rect_bounds, 1));
 
-        let circle = Element::Circle { radius: 15.0 };
+        let circle = ElementStyle {
+            width: 30.0,
+            height: 30.0,
+            corner_radius: 15.0,
+        };
         let circle_transform = LocalTransform {
             position: LocalPosition(-20.0, -30.0),
             scale_x: 1.0,
@@ -637,9 +637,10 @@ mod tests {
                 scale_y: 1.0,
                 rotation: 0.0,
             },
-            element: Some(Element::Rectangle {
+            element: Some(ElementStyle {
                 width: 30.0,
                 height: 20.0,
+                corner_radius: 0.0,
             }),
             children: vec![],
             clip_content: true,
@@ -653,7 +654,11 @@ mod tests {
                 scale_y: 2.0,
                 rotation: 0.0,
             },
-            element: Some(Element::Circle { radius: 10.0 }),
+            element: Some(ElementStyle {
+                width: 20.0,
+                height: 20.0,
+                corner_radius: 10.0,
+            }),
             children: vec![],
             clip_content: true,
         };
@@ -699,9 +704,10 @@ mod tests {
                 scale_y: 1.0,
                 rotation: 0.0,
             },
-            element: Some(Element::Rectangle {
+            element: Some(ElementStyle {
                 width: 100.0,
                 height: 50.0,
+                corner_radius: 0.0,
             }),
             clip_content: true,
             children: vec![SceneNode {
@@ -712,7 +718,11 @@ mod tests {
                     scale_y: 1.0,
                     rotation: 0.0,
                 },
-                element: Some(Element::Circle { radius: 20.0 }),
+                element: Some(ElementStyle {
+                    width: 40.0,
+                    height: 40.0,
+                    corner_radius: 20.0,
+                }),
                 clip_content: true,
                 children: vec![],
             }],
@@ -741,9 +751,10 @@ mod tests {
                 scale_y: 1.0,
                 rotation: 0.0,
             },
-            element: Some(Element::Rectangle {
+            element: Some(ElementStyle {
                 width: 100.0,
                 height: 50.0,
+                corner_radius: 0.0,
             }),
             clip_content: false,
             children: vec![SceneNode {
@@ -754,7 +765,11 @@ mod tests {
                     scale_y: 1.0,
                     rotation: 0.0,
                 },
-                element: Some(Element::Circle { radius: 20.0 }),
+                element: Some(ElementStyle {
+                    width: 40.0,
+                    height: 40.0,
+                    corner_radius: 20.0,
+                }),
                 clip_content: false,
                 children: vec![],
             }],
