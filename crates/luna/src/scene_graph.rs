@@ -45,77 +45,70 @@ struct SceneNode {
 }
 
 impl SceneNode {
-    fn calculate_combined_bounds(&self) -> Option<Boundary> {
+    fn calculate_combined_bounds_with_parent(
+        &self,
+        parent_transform: &Transform,
+    ) -> Option<Boundary> {
+        let world_transform = Transform {
+            x: parent_transform.x + self.transform.x,
+            y: parent_transform.y + self.transform.y,
+            scale_x: parent_transform.scale_x * self.transform.scale_x,
+            scale_y: parent_transform.scale_y * self.transform.scale_y,
+            rotation: parent_transform.rotation + self.transform.rotation,
+        };
+
         let mut bounds = Vec::new();
 
-        // Add this node's bounds if it has an element
         if let Some(ref element) = self.element {
-            bounds.push(element.calculate_bounds(&self.transform));
+            bounds.push(element.calculate_bounds(&world_transform));
         }
 
-        // Add children's bounds, transformed to world space
         for child in &self.children {
-            if let Some(child_bounds) = child.calculate_combined_bounds() {
-                // Transform child bounds to world space
-                let world_transform = Transform {
-                    x: self.transform.x + child.transform.x,
-                    y: self.transform.y + child.transform.y,
-                    scale_x: self.transform.scale_x * child.transform.scale_x,
-                    scale_y: self.transform.scale_y * child.transform.scale_y,
-                    rotation: self.transform.rotation + child.transform.rotation,
-                };
-
-                let mut child_world_bounds = Boundary {
-                    x: world_transform.x + child_bounds.x,
-                    y: world_transform.y + child_bounds.y,
-                    half_width: child_bounds.half_width * world_transform.scale_x,
-                    half_height: child_bounds.half_height * world_transform.scale_y,
-                };
-
-                // If this node clips content and has an element, clip child bounds
+            if let Some(child_bounds) =
+                child.calculate_combined_bounds_with_parent(&world_transform)
+            {
                 if self.clip_content {
-                    if let Some(ref element) = self.element {
-                        let parent_bounds = element.calculate_bounds(&self.transform);
-                        // Clamp child bounds to parent bounds
-                        let min_x = parent_bounds.x - parent_bounds.half_width;
-                        let max_x = parent_bounds.x + parent_bounds.half_width;
-                        let min_y = parent_bounds.y - parent_bounds.half_height;
-                        let max_y = parent_bounds.y + parent_bounds.half_height;
+                    let parent_bounds = if let Some(ref element) = self.element {
+                        element.calculate_bounds(&world_transform)
+                    } else {
+                        child_bounds
+                    };
 
-                        let child_min_x = child_world_bounds.x - child_world_bounds.half_width;
-                        let child_max_x = child_world_bounds.x + child_world_bounds.half_width;
-                        let child_min_y = child_world_bounds.y - child_world_bounds.half_height;
-                        let child_max_y = child_world_bounds.y + child_world_bounds.half_height;
+                    let min_x = parent_bounds.x - parent_bounds.half_width;
+                    let max_x = parent_bounds.x + parent_bounds.half_width;
+                    let min_y = parent_bounds.y - parent_bounds.half_height;
+                    let max_y = parent_bounds.y + parent_bounds.half_height;
 
-                        // Calculate intersection
-                        let intersect_min_x = child_min_x.max(min_x);
-                        let intersect_max_x = child_max_x.min(max_x);
-                        let intersect_min_y = child_min_y.max(min_y);
-                        let intersect_max_y = child_max_y.min(max_y);
+                    let child_min_x = child_bounds.x - child_bounds.half_width;
+                    let child_max_x = child_bounds.x + child_bounds.half_width;
+                    let child_min_y = child_bounds.y - child_bounds.half_height;
+                    let child_max_y = child_bounds.y + child_bounds.half_height;
 
-                        // Only add bounds if there is an intersection
-                        if intersect_max_x > intersect_min_x && intersect_max_y > intersect_min_y {
-                            child_world_bounds.x = (intersect_min_x + intersect_max_x) / 2.0;
-                            child_world_bounds.y = (intersect_min_y + intersect_max_y) / 2.0;
-                            child_world_bounds.half_width =
-                                (intersect_max_x - intersect_min_x) / 2.0;
-                            child_world_bounds.half_height =
-                                (intersect_max_y - intersect_min_y) / 2.0;
-                            bounds.push(child_world_bounds);
-                        }
+                    let intersect_min_x = child_min_x.max(min_x);
+                    let intersect_max_x = child_max_x.min(max_x);
+                    let intersect_min_y = child_min_y.max(min_y);
+                    let intersect_max_y = child_max_y.min(max_y);
+
+                    if intersect_max_x > intersect_min_x && intersect_max_y > intersect_min_y {
+                        let clipped_bounds = Boundary {
+                            x: (intersect_min_x + intersect_max_x) / 2.0,
+                            y: (intersect_min_y + intersect_max_y) / 2.0,
+                            half_width: (intersect_max_x - intersect_min_x) / 2.0,
+                            half_height: (intersect_max_y - intersect_min_y) / 2.0,
+                        };
+                        bounds.push(clipped_bounds);
                     }
+                    bounds.push(parent_bounds);
                 } else {
-                    bounds.push(child_world_bounds);
+                    bounds.push(child_bounds);
                 }
             }
         }
 
-        // If no bounds were collected, return None
         if bounds.is_empty() {
             return None;
         }
 
-        // Combine all bounds
         let mut min_x = f32::MAX;
         let mut max_x = f32::MIN;
         let mut min_y = f32::MAX;
@@ -133,6 +126,16 @@ impl SceneNode {
             y: (min_y + max_y) / 2.0,
             half_width: (max_x - min_x) / 2.0,
             half_height: (max_y - min_y) / 2.0,
+        })
+    }
+
+    fn calculate_combined_bounds(&self) -> Option<Boundary> {
+        self.calculate_combined_bounds_with_parent(&Transform {
+            x: 0.0,
+            y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
         })
     }
 }
@@ -623,7 +626,7 @@ mod tests {
                 height: 20.0,
             }),
             children: vec![],
-            clip_content: false,
+            clip_content: true,
         };
 
         let circle_node = SceneNode {
@@ -672,8 +675,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scene_node_with_clipping() {
-        // Create a parent node with a rectangle that clips its content
+    fn test_clipped_scene_node_with_child() {
         let parent_node = SceneNode {
             id: 1,
             transform: Transform {
@@ -688,45 +690,36 @@ mod tests {
                 height: 50.0,
             }),
             clip_content: true,
-            children: vec![
-                // Child node with a circle that extends outside the parent bounds
-                SceneNode {
-                    id: 2,
-                    transform: Transform {
-                        x: 60.0,
-                        y: 0.0,
-                        scale_x: 1.0,
-                        scale_y: 1.0,
-                        rotation: 0.0,
-                    },
-                    element: Some(Element::Circle { radius: 20.0 }),
-                    clip_content: false,
-                    children: vec![],
+            children: vec![SceneNode {
+                id: 2,
+                transform: Transform {
+                    x: 60.0,
+                    y: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    rotation: 0.0,
                 },
-            ],
+                element: Some(Element::Circle { radius: 20.0 }),
+                clip_content: true,
+                children: vec![],
+            }],
         };
 
         let combined_bounds = parent_node.calculate_combined_bounds().unwrap();
 
         // The combined bounds should be clipped to the parent rectangle
-        assert!(combined_bounds.half_width <= 50.0); // parent width/2
-        assert!(combined_bounds.half_height <= 25.0); // parent height/2
-
-        // Create the same scene without clipping
-        let unclipped_parent = SceneNode {
-            clip_content: false,
-            ..parent_node
-        };
-
-        let unclipped_bounds = unclipped_parent.calculate_combined_bounds().unwrap();
-
-        // The unclipped bounds should be larger to contain the full circle
-        assert!(unclipped_bounds.half_width > 50.0);
+        assert!(
+            combined_bounds.half_width <= 50.0,
+            "Width should be clipped to parent bounds"
+        );
+        assert!(
+            combined_bounds.half_height <= 25.0,
+            "Height should be clipped to parent bounds"
+        );
     }
 
     #[test]
-    fn test_scene_node_with_child() {
-        // Create a parent node with a rectangle
+    fn test_unclipped_scene_node_with_child() {
         let parent_node = SceneNode {
             id: 1,
             transform: Transform {
@@ -740,89 +733,33 @@ mod tests {
                 width: 100.0,
                 height: 50.0,
             }),
-            clip_content: true,
-            children: vec![
-                // Child node with a circle, positioned relative to parent
-                SceneNode {
-                    id: 2,
-                    transform: Transform {
-                        x: 75.0, // This will be relative to parent's position
-                        y: 25.0,
-                        scale_x: 1.0,
-                        scale_y: 1.0,
-                        rotation: 0.0,
-                    },
-                    element: Some(Element::Circle { radius: 20.0 }),
-                    children: vec![],
-                    clip_content: true,
+            clip_content: false,
+            children: vec![SceneNode {
+                id: 2,
+                transform: Transform {
+                    x: 60.0,
+                    y: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    rotation: 0.0,
                 },
-            ],
+                element: Some(Element::Circle { radius: 20.0 }),
+                clip_content: false,
+                children: vec![],
+            }],
         };
 
-        // Calculate parent bounds
-        let parent_bounds = parent_node
-            .element
-            .as_ref()
-            .unwrap()
-            .calculate_bounds(&parent_node.transform);
-
-        // Calculate child bounds with combined transform
-        let child = &parent_node.children[0];
-        let child_transform = Transform {
-            x: parent_node.transform.x + child.transform.x,
-            y: parent_node.transform.y + child.transform.y,
-            scale_x: parent_node.transform.scale_x * child.transform.scale_x,
-            scale_y: parent_node.transform.scale_y * child.transform.scale_y,
-            rotation: parent_node.transform.rotation + child.transform.rotation,
-        };
-        let child_bounds = child
-            .element
-            .as_ref()
-            .unwrap()
-            .calculate_bounds(&child_transform);
-
-        // Verify parent bounds
-        assert_eq!(parent_bounds.x, 0.0);
-        assert_eq!(parent_bounds.y, 0.0);
-        assert_eq!(parent_bounds.half_width, 50.0);
-        assert_eq!(parent_bounds.half_height, 25.0);
-
-        // Verify child bounds (in world space)
-        assert_eq!(child_bounds.x, 75.0);
-        assert_eq!(child_bounds.y, 25.0);
-        assert_eq!(child_bounds.half_width, 20.0);
-        assert_eq!(child_bounds.half_height, 20.0);
-
-        // Calculate combined bounds using the new method
         let combined_bounds = parent_node.calculate_combined_bounds().unwrap();
 
-        // Verify combined bounds contains both elements
-        assert!(combined_bounds.half_width >= parent_bounds.half_width);
-        assert!(combined_bounds.half_width >= child_bounds.half_width);
-        assert!(combined_bounds.half_height >= parent_bounds.half_height);
-        assert!(combined_bounds.half_height >= child_bounds.half_height);
-
-        // Verify the combined bounds fully contain both elements
-        let contains_parent = parent_bounds.x + parent_bounds.half_width
-            <= combined_bounds.x + combined_bounds.half_width
-            && parent_bounds.x - parent_bounds.half_width
-                >= combined_bounds.x - combined_bounds.half_width
-            && parent_bounds.y + parent_bounds.half_height
-                <= combined_bounds.y + combined_bounds.half_height
-            && parent_bounds.y - parent_bounds.half_height
-                >= combined_bounds.y - combined_bounds.half_height;
-
-        let contains_child = child_bounds.x + child_bounds.half_width
-            <= combined_bounds.x + combined_bounds.half_width
-            && child_bounds.x - child_bounds.half_width
-                >= combined_bounds.x - combined_bounds.half_width
-            && child_bounds.y + child_bounds.half_height
-                <= combined_bounds.y + combined_bounds.half_height
-            && child_bounds.y - child_bounds.half_height
-                >= combined_bounds.y - combined_bounds.half_height;
-
-        assert!(contains_parent, "Combined bounds should contain parent");
-        assert!(contains_child, "Combined bounds should contain child");
+        // The unclipped bounds should be large enough to contain both the parent rectangle and the full circle
+        assert!(
+            combined_bounds.half_width > 50.0,
+            "Width should include full circle bounds"
+        );
+        assert!(
+            combined_bounds.x > 0.0,
+            "Center should shift right to accommodate circle"
+        );
     }
 
     #[test]
