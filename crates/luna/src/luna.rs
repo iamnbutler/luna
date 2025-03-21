@@ -12,7 +12,7 @@ use element::ElementStyle;
 use gpui::{prelude::FluentBuilder as _, *};
 
 use layer_list::LayerList;
-use scene_graph::{BoundingBox, QuadTree};
+use scene_graph::{BoundingBox, QuadTree, SceneGraph};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -126,12 +126,13 @@ struct Luna {
     titlebar: Entity<Titlebar>,
     canvas: Entity<Canvas>,
     element_list: Entity<LayerList>,
-    scene_graph: Entity<QuadTree>,
+    scene_graph: Entity<SceneGraph>,
 }
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .debug_below()
             .text_xs()
             .text_color(rgb(0xA9AFBC))
             .font_family("Berkeley Mono")
@@ -141,19 +142,20 @@ impl Render for Luna {
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .size_full()
-                    .overflow_hidden()
-                    .child(self.canvas.clone()),
-            )
-            .child(self.element_list.clone())
-            .child(self.titlebar.clone())
+            .child(self.scene_graph.clone())
+        // .child(
+        //     div()
+        //         .absolute()
+        //         .top_0()
+        //         .left_0()
+        //         .right_0()
+        //         .bottom_0()
+        //         .size_full()
+        //         .overflow_hidden()
+
+        // )
+        // .child(self.element_list.clone())
+        // .child(self.titlebar.clone())
     }
 }
 
@@ -211,8 +213,10 @@ fn main() {
             let titlebar = cx.new(|cx| Titlebar::new(window, cx));
             let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
 
-            let scene_graph =
-                cx.new(|cx| QuadTree::new("quad-tree", BoundingBox::new(0., 0., 128., 128.), 4));
+            let scene_graph = cx.new(|cx| {
+                let tree = QuadTree::new("quad-tree", BoundingBox::new(0., 0., 128., 128.), 4);
+                SceneGraph::new(tree, cx)
+            });
 
             cx.new(|_cx| Luna {
                 titlebar,

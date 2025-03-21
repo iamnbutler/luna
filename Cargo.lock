@@ -2517,6 +2517,7 @@ dependencies = [
  "smallvec",
  "strum 0.24.1",
  "strum_macros 0.24.3",
+ "taffy",
  "uuid",
 ]
 

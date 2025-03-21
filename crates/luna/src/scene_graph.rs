@@ -1,4 +1,8 @@
-use gpui::{div, Element, ElementId, Entity, IntoElement, Render};
+use gpui::{
+    div, hsla, px, quad, App, AppContext, Bounds, Context, Element, ElementId, Entity,
+    GlobalElementId, Hitbox, IntoElement, LayoutId, Pixels, Point, Position, Render, Size, Style,
+    Window,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct WorldPosition(pub f32, pub f32);
@@ -176,7 +180,7 @@ fn new_element_id() -> ElementId {
     ElementId::Uuid(uuid::Uuid::new_v4())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct QuadTree {
     id: ElementId,
     boundary: BoundingBox,
@@ -382,47 +386,154 @@ impl QuadTree {
 pub struct SceneGraph {
     id: ElementId,
     tree: QuadTree,
+    nodes: Vec<SceneNode>,
+    viewport_size: Option<Size<Pixels>>,
+}
+
+impl SceneGraph {
+    pub fn new(tree: QuadTree, cx: &mut Context<Self>) -> Self {
+        SceneGraph {
+            id: ElementId::Name("scene-graph".into()),
+            tree,
+            nodes: Vec::new(),
+            viewport_size: None,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct SceneGraphLayoutState {
+    node_layouts: Vec<LayoutId>,
 }
 
 impl Element for SceneGraph {
-    type RequestLayoutState = ();
+    type RequestLayoutState = SceneGraphLayoutState;
+    type PrepaintState = Option<Hitbox>;
 
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
     }
 
     fn request_layout(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        todo!()
+        _id: Option<&GlobalElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let mut state = SceneGraphLayoutState::default();
+
+        for node in &mut self.nodes {
+            println!("Processing node: {:?}", node.id);
+
+            if let Some(ref element) = node.element {
+                let style = Style {
+                    position: Position::Absolute,
+                    size: Size {
+                        width: px(element.width).into(),
+                        height: px(element.height).into(),
+                    },
+                    ..Default::default()
+                };
+
+                let layout_id = window.request_layout(style, vec![], cx);
+                state.node_layouts.push(layout_id);
+            }
+        }
+
+        let layout_id = window.request_layout(
+            Style {
+                position: Position::Absolute,
+                ..Default::default()
+            },
+            state.node_layouts.iter().copied(),
+            cx,
+        );
+
+        (layout_id, state)
     }
 
     fn prepaint(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
+        window: &mut Window,
+        _cx: &mut App,
     ) -> Self::PrepaintState {
-        todo!()
+        self.viewport_size = Some(bounds.size);
+
+        self.tree = QuadTree::new(
+            new_element_id(),
+            BoundingBox::new(
+                bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
+                bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
+                bounds.size.width.0 as f32 / 2.0,
+                bounds.size.height.0 as f32 / 2.0,
+            ),
+            32,
+        );
+
+        for (i, (node, layout_id)) in self
+            .nodes
+            .iter()
+            .zip(&request_layout.node_layouts)
+            .enumerate()
+        {
+            let node_bounds = window.layout_bounds(*layout_id);
+            if let Some(element) = &node.element {
+                let bounds = BoundingBox::new(
+                    node_bounds.origin.x.0 as f32,
+                    node_bounds.origin.y.0 as f32,
+                    element.width * node.transform.scale_x / 2.0,
+                    element.height * node.transform.scale_y / 2.0,
+                );
+                self.tree.insert_with_bounds(&bounds, i);
+            }
+        }
+
+        Some(window.insert_hitbox(bounds, false))
     }
 
     fn paint(
         &mut self,
-        id: Option<&gpui::GlobalElementId>,
-        bounds: gpui::Bounds<gpui::Pixels>,
-        request_layout: &mut Self::RequestLayoutState,
-        prepaint: &mut Self::PrepaintState,
-        window: &mut gpui::Window,
-        cx: &mut gpui::App,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        _cx: &mut App,
     ) {
-        todo!()
+        let query_bounds = BoundingBox::new(
+            bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
+            bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
+            bounds.size.width.0 as f32 / 2.0,
+            bounds.size.height.0 as f32 / 2.0,
+        );
+
+        let visible_nodes = self.tree.query_range(&query_bounds);
+
+        for (_, _, node_id) in visible_nodes {
+            if let Some(node) = self.nodes.get(node_id) {
+                if let Some(element) = &node.element {
+                    window.paint_quad(quad(
+                        Bounds {
+                            origin: Point {
+                                x: px(node.transform.position.0),
+                                y: px(node.transform.position.1),
+                            },
+                            size: Size {
+                                width: px(element.width * node.transform.scale_x),
+                                height: px(element.height * node.transform.scale_y),
+                            },
+                        },
+                        element.corner_radius,
+                        hsla(0.0, 0.0, 0.5, 0.5),
+                        px(1.0),
+                        hsla(0.0, 0.0, 0.0, 1.0),
+                    ));
+                }
+            }
+        }
     }
 }
 
@@ -435,12 +546,19 @@ impl IntoElement for SceneGraph {
 }
 
 impl Render for SceneGraph {
-    fn render(
-        &mut self,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl IntoElement {
-        div()
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        self.clone()
+    }
+}
+
+impl Clone for SceneGraph {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            tree: self.tree.clone(),
+            nodes: self.nodes.clone(),
+            viewport_size: self.viewport_size,
+        }
     }
 }
 

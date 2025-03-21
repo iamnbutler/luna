@@ -22,3 +22,4 @@ uuid = { version ="1.16.0", features = ["v4"] }
 strum = "0.24"
 strum_macros = "0.24"
 palette = "0.7.6"
+taffy = "0.4.3"
