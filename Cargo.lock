@@ -2511,6 +2511,7 @@ dependencies = [
  "anyhow",
  "gpui",
  "palette",
+ "rand 0.9.0",
  "schemars",
  "schemars_derive",
  "serde",

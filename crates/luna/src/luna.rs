@@ -213,10 +213,7 @@ fn main() {
             let titlebar = cx.new(|cx| Titlebar::new(window, cx));
             let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
 
-            let scene_graph = cx.new(|cx| {
-                let tree = QuadTree::new("quad-tree", BoundingBox::new(0., 0., 128., 128.), 4);
-                SceneGraph::new(tree, cx)
-            });
+            let scene_graph = cx.new(|cx| SceneGraph::new("scene-graph", cx));
 
             cx.new(|_cx| Luna {
                 titlebar,

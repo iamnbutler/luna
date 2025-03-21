@@ -60,7 +60,7 @@ impl ElementStyle {
 }
 
 #[derive(Debug, Clone)]
-struct SceneNode {
+pub struct SceneNode {
     id: usize,
     transform: LocalTransform,
     element: Option<ElementStyle>,
@@ -173,6 +173,14 @@ impl BoundingBox {
             half_width,
             half_height,
         }
+    }
+
+    pub fn width(&self) -> f32 {
+        self.half_width * 2.0
+    }
+
+    pub fn height(&self) -> f32 {
+        self.half_height * 2.0
     }
 }
 
@@ -391,13 +399,79 @@ pub struct SceneGraph {
 }
 
 impl SceneGraph {
-    pub fn new(tree: QuadTree, cx: &mut Context<Self>) -> Self {
-        SceneGraph {
-            id: ElementId::Name("scene-graph".into()),
+    pub fn new(id: impl Into<ElementId>, cx: &mut Context<Self>) -> Self {
+        let boundary = BoundingBox::new(0.0, 0.0, 1000.0, 1000.0);
+        let tree = QuadTree::new("scene-graph-quad-tree", boundary, 32);
+
+        let mut graph = SceneGraph {
+            id: id.into(),
             tree,
             nodes: Vec::new(),
             viewport_size: None,
+        };
+
+        for _ in 0..1000 {
+            let x = -200.0 + (rand::random::<f32>() * 1200.0);
+            let y = -200.0 + (rand::random::<f32>() * 1200.0);
+            let size = 1.0 + (rand::random::<f32>() * 24.0);
+            if rand::random::<bool>() {
+                graph.add_circle(x, y, size);
+            } else {
+                graph.add_rectangle(x, y, size * 2.0, size * 2.0);
+            }
         }
+
+        eprintln!("SceneGraph initialized with {} nodes", graph.nodes.len());
+
+        graph
+    }
+
+    pub fn add_node(&mut self, node: SceneNode) -> usize {
+        let id = self.nodes.len();
+        self.nodes.push(node);
+        id
+    }
+
+    pub fn add_rectangle(&mut self, x: f32, y: f32, width: f32, height: f32) -> usize {
+        let node = SceneNode {
+            id: self.nodes.len(),
+            transform: LocalTransform {
+                position: LocalPosition(x, y),
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+            },
+            element: Some(ElementStyle {
+                width,
+                height,
+                corner_radius: 0.0,
+            }),
+            children: Vec::new(),
+            clip_content: false,
+        };
+
+        self.add_node(node)
+    }
+
+    pub fn add_circle(&mut self, x: f32, y: f32, radius: f32) -> usize {
+        let node = SceneNode {
+            id: self.nodes.len(),
+            transform: LocalTransform {
+                position: LocalPosition(x, y),
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+            },
+            element: Some(ElementStyle {
+                width: radius * 2.0,
+                height: radius * 2.0,
+                corner_radius: radius,
+            }),
+            children: Vec::new(),
+            clip_content: false,
+        };
+
+        self.add_node(node)
     }
 }
 
@@ -422,8 +496,11 @@ impl Element for SceneGraph {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut state = SceneGraphLayoutState::default();
 
+        eprintln!("SceneGraph request_layout with {} nodes", self.nodes.len());
+
+        // Request layout for each node
         for node in &mut self.nodes {
-            println!("Processing node: {:?}", node.id);
+            // eprintln!("Processing node: {:?}", node.id);
 
             if let Some(ref element) = node.element {
                 let style = Style {
@@ -440,6 +517,7 @@ impl Element for SceneGraph {
             }
         }
 
+        // Create layout for the scene graph container
         let layout_id = window.request_layout(
             Style {
                 position: Position::Absolute,
@@ -447,6 +525,11 @@ impl Element for SceneGraph {
             },
             state.node_layouts.iter().copied(),
             cx,
+        );
+
+        eprintln!(
+            "SceneGraph layout created with {} child layouts",
+            state.node_layouts.len()
         );
 
         (layout_id, state)
@@ -511,24 +594,63 @@ impl Element for SceneGraph {
         );
 
         let visible_nodes = self.tree.query_range(&query_bounds);
+        eprintln!(
+            "SceneGraph paint: found {} visible nodes in bounds {:?}",
+            visible_nodes.len(),
+            bounds
+        );
+
+        // Paint a background to visualize the scene graph bounds
+        window.paint_quad(quad(
+            bounds,
+            0.0,
+            hsla(0.7, 0.3, 0.9, 0.1), // Light purple background
+            px(1.0),
+            hsla(0.7, 0.5, 0.5, 0.5), // Purple border
+        ));
 
         for (_, _, node_id) in visible_nodes {
             if let Some(node) = self.nodes.get(node_id) {
+                // eprintln!(
+                //     "Painting node {}: position ({}, {})",
+                //     node.id, node.transform.position.0, node.transform.position.1
+                // );
+
                 if let Some(element) = &node.element {
-                    window.paint_quad(quad(
-                        Bounds {
-                            origin: Point {
-                                x: px(node.transform.position.0),
-                                y: px(node.transform.position.1),
-                            },
-                            size: Size {
-                                width: px(element.width * node.transform.scale_x),
-                                height: px(element.height * node.transform.scale_y),
-                            },
+                    // Create more visually distinct nodes for debugging
+                    let node_color = match node.id % 12 {
+                        0 => hsla(0.0, 0.7, 0.5, 0.3),  // Red
+                        1 => hsla(0.3, 0.7, 0.5, 0.3),  // Green
+                        2 => hsla(0.6, 0.7, 0.5, 0.3),  // Blue
+                        3 => hsla(0.1, 0.7, 0.5, 0.3),  // Orange
+                        4 => hsla(0.8, 0.7, 0.5, 0.3),  // Purple
+                        5 => hsla(0.5, 0.7, 0.5, 0.3),  // Teal
+                        6 => hsla(0.15, 0.7, 0.5, 0.3), // Yellow
+                        7 => hsla(0.7, 0.7, 0.5, 0.3),  // Pink
+                        8 => hsla(0.4, 0.7, 0.5, 0.3),  // Lime
+                        9 => hsla(0.9, 0.7, 0.5, 0.3),  // Magenta
+                        10 => hsla(0.2, 0.7, 0.5, 0.3), // Olive
+                        _ => hsla(0.55, 0.7, 0.5, 0.3), // Sky Blue
+                    };
+
+                    let node_bounds = Bounds {
+                        origin: Point {
+                            x: px(node.transform.position.0
+                                - element.width * node.transform.scale_x / 2.0),
+                            y: px(node.transform.position.1
+                                - element.height * node.transform.scale_y / 2.0),
                         },
+                        size: Size {
+                            width: px(element.width * node.transform.scale_x),
+                            height: px(element.height * node.transform.scale_y),
+                        },
+                    };
+
+                    window.paint_quad(quad(
+                        node_bounds,
                         element.corner_radius,
-                        hsla(0.0, 0.0, 0.5, 0.5),
-                        px(1.0),
+                        node_color,
+                        px(2.0),
                         hsla(0.0, 0.0, 0.0, 1.0),
                     ));
                 }
