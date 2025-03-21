@@ -3,12 +3,74 @@ use gpui::{
     GlobalElementId, Hitbox, IntoElement, LayoutId, Pixels, Point, Position, Render, Size, Style,
     Window,
 };
+#[derive(Debug, Clone, Copy)]
+pub struct Vector2D {
+    x: f32,
+    y: f32,
+}
+
+impl Vector2D {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
+    pub fn add(&self, other: &Vector2D) -> Vector2D {
+        Vector2D::new(self.x + other.x, self.y + other.y)
+    }
+
+    pub fn scale(&self, sx: f32, sy: f32) -> Vector2D {
+        Vector2D::new(self.x * sx, self.y * sy)
+    }
+
+    pub fn x(&self) -> f32 {
+        self.x
+    }
+    pub fn y(&self) -> f32 {
+        self.y
+    }
+}
+
+use std::ops::Sub;
+
+impl Sub<f32> for Vector2D {
+    type Output = Vector2D;
+
+    fn sub(self, rhs: f32) -> Self::Output {
+        Vector2D::new(self.x - rhs, self.y - rhs)
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
-pub struct WorldPosition(pub f32, pub f32);
+pub struct WorldPosition(Vector2D);
+
+impl WorldPosition {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vector2D::new(x, y))
+    }
+
+    pub fn x(&self) -> f32 {
+        self.0.x
+    }
+    pub fn y(&self) -> f32 {
+        self.0.y
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
-pub struct LocalPosition(pub f32, pub f32);
+pub struct LocalPosition(Vector2D);
+
+impl LocalPosition {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vector2D::new(x, y))
+    }
+
+    pub fn x(&self) -> f32 {
+        self.0.x
+    }
+    pub fn y(&self) -> f32 {
+        self.0.y
+    }
+}
 
 #[derive(Debug, Clone)]
 struct LocalTransform {
@@ -21,9 +83,9 @@ struct LocalTransform {
 impl LocalTransform {
     fn to_world_transform(&self, parent: &LocalTransform) -> LocalTransform {
         LocalTransform {
-            position: LocalPosition(
-                parent.position.0 + self.position.0,
-                parent.position.1 + self.position.1,
+            position: LocalPosition::new(
+                parent.position.x() + self.position.x(),
+                parent.position.y() + self.position.y(),
             ),
             scale_x: parent.scale_x * self.scale_x,
             scale_y: parent.scale_y * self.scale_y,
@@ -42,8 +104,8 @@ struct ElementStyle {
 impl ElementStyle {
     fn calculate_local_bounds(&self, transform: &LocalTransform) -> BoundingBox {
         BoundingBox {
-            x: transform.position.0,
-            y: transform.position.1,
+            center_x: transform.position.x(),
+            center_y: transform.position.y(),
             half_width: self.width * transform.scale_x * 0.5,
             half_height: self.height * transform.scale_y * 0.5,
         }
@@ -92,15 +154,15 @@ impl SceneNode {
                         child_bounds
                     };
 
-                    let min_x = parent_bounds.x - parent_bounds.half_width;
-                    let max_x = parent_bounds.x + parent_bounds.half_width;
-                    let min_y = parent_bounds.y - parent_bounds.half_height;
-                    let max_y = parent_bounds.y + parent_bounds.half_height;
+                    let min_x = parent_bounds.min_x();
+                    let max_x = parent_bounds.max_x();
+                    let min_y = parent_bounds.min_y();
+                    let max_y = parent_bounds.max_y();
 
-                    let child_min_x = child_bounds.x - child_bounds.half_width;
-                    let child_max_x = child_bounds.x + child_bounds.half_width;
-                    let child_min_y = child_bounds.y - child_bounds.half_height;
-                    let child_max_y = child_bounds.y + child_bounds.half_height;
+                    let child_min_x = child_bounds.min_x();
+                    let child_max_x = child_bounds.max_x();
+                    let child_min_y = child_bounds.min_y();
+                    let child_max_y = child_bounds.max_y();
 
                     let intersect_min_x = child_min_x.max(min_x);
                     let intersect_max_x = child_max_x.min(max_x);
@@ -109,8 +171,8 @@ impl SceneNode {
 
                     if intersect_max_x > intersect_min_x && intersect_max_y > intersect_min_y {
                         let clipped_bounds = BoundingBox {
-                            x: (intersect_min_x + intersect_max_x) / 2.0,
-                            y: (intersect_min_y + intersect_max_y) / 2.0,
+                            center_x: (intersect_min_x + intersect_max_x) / 2.0,
+                            center_y: (intersect_min_y + intersect_max_y) / 2.0,
                             half_width: (intersect_max_x - intersect_min_x) / 2.0,
                             half_height: (intersect_max_y - intersect_min_y) / 2.0,
                         };
@@ -133,15 +195,15 @@ impl SceneNode {
         let mut max_y = f32::MIN;
 
         for bound in bounds {
-            min_x = min_x.min(bound.x - bound.half_width);
-            max_x = max_x.max(bound.x + bound.half_width);
-            min_y = min_y.min(bound.y - bound.half_height);
-            max_y = max_y.max(bound.y + bound.half_height);
+            min_x = min_x.min(bound.min_x());
+            max_x = max_x.max(bound.max_x());
+            min_y = min_y.min(bound.min_y());
+            max_y = max_y.max(bound.max_y());
         }
 
         Some(BoundingBox {
-            x: (min_x + max_x) / 2.0,
-            y: (min_y + max_y) / 2.0,
+            center_x: (min_x + max_x) / 2.0,
+            center_y: (min_y + max_y) / 2.0,
             half_width: (max_x - min_x) / 2.0,
             half_height: (max_y - min_y) / 2.0,
         })
@@ -149,7 +211,7 @@ impl SceneNode {
 
     fn calculate_combined_bounds(&self) -> Option<BoundingBox> {
         self.calculate_combined_bounds_with_parent(&LocalTransform {
-            position: LocalPosition(0.0, 0.0),
+            position: LocalPosition::new(0.0, 0.0),
             scale_x: 1.0,
             scale_y: 1.0,
             rotation: 0.0,
@@ -157,21 +219,33 @@ impl SceneNode {
     }
 }
 
+/// A bounding box representation using center point and half-dimensions.
+/// This representation is optimized for quad tree operations and intersection tests.
 #[derive(Debug, Clone, Copy)]
 pub struct BoundingBox {
-    x: f32,
-    y: f32,
+    center_x: f32,
+    center_y: f32,
     half_width: f32,
     half_height: f32,
 }
 
 impl BoundingBox {
-    pub fn new(x: f32, y: f32, half_width: f32, half_height: f32) -> Self {
+    pub fn new(center_x: f32, center_y: f32, half_width: f32, half_height: f32) -> Self {
         Self {
-            x,
-            y,
+            center_x,
+            center_y,
             half_width,
             half_height,
+        }
+    }
+
+    /// Creates a bounding box from minimum and maximum coordinates
+    pub fn from_min_max(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
+        Self {
+            center_x: (min_x + max_x) / 2.0,
+            center_y: (min_y + max_y) / 2.0,
+            half_width: (max_x - min_x) / 2.0,
+            half_height: (max_y - min_y) / 2.0,
         }
     }
 
@@ -181,6 +255,35 @@ impl BoundingBox {
 
     pub fn height(&self) -> f32 {
         self.half_height * 2.0
+    }
+
+    pub fn min_x(&self) -> f32 {
+        self.center_x - self.half_width
+    }
+
+    pub fn max_x(&self) -> f32 {
+        self.center_x + self.half_width
+    }
+
+    pub fn min_y(&self) -> f32 {
+        self.center_y - self.half_height
+    }
+
+    pub fn max_y(&self) -> f32 {
+        self.center_y + self.half_height
+    }
+
+    /// Returns true if this bounding box contains the given point
+    pub fn contains_point(&self, x: f32, y: f32) -> bool {
+        x >= self.min_x() && x <= self.max_x() && y >= self.min_y() && y <= self.max_y()
+    }
+
+    /// Returns true if this bounding box intersects with another
+    pub fn intersects(&self, other: &BoundingBox) -> bool {
+        !(other.min_x() > self.max_x()
+            || other.max_x() < self.min_x()
+            || other.min_y() > self.max_y()
+            || other.max_y() < self.min_y())
     }
 }
 
@@ -203,24 +306,28 @@ pub struct QuadTree {
 
 impl QuadTree {
     fn collect_all_points(&self) -> Vec<(f32, f32, usize)> {
-        let mut result = self.points.clone();
+        let mut results = Vec::new();
+        self.collect_all_points_into(&mut results);
+        results
+    }
+
+    fn collect_all_points_into(&self, results: &mut Vec<(f32, f32, usize)>) {
+        results.extend_from_slice(&self.points);
 
         if self.divided {
             if let Some(ref quad) = self.northeast {
-                result.extend(quad.collect_all_points());
+                quad.collect_all_points_into(results);
             }
             if let Some(ref quad) = self.northwest {
-                result.extend(quad.collect_all_points());
+                quad.collect_all_points_into(results);
             }
             if let Some(ref quad) = self.southeast {
-                result.extend(quad.collect_all_points());
+                quad.collect_all_points_into(results);
             }
             if let Some(ref quad) = self.southwest {
-                result.extend(quad.collect_all_points());
+                quad.collect_all_points_into(results);
             }
         }
-
-        result
     }
 
     fn clear_points(&mut self) {
@@ -244,8 +351,8 @@ impl QuadTree {
 
     fn update_bounds(&mut self, new_boundary: BoundingBox) {
         // Only rebuild if boundary changed significantly
-        if (self.boundary.x - new_boundary.x).abs() > 1.0
-            || (self.boundary.y - new_boundary.y).abs() > 1.0
+        if (self.boundary.center_x - new_boundary.center_x).abs() > 1.0
+            || (self.boundary.center_y - new_boundary.center_y).abs() > 1.0
             || (self.boundary.half_width - new_boundary.half_width).abs() > 1.0
             || (self.boundary.half_height - new_boundary.half_height).abs() > 1.0
         {
@@ -275,7 +382,7 @@ impl QuadTree {
 
         if self.points.len() < self.capacity {
             // Store the center point of the bounds
-            self.points.push((bounds.x, bounds.y, id));
+            self.points.push((bounds.center_x, bounds.center_y, id));
             return true;
         }
 
@@ -322,15 +429,15 @@ impl QuadTree {
     }
 
     fn subdivide(&mut self) {
-        let x = self.boundary.x;
-        let y = self.boundary.y;
+        let x = self.boundary.center_x;
+        let y = self.boundary.center_y;
         let hw = self.boundary.half_width / 2.0;
         let hh = self.boundary.half_height / 2.0;
         self.northeast = Some(Box::new(QuadTree::new(
             new_element_id(),
             BoundingBox {
-                x: x + hw,
-                y: y - hh,
+                center_x: x + hw,
+                center_y: y - hh,
                 half_width: hw,
                 half_height: hh,
             },
@@ -339,8 +446,8 @@ impl QuadTree {
         self.northwest = Some(Box::new(QuadTree::new(
             new_element_id(),
             BoundingBox {
-                x: x - hw,
-                y: y - hh,
+                center_x: x - hw,
+                center_y: y - hh,
                 half_width: hw,
                 half_height: hh,
             },
@@ -349,8 +456,8 @@ impl QuadTree {
         self.southeast = Some(Box::new(QuadTree::new(
             new_element_id(),
             BoundingBox {
-                x: x + hw,
-                y: y + hh,
+                center_x: x + hw,
+                center_y: y + hh,
                 half_width: hw,
                 half_height: hh,
             },
@@ -359,8 +466,8 @@ impl QuadTree {
         self.southwest = Some(Box::new(QuadTree::new(
             new_element_id(),
             BoundingBox {
-                x: x - hw,
-                y: y + hh,
+                center_x: x - hw,
+                center_y: y + hh,
                 half_width: hw,
                 half_height: hh,
             },
@@ -408,52 +515,44 @@ impl QuadTree {
     }
 
     fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.boundary.x - self.boundary.half_width
-            && x <= self.boundary.x + self.boundary.half_width
-            && y >= self.boundary.y - self.boundary.half_height
-            && y <= self.boundary.y + self.boundary.half_height
+        self.boundary.contains_point(x, y)
     }
 
     fn intersects(&self, other: &BoundingBox) -> bool {
-        !(other.x - other.half_width > self.boundary.x + self.boundary.half_width
-            || other.x + other.half_width < self.boundary.x - self.boundary.half_width
-            || other.y - other.half_height > self.boundary.y + self.boundary.half_height
-            || other.y + other.half_height < self.boundary.y - self.boundary.half_height)
+        self.boundary.intersects(other)
     }
 
     fn query_range(&self, query_range: &BoundingBox) -> Vec<(f32, f32, usize)> {
-        let mut found = Vec::new();
+        let mut results = Vec::new();
+        self.query_range_into(query_range, &mut results);
+        results
+    }
 
+    fn query_range_into(&self, query_range: &BoundingBox, results: &mut Vec<(f32, f32, usize)>) {
         if !self.intersects(query_range) {
-            return found;
+            return;
         }
 
         for &(x, y, id) in &self.points {
-            if x >= query_range.x - query_range.half_width
-                && x <= query_range.x + query_range.half_width
-                && y >= query_range.y - query_range.half_height
-                && y <= query_range.y + query_range.half_height
-            {
-                found.push((x, y, id));
+            if query_range.contains_point(x, y) {
+                results.push((x, y, id));
             }
         }
 
         if self.divided {
             if let Some(ref quad) = self.northeast {
-                found.extend(quad.query_range(query_range));
+                quad.query_range_into(query_range, results);
             }
             if let Some(ref quad) = self.northwest {
-                found.extend(quad.query_range(query_range));
+                quad.query_range_into(query_range, results);
             }
             if let Some(ref quad) = self.southeast {
-                found.extend(quad.query_range(query_range));
+                quad.query_range_into(query_range, results);
             }
             if let Some(ref quad) = self.southwest {
-                found.extend(quad.query_range(query_range));
+                quad.query_range_into(query_range, results);
             }
         }
-
-        found
     }
 }
 
@@ -502,7 +601,7 @@ impl SceneGraph {
         let node = SceneNode {
             id: self.nodes.len(),
             transform: LocalTransform {
-                position: LocalPosition(x, y),
+                position: LocalPosition::new(x, y),
                 scale_x: 1.0,
                 scale_y: 1.0,
                 rotation: 0.0,
@@ -523,7 +622,7 @@ impl SceneGraph {
         let node = SceneNode {
             id: self.nodes.len(),
             transform: LocalTransform {
-                position: LocalPosition(x, y),
+                position: LocalPosition::new(x, y),
                 scale_x: 1.0,
                 scale_y: 1.0,
                 rotation: 0.0,
@@ -717,9 +816,9 @@ impl Element for SceneGraph {
 
                     let node_bounds = Bounds {
                         origin: Point {
-                            x: px(node.transform.position.0
+                            x: px(node.transform.position.x()
                                 - element.width * node.transform.scale_x / 2.0),
-                            y: px(node.transform.position.1
+                            y: px(node.transform.position.y()
                                 - element.height * node.transform.scale_y / 2.0),
                         },
                         size: Size {
@@ -801,10 +900,7 @@ mod tests {
 
     fn check_node(qt: &QuadTree) {
         for (x, y, _id) in &qt.points {
-            assert!(*x >= qt.boundary.x - qt.boundary.half_width);
-            assert!(*x <= qt.boundary.x + qt.boundary.half_width);
-            assert!(*y >= qt.boundary.y - qt.boundary.half_height);
-            assert!(*y <= qt.boundary.y + qt.boundary.half_height);
+            assert!(qt.boundary.contains_point(*x, *y));
         }
         if qt.divided {
             if let Some(ref ne) = qt.northeast {
@@ -830,14 +926,14 @@ mod tests {
             corner_radius: 0.0,
         };
         let rect_transform = LocalTransform {
-            position: LocalPosition(10.0, 20.0),
+            position: LocalPosition::new(10.0, 20.0),
             scale_x: 1.0,
             scale_y: 1.0,
             rotation: 0.0,
         };
         let rect_bounds = rect.calculate_local_bounds(&rect_transform);
-        assert_eq!(rect_bounds.x, 10.0);
-        assert_eq!(rect_bounds.y, 20.0);
+        assert_eq!(rect_bounds.center_x, 10.0);
+        assert_eq!(rect_bounds.center_y, 20.0);
         assert_eq!(rect_bounds.half_width, 50.0);
         assert_eq!(rect_bounds.half_height, 25.0);
 
@@ -847,14 +943,14 @@ mod tests {
             corner_radius: 30.0,
         };
         let circle_transform = LocalTransform {
-            position: LocalPosition(-10.0, -20.0),
+            position: LocalPosition::new(-10.0, -20.0),
             scale_x: 2.0,
             scale_y: 2.0,
             rotation: 0.0,
         };
         let circle_bounds = circle.calculate_local_bounds(&circle_transform);
-        assert_eq!(circle_bounds.x, -10.0);
-        assert_eq!(circle_bounds.y, -20.0);
+        assert_eq!(circle_bounds.center_x, -10.0);
+        assert_eq!(circle_bounds.center_y, -20.0);
         assert_eq!(circle_bounds.half_width, 60.0);
         assert_eq!(circle_bounds.half_height, 60.0);
     }
@@ -865,8 +961,8 @@ mod tests {
             let mut qt = QuadTree::new(
                 "test",
                 BoundingBox {
-                    x: 0.0,
-                    y: 0.0,
+                    center_x: 0.0,
+                    center_y: 0.0,
                     half_width: 10.0,
                     half_height: 10.0,
                 },
@@ -892,8 +988,8 @@ mod tests {
             let mut qt = QuadTree::new(
                 "test",
                 BoundingBox {
-                    x: 0.0,
-                    y: 0.0,
+                    center_x: 0.0,
+                    center_y: 0.0,
                     half_width: 10.0,
                     half_height: 10.0,
                 },
@@ -927,8 +1023,8 @@ mod tests {
         let mut qt = QuadTree::new(
             "test",
             BoundingBox {
-                x: 0.0,
-                y: 0.0,
+                center_x: 0.0,
+                center_y: 0.0,
                 half_width: 10.0,
                 half_height: 10.0,
             },
@@ -952,8 +1048,8 @@ mod tests {
         let mut qt = QuadTree::new(
             "test",
             BoundingBox {
-                x: 0.0,
-                y: 0.0,
+                center_x: 0.0,
+                center_y: 0.0,
                 half_width: 16.0,
                 half_height: 16.0,
             },
@@ -987,8 +1083,8 @@ mod tests {
         let mut qt = QuadTree::new(
             "test",
             BoundingBox {
-                x: 0.0,
-                y: 0.0,
+                center_x: 0.0,
+                center_y: 0.0,
                 half_width: 100.0,
                 half_height: 100.0,
             },
@@ -1001,7 +1097,7 @@ mod tests {
             corner_radius: 0.0,
         };
         let rect_transform = LocalTransform {
-            position: LocalPosition(30.0, 40.0),
+            position: LocalPosition::new(30.0, 40.0),
             scale_x: 1.0,
             scale_y: 1.0,
             rotation: 0.0,
@@ -1016,7 +1112,7 @@ mod tests {
             corner_radius: 15.0,
         };
         let circle_transform = LocalTransform {
-            position: LocalPosition(-20.0, -30.0),
+            position: LocalPosition(Vector2D { x: 20.0, y: 30.0 }),
             scale_x: 1.0,
             scale_y: 1.0,
             rotation: 0.0,
@@ -1037,8 +1133,8 @@ mod tests {
         let mut qt = QuadTree::new(
             "test",
             BoundingBox {
-                x: 0.0,
-                y: 0.0,
+                center_x: 0.0,
+                center_y: 0.0,
                 half_width: 100.0,
                 half_height: 100.0,
             },
@@ -1048,7 +1144,7 @@ mod tests {
         let rect_node = SceneNode {
             id: 1,
             transform: LocalTransform {
-                position: LocalPosition(25.0, 25.0),
+                position: LocalPosition::new(25.0, 25.0),
                 scale_x: 1.0,
                 scale_y: 1.0,
                 rotation: 0.0,
@@ -1065,7 +1161,7 @@ mod tests {
         let circle_node = SceneNode {
             id: 2,
             transform: LocalTransform {
-                position: LocalPosition(-25.0, -25.0),
+                position: LocalPosition::new(-25.0, -25.0),
                 scale_x: 2.0,
                 scale_y: 2.0,
                 rotation: 0.0,
@@ -1090,8 +1186,8 @@ mod tests {
         }
 
         let query_rect = BoundingBox {
-            x: 25.0,
-            y: 25.0,
+            center_x: 25.0,
+            center_y: 25.0,
             half_width: 20.0,
             half_height: 20.0,
         };
@@ -1099,8 +1195,8 @@ mod tests {
         assert!(rect_results.iter().any(|&(_, _, id)| id == rect_node.id));
 
         let query_circle = BoundingBox {
-            x: -25.0,
-            y: -25.0,
+            center_x: -25.0,
+            center_y: -25.0,
             half_width: 25.0,
             half_height: 25.0,
         };
@@ -1115,7 +1211,7 @@ mod tests {
         let parent_node = SceneNode {
             id: 1,
             transform: LocalTransform {
-                position: LocalPosition(0.0, 0.0),
+                position: LocalPosition::new(0.0, 0.0),
                 scale_x: 1.0,
                 scale_y: 1.0,
                 rotation: 0.0,
@@ -1129,7 +1225,7 @@ mod tests {
             children: vec![SceneNode {
                 id: 2,
                 transform: LocalTransform {
-                    position: LocalPosition(60.0, 0.0),
+                    position: LocalPosition::new(60.0, 0.0),
                     scale_x: 1.0,
                     scale_y: 1.0,
                     rotation: 0.0,
@@ -1162,7 +1258,7 @@ mod tests {
         let parent_node = SceneNode {
             id: 1,
             transform: LocalTransform {
-                position: LocalPosition(0.0, 0.0),
+                position: LocalPosition::new(0.0, 0.0),
                 scale_x: 1.0,
                 scale_y: 1.0,
                 rotation: 0.0,
@@ -1176,7 +1272,7 @@ mod tests {
             children: vec![SceneNode {
                 id: 2,
                 transform: LocalTransform {
-                    position: LocalPosition(60.0, 0.0),
+                    position: LocalPosition::new(60.0, 0.0),
                     scale_x: 1.0,
                     scale_y: 1.0,
                     rotation: 0.0,
@@ -1199,7 +1295,7 @@ mod tests {
             "Width should include full circle bounds"
         );
         assert!(
-            combined_bounds.x > 0.0,
+            combined_bounds.center_x > 0.0,
             "Center should shift right to accommodate circle"
         );
     }
@@ -1209,8 +1305,8 @@ mod tests {
         let mut qt = QuadTree::new(
             "test",
             BoundingBox {
-                x: 0.0,
-                y: 0.0,
+                center_x: 0.0,
+                center_y: 0.0,
                 half_width: 16.0,
                 half_height: 16.0,
             },
@@ -1227,8 +1323,8 @@ mod tests {
             qt.insert(x, y, id);
         }
         let query_range = BoundingBox {
-            x: 5.0,
-            y: 5.0,
+            center_x: 5.0,
+            center_y: 5.0,
             half_width: 3.0,
             half_height: 3.0,
         };
