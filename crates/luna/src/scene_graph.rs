@@ -204,7 +204,7 @@ pub struct QuadTree {
 impl QuadTree {
     fn collect_all_points(&self) -> Vec<(f32, f32, usize)> {
         let mut result = self.points.clone();
-        
+
         if self.divided {
             if let Some(ref quad) = self.northeast {
                 result.extend(quad.collect_all_points());
@@ -219,13 +219,13 @@ impl QuadTree {
                 result.extend(quad.collect_all_points());
             }
         }
-        
+
         result
     }
 
     fn clear_points(&mut self) {
         self.points.clear();
-        
+
         if self.divided {
             if let Some(ref mut quad) = self.northeast {
                 quad.clear_points();
@@ -244,23 +244,23 @@ impl QuadTree {
 
     fn update_bounds(&mut self, new_boundary: BoundingBox) {
         // Only rebuild if boundary changed significantly
-        if (self.boundary.x - new_boundary.x).abs() > 1.0 ||
-           (self.boundary.y - new_boundary.y).abs() > 1.0 ||
-           (self.boundary.half_width - new_boundary.half_width).abs() > 1.0 ||
-           (self.boundary.half_height - new_boundary.half_height).abs() > 1.0 {
-            
+        if (self.boundary.x - new_boundary.x).abs() > 1.0
+            || (self.boundary.y - new_boundary.y).abs() > 1.0
+            || (self.boundary.half_width - new_boundary.half_width).abs() > 1.0
+            || (self.boundary.half_height - new_boundary.half_height).abs() > 1.0
+        {
             // Save existing points
             let saved_points = self.collect_all_points();
-            
+
             // Reset tree with new boundary
             self.boundary = new_boundary;
             self.points.clear();
             self.divided = false;
             self.northeast = None;
-            self.northwest = None; 
+            self.northwest = None;
             self.southeast = None;
             self.southwest = None;
-            
+
             // Reinsert points
             for (x, y, id) in saved_points {
                 self.insert_point(x, y, id);
@@ -477,9 +477,9 @@ impl SceneGraph {
         };
 
         for _ in 0..1000 {
-            let x = -200.0 + (rand::random::<f32>() * 1200.0);
-            let y = -200.0 + (rand::random::<f32>() * 1200.0);
-            let size = 1.0 + (rand::random::<f32>() * 24.0);
+            let x = -200.0 + (rand::random::<f32>() * 2400.0);
+            let y = -200.0 + (rand::random::<f32>() * 2400.0);
+            let size = 1.0 + (rand::random::<f32>() * 32.0);
             if rand::random::<bool>() {
                 graph.add_circle(x, y, size);
             } else {
@@ -635,7 +635,7 @@ impl Element for SceneGraph {
             bounds.size.width.0 as f32 / 2.0,
             bounds.size.height.0 as f32 / 2.0,
         );
-        
+
         self.tree.update_bounds(new_bounds);
 
         for (i, (node, layout_id)) in self
