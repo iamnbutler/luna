@@ -1,10 +1,12 @@
+use gpui::{div, Element, ElementId, Entity, IntoElement, Render};
+
 #[derive(Debug, Clone, Copy)]
 pub struct WorldPosition(pub f32, pub f32);
 
 #[derive(Debug, Clone, Copy)]
 pub struct LocalPosition(pub f32, pub f32);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LocalTransform {
     position: LocalPosition,
     scale_x: f32,
@@ -26,7 +28,7 @@ impl LocalTransform {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ElementStyle {
     width: f32,
     height: f32,
@@ -53,7 +55,7 @@ impl ElementStyle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SceneNode {
     id: usize,
     transform: LocalTransform,
@@ -152,15 +154,31 @@ impl SceneNode {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct BoundingBox {
+pub struct BoundingBox {
     x: f32,
     y: f32,
     half_width: f32,
     half_height: f32,
 }
 
+impl BoundingBox {
+    pub fn new(x: f32, y: f32, half_width: f32, half_height: f32) -> Self {
+        Self {
+            x,
+            y,
+            half_width,
+            half_height,
+        }
+    }
+}
+
+fn new_element_id() -> ElementId {
+    ElementId::Uuid(uuid::Uuid::new_v4())
+}
+
 #[derive(Debug)]
-struct QuadTree {
+pub struct QuadTree {
+    id: ElementId,
     boundary: BoundingBox,
     capacity: usize,
     points: Vec<(f32, f32, usize)>,
@@ -211,8 +229,9 @@ impl QuadTree {
         false
     }
 
-    fn new(boundary: BoundingBox, capacity: usize) -> Self {
+    pub fn new(id: impl Into<ElementId>, boundary: BoundingBox, capacity: usize) -> Self {
         Self {
+            id: id.into(),
             boundary,
             capacity,
             points: Vec::new(),
@@ -230,6 +249,7 @@ impl QuadTree {
         let hw = self.boundary.half_width / 2.0;
         let hh = self.boundary.half_height / 2.0;
         self.northeast = Some(Box::new(QuadTree::new(
+            new_element_id(),
             BoundingBox {
                 x: x + hw,
                 y: y - hh,
@@ -239,6 +259,7 @@ impl QuadTree {
             self.capacity,
         )));
         self.northwest = Some(Box::new(QuadTree::new(
+            new_element_id(),
             BoundingBox {
                 x: x - hw,
                 y: y - hh,
@@ -248,6 +269,7 @@ impl QuadTree {
             self.capacity,
         )));
         self.southeast = Some(Box::new(QuadTree::new(
+            new_element_id(),
             BoundingBox {
                 x: x + hw,
                 y: y + hh,
@@ -257,6 +279,7 @@ impl QuadTree {
             self.capacity,
         )));
         self.southwest = Some(Box::new(QuadTree::new(
+            new_element_id(),
             BoundingBox {
                 x: x - hw,
                 y: y + hh,
@@ -353,6 +376,71 @@ impl QuadTree {
         }
 
         found
+    }
+}
+
+pub struct SceneGraph {
+    id: ElementId,
+    tree: QuadTree,
+}
+
+impl Element for SceneGraph {
+    type RequestLayoutState = ();
+
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        todo!()
+    }
+
+    fn prepaint(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        window: &mut gpui::Window,
+        cx: &mut gpui::App,
+    ) -> Self::PrepaintState {
+        todo!()
+    }
+
+    fn paint(
+        &mut self,
+        id: Option<&gpui::GlobalElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut gpui::Window,
+        cx: &mut gpui::App,
+    ) {
+        todo!()
+    }
+}
+
+impl IntoElement for SceneGraph {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Render for SceneGraph {
+    fn render(
+        &mut self,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        div()
     }
 }
 
@@ -453,6 +541,7 @@ mod tests {
     fn test_insert_point_within_boundary() {
         for i in 0..10 {
             let mut qt = QuadTree::new(
+                "test",
                 BoundingBox {
                     x: 0.0,
                     y: 0.0,
@@ -479,6 +568,7 @@ mod tests {
     fn test_insert_outside_point_boundary() {
         for i in 0..10 {
             let mut qt = QuadTree::new(
+                "test",
                 BoundingBox {
                     x: 0.0,
                     y: 0.0,
@@ -513,6 +603,7 @@ mod tests {
     #[test]
     fn test_division() {
         let mut qt = QuadTree::new(
+            "test",
             BoundingBox {
                 x: 0.0,
                 y: 0.0,
@@ -537,6 +628,7 @@ mod tests {
     #[test]
     fn test_complex_division() {
         let mut qt = QuadTree::new(
+            "test",
             BoundingBox {
                 x: 0.0,
                 y: 0.0,
@@ -571,6 +663,7 @@ mod tests {
     #[test]
     fn test_insert_element_with_bounds() {
         let mut qt = QuadTree::new(
+            "test",
             BoundingBox {
                 x: 0.0,
                 y: 0.0,
@@ -620,6 +713,7 @@ mod tests {
     #[test]
     fn test_scene_node_with_quadtree() {
         let mut qt = QuadTree::new(
+            "test",
             BoundingBox {
                 x: 0.0,
                 y: 0.0,
@@ -791,6 +885,7 @@ mod tests {
     #[test]
     fn test_query_range() {
         let mut qt = QuadTree::new(
+            "test",
             BoundingBox {
                 x: 0.0,
                 y: 0.0,

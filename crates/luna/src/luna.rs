@@ -12,6 +12,7 @@ use element::ElementStyle;
 use gpui::{prelude::FluentBuilder as _, *};
 
 use layer_list::LayerList;
+use scene_graph::{BoundingBox, QuadTree};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -125,6 +126,7 @@ struct Luna {
     titlebar: Entity<Titlebar>,
     canvas: Entity<Canvas>,
     element_list: Entity<LayerList>,
+    scene_graph: Entity<QuadTree>,
 }
 
 impl Render for Luna {
@@ -209,9 +211,13 @@ fn main() {
             let titlebar = cx.new(|cx| Titlebar::new(window, cx));
             let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
 
+            let scene_graph =
+                cx.new(|cx| QuadTree::new("quad-tree", BoundingBox::new(0., 0., 128., 128.), 4));
+
             cx.new(|_cx| Luna {
                 titlebar,
                 canvas,
+                scene_graph,
                 element_list,
             })
         })
