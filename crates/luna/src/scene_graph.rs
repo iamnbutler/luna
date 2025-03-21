@@ -202,6 +202,72 @@ pub struct QuadTree {
 }
 
 impl QuadTree {
+    fn collect_all_points(&self) -> Vec<(f32, f32, usize)> {
+        let mut result = self.points.clone();
+        
+        if self.divided {
+            if let Some(ref quad) = self.northeast {
+                result.extend(quad.collect_all_points());
+            }
+            if let Some(ref quad) = self.northwest {
+                result.extend(quad.collect_all_points());
+            }
+            if let Some(ref quad) = self.southeast {
+                result.extend(quad.collect_all_points());
+            }
+            if let Some(ref quad) = self.southwest {
+                result.extend(quad.collect_all_points());
+            }
+        }
+        
+        result
+    }
+
+    fn clear_points(&mut self) {
+        self.points.clear();
+        
+        if self.divided {
+            if let Some(ref mut quad) = self.northeast {
+                quad.clear_points();
+            }
+            if let Some(ref mut quad) = self.northwest {
+                quad.clear_points();
+            }
+            if let Some(ref mut quad) = self.southeast {
+                quad.clear_points();
+            }
+            if let Some(ref mut quad) = self.southwest {
+                quad.clear_points();
+            }
+        }
+    }
+
+    fn update_bounds(&mut self, new_boundary: BoundingBox) {
+        // Only rebuild if boundary changed significantly
+        if (self.boundary.x - new_boundary.x).abs() > 1.0 ||
+           (self.boundary.y - new_boundary.y).abs() > 1.0 ||
+           (self.boundary.half_width - new_boundary.half_width).abs() > 1.0 ||
+           (self.boundary.half_height - new_boundary.half_height).abs() > 1.0 {
+            
+            // Save existing points
+            let saved_points = self.collect_all_points();
+            
+            // Reset tree with new boundary
+            self.boundary = new_boundary;
+            self.points.clear();
+            self.divided = false;
+            self.northeast = None;
+            self.northwest = None; 
+            self.southeast = None;
+            self.southwest = None;
+            
+            // Reinsert points
+            for (x, y, id) in saved_points {
+                self.insert_point(x, y, id);
+            }
+        }
+    }
+
     fn insert_with_bounds(&mut self, bounds: &BoundingBox, id: usize) -> bool {
         if !self.intersects(bounds) {
             return false;
@@ -473,6 +539,24 @@ impl SceneGraph {
 
         self.add_node(node)
     }
+
+    pub fn update_viewport(
+        &mut self,
+        viewport: Size<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        let bounds = BoundingBox::new(
+            viewport.width.0 as f32 / 2.0,
+            viewport.height.0 as f32 / 2.0,
+            viewport.width.0 as f32 / 2.0,
+            viewport.height.0 as f32 / 2.0,
+        );
+
+        self.viewport_size = Some(viewport);
+        self.tree.update_bounds(bounds);
+        cx.notify();
+    }
 }
 
 #[derive(Default)]
@@ -545,16 +629,14 @@ impl Element for SceneGraph {
     ) -> Self::PrepaintState {
         self.viewport_size = Some(bounds.size);
 
-        self.tree = QuadTree::new(
-            new_element_id(),
-            BoundingBox::new(
-                bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
-                bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
-                bounds.size.width.0 as f32 / 2.0,
-                bounds.size.height.0 as f32 / 2.0,
-            ),
-            32,
+        let new_bounds = BoundingBox::new(
+            bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
+            bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
+            bounds.size.width.0 as f32 / 2.0,
+            bounds.size.height.0 as f32 / 2.0,
         );
+        
+        self.tree.update_bounds(new_bounds);
 
         for (i, (node, layout_id)) in self
             .nodes

@@ -123,14 +123,45 @@ impl ResizeDirection {
 }
 
 struct Luna {
+    weak_self: WeakEntity<Self>,
     titlebar: Entity<Titlebar>,
-    canvas: Entity<Canvas>,
-    element_list: Entity<LayerList>,
+    // canvas: Entity<Canvas>,
+    // element_list: Entity<LayerList>,
     scene_graph: Entity<SceneGraph>,
+    viewport_size: Size<Pixels>,
+    bounds: Bounds<Pixels>,
+}
+
+impl Luna {
+    pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
+        let titlebar = cx.new(|cx| Titlebar::new(window, cx));
+        // let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
+
+        let scene_graph = cx.new(|cx| SceneGraph::new("scene-graph", cx));
+
+        let weak_self = cx.entity().downgrade();
+
+        let bounds = Bounds::new(
+            point(px(0.0), px(0.0)),
+            size(viewport_size.width, viewport_size.height),
+        );
+
+        Luna {
+            weak_self,
+            titlebar,
+            // canvas,
+            // element_list,
+            scene_graph,
+            viewport_size,
+            bounds,
+        }
+    }
 }
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let viewport_size = self.viewport_size;
+
         div()
             .debug_below()
             .text_xs()
@@ -142,6 +173,25 @@ impl Render for Luna {
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
+            .child({
+                let this = cx.entity().clone();
+                canvas(
+                    move |bounds, window, cx| {
+                        this.update(cx, |this, cx| {
+                            let bounds_changed = this.bounds != bounds;
+                            this.bounds = bounds;
+                            if bounds_changed {
+                                this.scene_graph.update(cx, |scene_graph, cx| {
+                                    scene_graph.update_viewport(viewport_size, window, cx);
+                                });
+                            }
+                        })
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full()
+            })
             .child(self.scene_graph.clone())
         // .child(
         //     div()
@@ -197,30 +247,20 @@ impl Render for Titlebar {
 fn main() {
     Application::new().run(|cx: &mut App| {
         cx.open_window(WindowOptions::default(), |window, cx| {
-            let canvas = Canvas::new(window, cx);
-            canvas.update(cx, |canvas, cx| {
-                let element_1 = ElementStyle::new(cx).size(size(px(32.), px(128.)));
-                let element_2 = ElementStyle::new(cx);
-                let element_3 = ElementStyle::new(cx).size(size(px(64.), px(64.)));
-                let element_4 = ElementStyle::new(cx).size(size(px(128.), px(128.)));
+            // let canvas = Canvas::new(window, cx);
+            // canvas.update(cx, |canvas, cx| {
+            //     let element_1 = ElementStyle::new(cx).size(size(px(32.), px(128.)));
+            //     let element_2 = ElementStyle::new(cx);
+            //     let element_3 = ElementStyle::new(cx).size(size(px(64.), px(64.)));
+            //     let element_4 = ElementStyle::new(cx).size(size(px(128.), px(128.)));
 
-                canvas.add_element(element_1, point(px(0.), px(0.)), cx);
-                canvas.add_element(element_2, point(px(300.), px(300.)), cx);
-                canvas.add_element(element_3, point(px(600.), px(150.)), cx);
-                canvas.add_element(element_4, point(px(240.), px(550.)), cx);
-            });
+            //     canvas.add_element(element_1, point(px(0.), px(0.)), cx);
+            //     canvas.add_element(element_2, point(px(300.), px(300.)), cx);
+            //     canvas.add_element(element_3, point(px(600.), px(150.)), cx);
+            //     canvas.add_element(element_4, point(px(240.), px(550.)), cx);
+            // });
 
-            let titlebar = cx.new(|cx| Titlebar::new(window, cx));
-            let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
-
-            let scene_graph = cx.new(|cx| SceneGraph::new("scene-graph", cx));
-
-            cx.new(|_cx| Luna {
-                titlebar,
-                canvas,
-                scene_graph,
-                element_list,
-            })
+            cx.new(|cx| Luna::new(window, window.viewport_size(), cx))
         })
         .unwrap();
 
