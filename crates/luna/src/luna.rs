@@ -122,6 +122,7 @@ impl ResizeDirection {
     }
 }
 
+#[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,
     titlebar: Entity<Titlebar>,
@@ -130,6 +131,7 @@ struct Luna {
     scene_graph: Entity<SceneGraph>,
     viewport_size: Size<Pixels>,
     bounds: Bounds<Pixels>,
+    focus_handle: FocusHandle,
 }
 
 impl Luna {
@@ -146,7 +148,9 @@ impl Luna {
             size(viewport_size.width, viewport_size.height),
         );
 
-        Luna {
+        let focus_handle = cx.focus_handle();
+
+        let luna = Luna {
             weak_self,
             titlebar,
             // canvas,
@@ -154,7 +158,16 @@ impl Luna {
             scene_graph,
             viewport_size,
             bounds,
-        }
+            focus_handle,
+        };
+
+        cx.focus_self(window);
+
+        luna
+    }
+
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Mouse moved: {:?}", event);
     }
 }
 
@@ -163,7 +176,9 @@ impl Render for Luna {
         let bounds = self.bounds;
 
         div()
-            .debug_below()
+            .id("luna")
+            .key_context("Canvas")
+            .track_focus(&self.focus_handle(cx))
             .text_xs()
             .text_color(rgb(0xA9AFBC))
             .font_family("Berkeley Mono")
@@ -193,15 +208,16 @@ impl Render for Luna {
                 .size_full()
             })
             .child(self.scene_graph.clone())
-            .child(
-                div()
-                    .absolute()
-                    .top_8()
-                    .left_8()
-                    .text_sm()
-                    .text_color(gpui::red())
-                    .child(format!("{}x{}", bounds.size.width.0, bounds.size.height.0)),
-            )
+        // .child(
+        //     div()
+        //         .absolute()
+        //         .top_8()
+        //         .left_8()
+        //         .text_sm()
+        //         .text_color(gpui::red())
+        //         // .child(format!("{}x{}", bounds.size.width.0, bounds.size.height.0)),
+        //         .child(format!("{:?}, {:?}", self.focus_handle, window.focused(cx))),
+        // )
         // .child(
         //     div()
         //         .absolute()
@@ -215,6 +231,12 @@ impl Render for Luna {
         // )
         // .child(self.element_list.clone())
         // .child(self.titlebar.clone())
+    }
+}
+
+impl Focusable for Luna {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
     }
 }
 

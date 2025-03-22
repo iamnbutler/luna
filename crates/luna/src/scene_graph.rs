@@ -1,7 +1,7 @@
 use gpui::{
-    div, hsla, px, quad, App, AppContext, Bounds, Context, Element, ElementId, Entity,
-    GlobalElementId, Hitbox, IntoElement, LayoutId, Pixels, Point, Position, Render, Size, Style,
-    Window,
+    div, hsla, prelude::*, px, quad, rgb, App, AppContext, Bounds, Context, DragMoveEvent, Element,
+    ElementId, Entity, FocusHandle, Focusable, GlobalElementId, Hitbox, IntoElement, LayoutId,
+    Pixels, Point, Position, Render, Size, Style, Window,
 };
 #[derive(Debug, Clone, Copy)]
 pub struct Vector2D {
@@ -567,6 +567,7 @@ pub struct SceneGraph {
     tree: QuadTree,
     nodes: Vec<SceneNode>,
     viewport_size: Option<Size<Pixels>>,
+    focus_handle: FocusHandle,
 }
 
 impl SceneGraph {
@@ -579,6 +580,7 @@ impl SceneGraph {
             tree,
             nodes: Vec::new(),
             viewport_size: None,
+            focus_handle: cx.focus_handle(),
         };
 
         for _ in 0..1000 {
@@ -591,8 +593,6 @@ impl SceneGraph {
                 graph.add_rectangle(x, y, size * 2.0, size * 2.0);
             }
         }
-
-        eprintln!("SceneGraph initialized with {} nodes", graph.nodes.len());
 
         graph
     }
@@ -685,8 +685,6 @@ impl Element for SceneGraph {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut state = SceneGraphLayoutState::default();
 
-        eprintln!("SceneGraph request_layout with {} nodes", self.nodes.len());
-
         // Request layout for each node
         for node in &mut self.nodes {
             // eprintln!("Processing node: {:?}", node.id);
@@ -714,11 +712,6 @@ impl Element for SceneGraph {
             },
             state.node_layouts.iter().copied(),
             cx,
-        );
-
-        eprintln!(
-            "SceneGraph layout created with {} child layouts",
-            state.node_layouts.len()
         );
 
         (layout_id, state)
@@ -781,11 +774,6 @@ impl Element for SceneGraph {
         );
 
         let visible_nodes = self.tree.query_range(&query_bounds);
-        eprintln!(
-            "SceneGraph paint: found {} visible nodes in bounds {:?}",
-            visible_nodes.len(),
-            bounds
-        );
 
         // Paint a background to visualize the scene graph bounds
         window.paint_quad(quad(
@@ -855,8 +843,41 @@ impl IntoElement for SceneGraph {
 }
 
 impl Render for SceneGraph {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        self.clone()
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("scene-graph")
+            .key_context("SceneGraph")
+            .track_focus(&self.focus_handle(cx))
+            .text_xs()
+            .text_color(rgb(0xA9AFBC))
+            .font_family("Berkeley Mono")
+            .flex()
+            .flex_col()
+            .relative()
+            .bg(rgb(0x3B414D))
+            .size_full()
+            .text_color(rgb(0xffffff))
+            // .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_key_down(cx.listener(|_, event, _, cx| {
+                println!("Key down: {:?}", event);
+                // cx.stop_propagation();
+            }))
+            .on_key_up(cx.listener(|_, event, _, cx| {
+                println!("Key up: {:?}", event);
+                // cx.stop_propagation();
+            }))
+            // .on_drag_move(
+            //     cx.listener(move |canvas, e: &DragMoveEvent<Luna>, window, cx| {
+            //         eprintln!("Drag move: {:?}", e.bounds);
+            //     }),
+            // )
+            .child(self.clone())
+    }
+}
+
+impl Focusable for SceneGraph {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
     }
 }
 
@@ -867,6 +888,7 @@ impl Clone for SceneGraph {
             tree: self.tree.clone(),
             nodes: self.nodes.clone(),
             viewport_size: self.viewport_size,
+            focus_handle: self.focus_handle.clone(),
         }
     }
 }
