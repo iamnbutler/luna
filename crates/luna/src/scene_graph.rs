@@ -1,8 +1,24 @@
 use gpui::{
     div, hsla, prelude::*, px, quad, rgb, App, AppContext, Bounds, Context, DragMoveEvent, Element,
-    ElementId, Entity, FocusHandle, Focusable, GlobalElementId, Hitbox, IntoElement, LayoutId,
-    Pixels, Point, Position, Render, Size, Style, Window,
+    ElementId, Entity, FocusHandle, Focusable, GlobalElementId, Hitbox, IntoElement, KeyDownEvent,
+    KeyUpEvent, Keystroke, LayoutId, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Point, Position, Render, Size, Style, Window,
 };
+
+fn space_keystroke() -> Keystroke {
+    Keystroke {
+        modifiers: Modifiers {
+            control: false,
+            alt: false,
+            shift: false,
+            platform: false,
+            function: false,
+        },
+        key: "space".to_owned(),
+        key_char: Some(" ".to_owned()),
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Vector2D {
     x: f32,
@@ -568,6 +584,9 @@ pub struct SceneGraph {
     nodes: Vec<SceneNode>,
     viewport_size: Option<Size<Pixels>>,
     focus_handle: FocusHandle,
+    panning: bool,
+    pan_offset: (f32, f32),
+    last_mouse_position: Option<Point<Pixels>>,
 }
 
 impl SceneGraph {
@@ -581,6 +600,9 @@ impl SceneGraph {
             nodes: Vec::new(),
             viewport_size: None,
             focus_handle: cx.focus_handle(),
+            panning: false,
+            pan_offset: (0.0, 0.0),
+            last_mouse_position: None,
         };
 
         for _ in 0..1000 {
@@ -643,6 +665,51 @@ impl SceneGraph {
         };
 
         self.add_node(node)
+    }
+
+    fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if event.keystroke == space_keystroke() {
+            self.panning = true;
+            cx.stop_propagation();
+        }
+
+        cx.notify();
+    }
+
+    fn on_key_up(&mut self, event: &KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if event.keystroke == space_keystroke() {
+            self.panning = false;
+            cx.stop_propagation();
+        }
+    }
+
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.panning {
+            self.last_mouse_position = Some(event.position);
+            cx.stop_propagation();
+        }
+    }
+
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.panning && self.last_mouse_position.is_some() {
+            let last_pos = self.last_mouse_position.unwrap();
+            let dx = event.position.x - last_pos.x;
+            let dy = event.position.y - last_pos.y;
+
+            self.pan_offset.0 += dx.0 as f32;
+            self.pan_offset.1 += dy.0 as f32;
+            self.last_mouse_position = Some(event.position);
+
+            cx.notify();
+            cx.stop_propagation();
+        }
+    }
+
+    fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        self.panning = false;
+        self.last_mouse_position = None;
+
+        cx.notify();
     }
 
     pub fn update_viewport(
@@ -811,9 +878,11 @@ impl Element for SceneGraph {
                     let node_bounds = Bounds {
                         origin: Point {
                             x: px(node.transform.position.x()
-                                - element.width * node.transform.scale_x / 2.0),
+                                - element.width * node.transform.scale_x / 2.0
+                                + self.pan_offset.0),
                             y: px(node.transform.position.y()
-                                - element.height * node.transform.scale_y / 2.0),
+                                - element.height * node.transform.scale_y / 2.0
+                                + self.pan_offset.1),
                         },
                         size: Size {
                             width: px(element.width * node.transform.scale_x),
@@ -857,20 +926,11 @@ impl Render for SceneGraph {
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
-            // .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .on_key_down(cx.listener(|_, event, _, cx| {
-                println!("Key down: {:?}", event);
-                // cx.stop_propagation();
-            }))
-            .on_key_up(cx.listener(|_, event, _, cx| {
-                println!("Key up: {:?}", event);
-                // cx.stop_propagation();
-            }))
-            // .on_drag_move(
-            //     cx.listener(move |canvas, e: &DragMoveEvent<Luna>, window, cx| {
-            //         eprintln!("Drag move: {:?}", e.bounds);
-            //     }),
-            // )
+            .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+            .on_key_down(cx.listener(Self::on_key_down))
+            .on_key_up(cx.listener(Self::on_key_up))
             .child(self.clone())
     }
 }
@@ -889,6 +949,9 @@ impl Clone for SceneGraph {
             nodes: self.nodes.clone(),
             viewport_size: self.viewport_size,
             focus_handle: self.focus_handle.clone(),
+            panning: self.panning,
+            pan_offset: self.pan_offset,
+            last_mouse_position: self.last_mouse_position,
         }
     }
 }
