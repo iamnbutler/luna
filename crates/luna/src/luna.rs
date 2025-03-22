@@ -160,7 +160,7 @@ impl Luna {
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let viewport_size = self.viewport_size;
+        let bounds = self.bounds;
 
         div()
             .debug_below()
@@ -182,7 +182,7 @@ impl Render for Luna {
                             this.bounds = bounds;
                             if bounds_changed {
                                 this.scene_graph.update(cx, |scene_graph, cx| {
-                                    scene_graph.update_viewport(viewport_size, window, cx);
+                                    scene_graph.update_viewport(bounds.size, window, cx);
                                 });
                             }
                         })
@@ -193,6 +193,15 @@ impl Render for Luna {
                 .size_full()
             })
             .child(self.scene_graph.clone())
+            .child(
+                div()
+                    .absolute()
+                    .top_8()
+                    .left_8()
+                    .text_sm()
+                    .text_color(gpui::red())
+                    .child(format!("{}x{}", bounds.size.width.0, bounds.size.height.0)),
+            )
         // .child(
         //     div()
         //         .absolute()

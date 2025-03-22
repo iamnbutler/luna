@@ -217,6 +217,12 @@ impl SceneNode {
             rotation: 0.0,
         })
     }
+
+    pub fn scale(mut self, scale: f32) -> Self {
+        self.transform.scale_x = scale;
+        self.transform.scale_y = scale;
+        self
+    }
 }
 
 /// A bounding box representation using center point and half-dimensions.
@@ -566,7 +572,7 @@ pub struct SceneGraph {
 impl SceneGraph {
     pub fn new(id: impl Into<ElementId>, cx: &mut Context<Self>) -> Self {
         let boundary = BoundingBox::new(0.0, 0.0, 1000.0, 1000.0);
-        let tree = QuadTree::new("scene-graph-quad-tree", boundary, 32);
+        let tree = QuadTree::new("scene-graph-quad-tree", boundary, 4);
 
         let mut graph = SceneGraph {
             id: id.into(),
