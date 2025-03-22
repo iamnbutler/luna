@@ -126,8 +126,6 @@ impl ResizeDirection {
 struct Luna {
     weak_self: WeakEntity<Self>,
     titlebar: Entity<Titlebar>,
-    // canvas: Entity<Canvas>,
-    // element_list: Entity<LayerList>,
     scene_graph: Entity<SceneGraph>,
     viewport_size: Size<Pixels>,
     bounds: Bounds<Pixels>,
@@ -137,7 +135,6 @@ struct Luna {
 impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
         let titlebar = cx.new(|cx| Titlebar::new(window, cx));
-        // let element_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
 
         let scene_graph = cx.new(|cx| SceneGraph::new("scene-graph", cx));
 
@@ -153,8 +150,6 @@ impl Luna {
         let luna = Luna {
             weak_self,
             titlebar,
-            // canvas,
-            // element_list,
             scene_graph,
             viewport_size,
             bounds,
@@ -261,36 +256,12 @@ impl Render for Titlebar {
             .border_color(rgb(0x3F434C))
             .bg(rgb(0x2A2C31))
             .child(div().flex().items_center().h_full().px_2().child("Luna"))
-        // .child(
-        //     div()
-        //         .flex()
-        //         .flex_1()
-        //         .items_center()
-        //         .h_full()
-        //         .w_full()
-        //         .px_2()
-        //         .text_center()
-        //         .child(self.title.clone()),
-        // )
     }
 }
 
 fn main() {
     Application::new().run(|cx: &mut App| {
         cx.open_window(WindowOptions::default(), |window, cx| {
-            // let canvas = Canvas::new(window, cx);
-            // canvas.update(cx, |canvas, cx| {
-            //     let element_1 = ElementStyle::new(cx).size(size(px(32.), px(128.)));
-            //     let element_2 = ElementStyle::new(cx);
-            //     let element_3 = ElementStyle::new(cx).size(size(px(64.), px(64.)));
-            //     let element_4 = ElementStyle::new(cx).size(size(px(128.), px(128.)));
-
-            //     canvas.add_element(element_1, point(px(0.), px(0.)), cx);
-            //     canvas.add_element(element_2, point(px(300.), px(300.)), cx);
-            //     canvas.add_element(element_3, point(px(600.), px(150.)), cx);
-            //     canvas.add_element(element_4, point(px(240.), px(550.)), cx);
-            // });
-
             cx.new(|cx| Luna::new(window, window.viewport_size(), cx))
         })
         .unwrap();

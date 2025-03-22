@@ -587,6 +587,9 @@ pub struct SceneGraph {
     panning: bool,
     pan_offset: (f32, f32),
     last_mouse_position: Option<Point<Pixels>>,
+    selected_node_id: Option<usize>,
+    drag_start_position: Option<Point<Pixels>>,
+    node_start_position: Option<LocalPosition>,
 }
 
 impl SceneGraph {
@@ -603,6 +606,9 @@ impl SceneGraph {
             panning: false,
             pan_offset: (0.0, 0.0),
             last_mouse_position: None,
+            selected_node_id: None,
+            drag_start_position: None,
+            node_start_position: None,
         };
 
         graph.add_rectangle(300.0, 300.0, 50.0, 50.0);
@@ -688,10 +694,67 @@ impl SceneGraph {
         }
     }
 
+    fn node_at_point(&self, screen_point: Point<Pixels>) -> Option<usize> {
+        println!("node_at_point called with screen point: ({}, {})", screen_point.x.0, screen_point.y.0);
+        
+        // Convert screen coordinates to world coordinates by subtracting pan offset
+        let world_x = screen_point.x.0 as f32 - self.pan_offset.0;
+        let world_y = screen_point.y.0 as f32 - self.pan_offset.1;
+        println!("World coordinates: ({}, {})", world_x, world_y);
+
+        // DIRECT CHECK: Instead of relying on the quadtree query, check each node directly
+        println!("=== DIRECT NODE CHECK ===");
+        
+        // Check nodes in reverse order (top to bottom visual order)
+        for i in (0..self.nodes.len()).rev() {
+            let node = &self.nodes[i];
+            if let Some(element) = &node.element {
+                let bounds = element.calculate_local_bounds(&node.transform);
+                let contains = bounds.contains_point(world_x, world_y);
+                
+                println!(
+                    "Node {}: position({}, {}), bounds({:.1},{:.1} to {:.1},{:.1}), contains: {}", 
+                    i,
+                    node.transform.position.x(), node.transform.position.y(),
+                    bounds.min_x(), bounds.min_y(), 
+                    bounds.max_x(), bounds.max_y(),
+                    contains
+                );
+                
+                // If we find a node that contains the point, return it immediately
+                if contains {
+                    println!("Direct hit on node {}", i);
+                    return Some(i);
+                }
+            }
+        }
+        
+        println!("No nodes contain the point");
+        println!("=== END DIRECT CHECK ===");
+        
+        None
+    }
+
     fn on_mouse_down(&mut self, event: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Mouse down event received");
+
         if self.panning {
             self.last_mouse_position = Some(event.position);
             cx.stop_propagation();
+        } else {
+            println!("else received");
+
+            if let Some(node_id) = self.node_at_point(event.position) {
+                println!("Node at point received");
+                self.selected_node_id = Some(node_id);
+                self.drag_start_position = Some(event.position);
+                if let Some(node) = self.nodes.get(node_id) {
+                    self.node_start_position = Some(node.transform.position);
+                }
+                cx.stop_propagation();
+
+                cx.notify();
+            }
         }
     }
 
@@ -707,12 +770,30 @@ impl SceneGraph {
 
             cx.notify();
             cx.stop_propagation();
+        } else if let (Some(node_id), Some(start_pos), Some(node_start)) = (
+            self.selected_node_id,
+            self.drag_start_position,
+            self.node_start_position,
+        ) {
+            let dx = event.position.x - start_pos.x;
+            let dy = event.position.y - start_pos.y;
+
+            if let Some(node) = self.nodes.get_mut(node_id) {
+                node.transform.position =
+                    LocalPosition::new(node_start.x() + dx.0 as f32, node_start.y() + dy.0 as f32);
+            }
+
+            cx.notify();
+            cx.stop_propagation();
         }
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
         self.panning = false;
         self.last_mouse_position = None;
+        self.selected_node_id = None;
+        self.drag_start_position = None;
+        self.node_start_position = None;
 
         cx.notify();
     }
@@ -733,14 +814,6 @@ impl SceneGraph {
         self.viewport_size = Some(viewport);
         self.tree.update_bounds(bounds);
         cx.notify();
-    }
-
-    pub fn contains_point(&self, point: Point<Pixels>) -> bool {
-        self.tree.contains_point(point)
-    }
-
-    pub fn node_at_point(&self, point: Point<Pixels>) -> Option<&SceneNode> {
-        self.tree.node_at_point(point)
     }
 }
 
@@ -807,14 +880,26 @@ impl Element for SceneGraph {
     ) -> Self::PrepaintState {
         self.viewport_size = Some(bounds.size);
 
+        // Use a much larger boundary for the quadtree to include all nodes
+        // regardless of their position relative to the viewport
         let new_bounds = BoundingBox::new(
             bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
             bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
-            bounds.size.width.0 as f32 / 2.0,
-            bounds.size.height.0 as f32 / 2.0,
+            1000.0, // Much larger half-width to include all nodes
+            1000.0, // Much larger half-height to include all nodes
         );
 
+        // println!("Setting quadtree boundary: center({}, {}), size({}x{})",
+        //          new_bounds.center_x, new_bounds.center_y,
+        //          new_bounds.width(), new_bounds.height());
+
         self.tree.update_bounds(new_bounds);
+
+        // println!("----------- Prepaint: Adding nodes to quadtree -----------");
+        // println!(
+        //     "Current pan offset: ({}, {})",
+        //     self.pan_offset.0, self.pan_offset.1
+        // );
 
         for (i, (node, layout_id)) in self
             .nodes
@@ -822,17 +907,34 @@ impl Element for SceneGraph {
             .zip(&request_layout.node_layouts)
             .enumerate()
         {
-            let node_bounds = window.layout_bounds(*layout_id);
             if let Some(element) = &node.element {
+                // println!(
+                //     "Node {} position: ({}, {}), size: {}x{}",
+                //     i,
+                //     node.transform.position.x(),
+                //     node.transform.position.y(),
+                //     element.width,
+                //     element.height
+                // );
+
+                // Use node's actual transform position instead of layout bounds
                 let bounds = BoundingBox::new(
-                    node_bounds.origin.x.0 as f32,
-                    node_bounds.origin.y.0 as f32,
+                    node.transform.position.x(),
+                    node.transform.position.y(),
                     element.width * node.transform.scale_x / 2.0,
                     element.height * node.transform.scale_y / 2.0,
                 );
+                // println!(
+                //     "Adding to quadtree with bounds: min({}, {}), max({}, {})",
+                //     bounds.min_x(),
+                //     bounds.min_y(),
+                //     bounds.max_x(),
+                //     bounds.max_y()
+                // );
                 self.tree.insert_with_bounds(&bounds, i);
             }
         }
+        // println!("----------- End Prepaint -----------");
 
         Some(window.insert_hitbox(bounds, false))
     }
@@ -846,14 +948,17 @@ impl Element for SceneGraph {
         window: &mut Window,
         _cx: &mut App,
     ) {
+        // Use a much larger query bounds to find all nodes in the scene
+        // This ensures we find nodes even if their centers are outside the viewport
         let query_bounds = BoundingBox::new(
             bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
             bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
-            bounds.size.width.0 as f32 / 2.0,
-            bounds.size.height.0 as f32 / 2.0,
+            1000.0, // Much larger half-width to find all nodes
+            1000.0, // Much larger half-height to find all nodes
         );
 
         let visible_nodes = self.tree.query_range(&query_bounds);
+        println!("Found {} nodes to render", visible_nodes.len());
 
         window.paint_quad(quad(
             bounds,
@@ -958,6 +1063,9 @@ impl Clone for SceneGraph {
             panning: self.panning,
             pan_offset: self.pan_offset,
             last_mouse_position: self.last_mouse_position,
+            selected_node_id: self.selected_node_id,
+            drag_start_position: self.drag_start_position,
+            node_start_position: self.node_start_position,
         }
     }
 }
