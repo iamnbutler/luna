@@ -590,6 +590,7 @@ pub struct SceneGraph {
     selected_node_id: Option<usize>,
     drag_start_position: Option<Point<Pixels>>,
     node_start_position: Option<LocalPosition>,
+    hovered_node_id: Option<usize>,
 }
 
 impl SceneGraph {
@@ -609,6 +610,7 @@ impl SceneGraph {
             selected_node_id: None,
             drag_start_position: None,
             node_start_position: None,
+            hovered_node_id: None,
         };
 
         graph.add_rectangle(300.0, 300.0, 50.0, 50.0);
@@ -695,8 +697,11 @@ impl SceneGraph {
     }
 
     fn node_at_point(&self, screen_point: Point<Pixels>) -> Option<usize> {
-        println!("node_at_point called with screen point: ({}, {})", screen_point.x.0, screen_point.y.0);
-        
+        println!(
+            "node_at_point called with screen point: ({}, {})",
+            screen_point.x.0, screen_point.y.0
+        );
+
         // Convert screen coordinates to world coordinates by subtracting pan offset
         let world_x = screen_point.x.0 as f32 - self.pan_offset.0;
         let world_y = screen_point.y.0 as f32 - self.pan_offset.1;
@@ -704,23 +709,26 @@ impl SceneGraph {
 
         // DIRECT CHECK: Instead of relying on the quadtree query, check each node directly
         println!("=== DIRECT NODE CHECK ===");
-        
+
         // Check nodes in reverse order (top to bottom visual order)
         for i in (0..self.nodes.len()).rev() {
             let node = &self.nodes[i];
             if let Some(element) = &node.element {
                 let bounds = element.calculate_local_bounds(&node.transform);
                 let contains = bounds.contains_point(world_x, world_y);
-                
+
                 println!(
-                    "Node {}: position({}, {}), bounds({:.1},{:.1} to {:.1},{:.1}), contains: {}", 
+                    "Node {}: position({}, {}), bounds({:.1},{:.1} to {:.1},{:.1}), contains: {}",
                     i,
-                    node.transform.position.x(), node.transform.position.y(),
-                    bounds.min_x(), bounds.min_y(), 
-                    bounds.max_x(), bounds.max_y(),
+                    node.transform.position.x(),
+                    node.transform.position.y(),
+                    bounds.min_x(),
+                    bounds.min_y(),
+                    bounds.max_x(),
+                    bounds.max_y(),
                     contains
                 );
-                
+
                 // If we find a node that contains the point, return it immediately
                 if contains {
                     println!("Direct hit on node {}", i);
@@ -728,10 +736,10 @@ impl SceneGraph {
                 }
             }
         }
-        
+
         println!("No nodes contain the point");
         println!("=== END DIRECT CHECK ===");
-        
+
         None
     }
 
@@ -778,22 +786,84 @@ impl SceneGraph {
             let dx = event.position.x - start_pos.x;
             let dy = event.position.y - start_pos.y;
 
+            // Update dragged node position
             if let Some(node) = self.nodes.get_mut(node_id) {
                 node.transform.position =
                     LocalPosition::new(node_start.x() + dx.0 as f32, node_start.y() + dy.0 as f32);
             }
 
+            // Check for node under cursor while dragging
+            if let Some(hovered_id) = self.node_at_point(event.position) {
+                // Don't hover over the node being dragged
+                if hovered_id != node_id {
+                    self.hovered_node_id = Some(hovered_id);
+                } else {
+                    self.hovered_node_id = None;
+                }
+            } else {
+                self.hovered_node_id = None;
+            }
+
             cx.notify();
             cx.stop_propagation();
+        } else {
+            self.hovered_node_id = None;
+        }
+    }
+
+    fn reparent_node(&mut self, node_id: usize, new_parent_id: usize) {
+        // First find and remove the node from its current location
+        let mut node_to_move = None;
+
+        // Check if it's a top-level node
+        if let Some(pos) = self.nodes.iter().position(|node| node.id == node_id) {
+            node_to_move = Some(self.nodes.remove(pos));
+        } else {
+            // Check if it's a child of another node
+            for node in &mut self.nodes {
+                if let Some(pos) = node.children.iter().position(|child| child.id == node_id) {
+                    node_to_move = Some(node.children.remove(pos));
+                    break;
+                }
+            }
+        }
+
+        // If we found the node, add it to its new parent
+        if let Some(mut node) = node_to_move {
+            // Get the new parent's world position
+            if let Some(parent) = self.nodes.get(new_parent_id) {
+                let parent_pos = parent.transform.position;
+
+                // Convert node's position to be relative to new parent
+                node.transform.position = LocalPosition::new(
+                    node.transform.position.x() - parent_pos.x(),
+                    node.transform.position.y() - parent_pos.y(),
+                );
+
+                // Add the node to its new parent's children
+                if let Some(parent) = self.nodes.get_mut(new_parent_id) {
+                    parent.children.push(node);
+                }
+            }
         }
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        // Check if we're dropping a node onto another node
+        if let (Some(dragged_id), Some(target_id)) = (self.selected_node_id, self.hovered_node_id) {
+            // Don't allow a node to become its own parent
+            if dragged_id != target_id {
+                self.reparent_node(dragged_id, target_id);
+            }
+        }
+
+        // Reset all state
         self.panning = false;
         self.last_mouse_position = None;
         self.selected_node_id = None;
         self.drag_start_position = None;
         self.node_start_position = None;
+        self.hovered_node_id = None;
 
         cx.notify();
     }
@@ -814,6 +884,66 @@ impl SceneGraph {
         self.viewport_size = Some(viewport);
         self.tree.update_bounds(bounds);
         cx.notify();
+    }
+
+    fn render_node(
+        &self,
+        node: &SceneNode,
+        parent_transform: &LocalTransform,
+        window: &mut Window,
+    ) {
+        if let Some(element) = &node.element {
+            let world_transform = node.transform.to_world_transform(parent_transform);
+
+            let node_color = match node.id % 12 {
+                0 => hsla(0.0, 0.7, 0.5, 0.3),  // Red
+                1 => hsla(0.3, 0.7, 0.5, 0.3),  // Green
+                2 => hsla(0.6, 0.7, 0.5, 0.3),  // Blue
+                3 => hsla(0.1, 0.7, 0.5, 0.3),  // Orange
+                4 => hsla(0.8, 0.7, 0.5, 0.3),  // Purple
+                5 => hsla(0.5, 0.7, 0.5, 0.3),  // Teal
+                6 => hsla(0.15, 0.7, 0.5, 0.3), // Yellow
+                7 => hsla(0.7, 0.7, 0.5, 0.3),  // Pink
+                8 => hsla(0.4, 0.7, 0.5, 0.3),  // Lime
+                9 => hsla(0.9, 0.7, 0.5, 0.3),  // Magenta
+                10 => hsla(0.2, 0.7, 0.5, 0.3), // Olive
+                _ => hsla(0.55, 0.7, 0.5, 0.3), // Sky Blue
+            };
+
+            let node_bounds = Bounds {
+                origin: Point {
+                    x: px(world_transform.position.x()
+                        - element.width * world_transform.scale_x / 2.0
+                        + self.pan_offset.0),
+                    y: px(world_transform.position.y()
+                        - element.height * world_transform.scale_y / 2.0
+                        + self.pan_offset.1),
+                },
+                size: Size {
+                    width: px(element.width * world_transform.scale_x),
+                    height: px(element.height * world_transform.scale_y),
+                },
+            };
+
+            let border_color = if Some(node.id) == self.hovered_node_id {
+                hsla(0.6, 0.7, 0.5, 1.0) // Blue border for hovered node
+            } else {
+                hsla(0.0, 0.0, 0.0, 1.0) // Black border for normal nodes
+            };
+
+            window.paint_quad(quad(
+                node_bounds,
+                element.corner_radius,
+                node_color,
+                px(2.0),
+                border_color,
+            ));
+        }
+
+        // Recursively render children
+        for child in &node.children {
+            self.render_node(child, &node.transform, window);
+        }
     }
 }
 
@@ -948,18 +1078,7 @@ impl Element for SceneGraph {
         window: &mut Window,
         _cx: &mut App,
     ) {
-        // Use a much larger query bounds to find all nodes in the scene
-        // This ensures we find nodes even if their centers are outside the viewport
-        let query_bounds = BoundingBox::new(
-            bounds.origin.x.0 as f32 + bounds.size.width.0 as f32 / 2.0,
-            bounds.origin.y.0 as f32 + bounds.size.height.0 as f32 / 2.0,
-            1000.0, // Much larger half-width to find all nodes
-            1000.0, // Much larger half-height to find all nodes
-        );
-
-        let visible_nodes = self.tree.query_range(&query_bounds);
-        println!("Found {} nodes to render", visible_nodes.len());
-
+        // Paint background
         window.paint_quad(quad(
             bounds,
             0.0,
@@ -968,48 +1087,17 @@ impl Element for SceneGraph {
             hsla(0.7, 0.5, 0.5, 0.5), // Purple border
         ));
 
-        for (_, _, node_id) in visible_nodes {
-            if let Some(node) = self.nodes.get(node_id) {
-                if let Some(element) = &node.element {
-                    let node_color = match node.id % 12 {
-                        0 => hsla(0.0, 0.7, 0.5, 0.3),  // Red
-                        1 => hsla(0.3, 0.7, 0.5, 0.3),  // Green
-                        2 => hsla(0.6, 0.7, 0.5, 0.3),  // Blue
-                        3 => hsla(0.1, 0.7, 0.5, 0.3),  // Orange
-                        4 => hsla(0.8, 0.7, 0.5, 0.3),  // Purple
-                        5 => hsla(0.5, 0.7, 0.5, 0.3),  // Teal
-                        6 => hsla(0.15, 0.7, 0.5, 0.3), // Yellow
-                        7 => hsla(0.7, 0.7, 0.5, 0.3),  // Pink
-                        8 => hsla(0.4, 0.7, 0.5, 0.3),  // Lime
-                        9 => hsla(0.9, 0.7, 0.5, 0.3),  // Magenta
-                        10 => hsla(0.2, 0.7, 0.5, 0.3), // Olive
-                        _ => hsla(0.55, 0.7, 0.5, 0.3), // Sky Blue
-                    };
+        // Create identity transform for top-level nodes
+        let root_transform = LocalTransform {
+            position: LocalPosition::new(0.0, 0.0),
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
 
-                    let node_bounds = Bounds {
-                        origin: Point {
-                            x: px(node.transform.position.x()
-                                - element.width * node.transform.scale_x / 2.0
-                                + self.pan_offset.0),
-                            y: px(node.transform.position.y()
-                                - element.height * node.transform.scale_y / 2.0
-                                + self.pan_offset.1),
-                        },
-                        size: Size {
-                            width: px(element.width * node.transform.scale_x),
-                            height: px(element.height * node.transform.scale_y),
-                        },
-                    };
-
-                    window.paint_quad(quad(
-                        node_bounds,
-                        element.corner_radius,
-                        node_color,
-                        px(2.0),
-                        hsla(0.0, 0.0, 0.0, 1.0),
-                    ));
-                }
-            }
+        // Render all top-level nodes and their children
+        for node in &self.nodes {
+            self.render_node(node, &root_transform, window);
         }
     }
 }
@@ -1066,6 +1154,7 @@ impl Clone for SceneGraph {
             selected_node_id: self.selected_node_id,
             drag_start_position: self.drag_start_position,
             node_start_position: self.node_start_position,
+            hovered_node_id: self.hovered_node_id,
         }
     }
 }
