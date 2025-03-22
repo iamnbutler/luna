@@ -327,6 +327,20 @@ pub struct QuadTree {
 }
 
 impl QuadTree {
+    pub fn new(id: impl Into<ElementId>, boundary: BoundingBox, capacity: usize) -> Self {
+        Self {
+            id: id.into(),
+            boundary,
+            capacity,
+            points: Vec::new(),
+            divided: false,
+            northeast: None,
+            northwest: None,
+            southeast: None,
+            southwest: None,
+        }
+    }
+
     fn collect_all_points(&self) -> Vec<(f32, f32, usize)> {
         let mut results = Vec::new();
         self.collect_all_points_into(&mut results);
@@ -434,20 +448,6 @@ impl QuadTree {
             }
         }
         false
-    }
-
-    pub fn new(id: impl Into<ElementId>, boundary: BoundingBox, capacity: usize) -> Self {
-        Self {
-            id: id.into(),
-            boundary,
-            capacity,
-            points: Vec::new(),
-            divided: false,
-            northeast: None,
-            northwest: None,
-            southeast: None,
-            southwest: None,
-        }
     }
 
     fn subdivide(&mut self) {
@@ -605,16 +605,21 @@ impl SceneGraph {
             last_mouse_position: None,
         };
 
-        for _ in 0..1000 {
-            let x = -200.0 + (rand::random::<f32>() * 2400.0);
-            let y = -200.0 + (rand::random::<f32>() * 2400.0);
-            let size = 1.0 + (rand::random::<f32>() * 32.0);
-            if rand::random::<bool>() {
-                graph.add_circle(x, y, size);
-            } else {
-                graph.add_rectangle(x, y, size * 2.0, size * 2.0);
-            }
-        }
+        graph.add_rectangle(300.0, 300.0, 50.0, 50.0);
+        graph.add_rectangle(300.0, 500.0, 100.0, 100.0);
+        graph.add_rectangle(500.0, 300.0, 150.0, 150.0);
+        graph.add_rectangle(500.0, 500.0, 200.0, 200.0);
+
+        // for _ in 0..1000 {
+        //     let x = -200.0 + (rand::random::<f32>() * 2500.0);
+        //     let y = -200.0 + (rand::random::<f32>() * 2400.0);
+        //     let size = 1.0 + (rand::random::<f32>() * 32.0);
+        //     if rand::random::<bool>() {
+        //         graph.add_circle(x, y, size);
+        //     } else {
+        //         graph.add_rectangle(x, y, size * 2.0, size * 2.0);
+        //     }
+        // }
 
         graph
     }
@@ -729,6 +734,14 @@ impl SceneGraph {
         self.tree.update_bounds(bounds);
         cx.notify();
     }
+
+    pub fn contains_point(&self, point: Point<Pixels>) -> bool {
+        self.tree.contains_point(point)
+    }
+
+    pub fn node_at_point(&self, point: Point<Pixels>) -> Option<&SceneNode> {
+        self.tree.node_at_point(point)
+    }
 }
 
 #[derive(Default)]
@@ -842,7 +855,6 @@ impl Element for SceneGraph {
 
         let visible_nodes = self.tree.query_range(&query_bounds);
 
-        // Paint a background to visualize the scene graph bounds
         window.paint_quad(quad(
             bounds,
             0.0,
@@ -853,13 +865,7 @@ impl Element for SceneGraph {
 
         for (_, _, node_id) in visible_nodes {
             if let Some(node) = self.nodes.get(node_id) {
-                // eprintln!(
-                //     "Painting node {}: position ({}, {})",
-                //     node.id, node.transform.position.0, node.transform.position.1
-                // );
-
                 if let Some(element) = &node.element {
-                    // Create more visually distinct nodes for debugging
                     let node_color = match node.id % 12 {
                         0 => hsla(0.0, 0.7, 0.5, 0.3),  // Red
                         1 => hsla(0.3, 0.7, 0.5, 0.3),  // Green
