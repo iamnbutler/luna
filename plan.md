@@ -1,6 +1,79 @@
-# Updated ECS-Organized Approach for a Scalable Canvas App
+# Luna – Description & Development Plan
 
-This plan now includes not only the core ECS-inspired design and ordered implementation steps but also visual debugging tools and additional visual elements for user interactions and testing.
+Our goal is to build a highly performant, scalable canvas application—akin to Figma—that supports complex interactions (drag-and-drop, reparenting, scaling, rotation) even with many levels of nested elements. We’ll use an ECS-inspired architecture with a strict type system that clearly distinguishes between local and world coordinates. Testing and test-driven development (TDD) are central to our approach, and we’ll integrate visual debugging tools to aid development and troubleshooting.
+
+---
+
+## Key Design Principles
+
+### 1. Performance
+- **Efficient Layout and Rendering:**
+  - Use spatial indexing (e.g., quadtrees) so that only visible elements are processed for hit testing and rendering.
+  - Cache world transforms computed by composing local transforms to minimize unnecessary recalculations.
+- **Scalability:**
+  - Design to support a theoretically infinite canvas and thousands of nested elements without performance degradation.
+  - Optimize critical paths in transform composition, event propagation, and rendering.
+
+### 2. Testing & Test-Driven Development
+- **TDD Approach:**
+  - Write comprehensive unit tests for core math operations (vector arithmetic, transform composition), ECS functions (entity management, component updates), and collision detection (AABB computations, hit testing).
+  - Develop integration tests for user flows (e.g., dragging, reparenting, scaling) using a virtual canvas (TestCanvas) that simulates actions and verifies state transitions.
+- **Visual Debugging:**
+  - Implement debug overlays that render bounding boxes, wireframes for clipping, and transformation controls.
+  - Use these visual tools to quickly identify discrepancies in layout or transform computations.
+
+### 3. Strict Type System & ECS Principles
+- **Local vs. World Coordinates:**
+  - Define explicit types (`LocalPosition`, `WorldPosition`, `LocalTransform`, `WorldTransform`) to prevent mixing coordinate spaces.
+  - Provide helper methods for converting between these types.
+- **ECS Architecture:**
+  - **Entities:** Represented by unique IDs (e.g., `LunaEntityId`), with no intrinsic data.
+  - **Components:** Store all data in dedicated structures (TransformComponent, HierarchyComponent, RenderComponent, etc.).
+  - **Systems:** Process component data (e.g., TransformSystem to compute world transforms, RenderSystem to draw elements, HitTestSystem for efficient interaction).
+
+---
+
+## Short-Range Needs and Goals
+- **MVP Features:**
+  - Create a basic canvas that supports the creation and movement of elements.
+  - Implement a simple scene graph with local-to-world transform composition.
+  - Integrate a basic quadtree for spatial indexing and hit testing.
+- **Testing & Debugging:**
+  - Develop unit tests for vector math, transform composition, and AABB hit testing.
+  - Implement visual debug overlays (bounding boxes, wireframe views) to validate layout and transform logic.
+
+---
+
+## Long-Range Needs and Goals
+- **Complex Interactions:**
+  - Support advanced interactions such as reparenting elements, interactive scaling, rotation, and drag-and-drop.
+  - Build a rich UI including a layer list (to manage hierarchy), transform controls (for scaling/rotation), and property inspectors.
+- **High Performance at Scale:**
+  - Ensure the system remains responsive even with thousands of elements and deep nesting.
+  - Optimize update flows, caching of transforms, and event handling.
+- **Extensibility and Maintainability:**
+  - Use an ECS framework with a flat data structure (e.g., hash maps keyed by EntityId) to store components.
+  - Maintain a single source of truth for positions and layout so that every update (via events like `request_layout_update`) flows through a well-defined pipeline.
+  - Provide clear, self-documenting types and conversion methods to minimize errors.
+
+---
+
+## Important Notes
+- **Adhere Strictly to the Type System:**
+  - Always use `LocalPosition` for data relative to a parent and `WorldPosition` for absolute positions.
+  - Ensure that all transforms are composed via explicit methods (e.g., `LocalTransform::to_world(&parent_transform)`) to avoid double-application.
+- **Follow ECS Patterns:**
+  - Treat entities as minimal IDs, with all data stored in separate, flat components (e.g., TransformComponent, HierarchyComponent, RenderComponent).
+  - Build systems that process these components in a decoupled manner (e.g., TransformSystem, RenderSystem, HitTestSystem).
+- **Prioritize Testing and Visual Debugging:**
+  - Use TDD to drive development, writing tests for every core function before implementation.
+  - Integrate visual debugging tools to render overlays (bounding boxes, wireframe clipping, transform controls) to assist in diagnosing issues.
+- **Plan for Both Short and Long Term:**
+  - In the short term, focus on a robust, testable MVP that includes basic element manipulation and rendering.
+  - In the long term, extend the system to support complex UI interactions (reparenting, multi-selection, property editing) and optimize for performance at scale.
+- **Data Storage Considerations:**
+  - Consider a centralized state (using hash maps keyed by entity IDs) for fast lookups and updates.
+  - Evaluate whether a flat structure or rebuilding the scene graph from a flat map is best for your performance needs.
 
 ---
 
