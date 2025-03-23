@@ -18,6 +18,7 @@ use uuid::Uuid;
 pub mod components;
 pub mod ecs;
 pub mod prelude;
+pub mod systems;
 
 pub const SELECTED_COLOR: Hsla = Hsla {
     h: 205.0 / 360.0,
@@ -61,7 +62,7 @@ struct Luna {
 impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
         let weak_self = cx.entity().downgrade();
-        let ecs = cx.new(|_| LunaEcs::new());
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
         let focus_handle = cx.focus_handle();
 
         let luna = Luna {
