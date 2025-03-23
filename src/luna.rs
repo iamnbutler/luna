@@ -1,5 +1,6 @@
 #![allow(dead_code, unused)]
 
+use ecs::LunaEcs;
 use gpui::{
     div, impl_actions, point, prelude::*, px, rgb, size, App, Application, Bounds, CursorStyle,
     Entity, FocusHandle, Focusable, Hsla, MouseMoveEvent, ParentElement, Pixels, Point,
@@ -52,6 +53,7 @@ impl std::fmt::Display for LunaEntityId {
 #[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,
+    ecs: Entity<LunaEcs>,
     viewport_size: Size<Pixels>,
     focus_handle: FocusHandle,
 }
@@ -59,10 +61,12 @@ struct Luna {
 impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
         let weak_self = cx.entity().downgrade();
+        let ecs = cx.new(|_| LunaEcs::new());
         let focus_handle = cx.focus_handle();
 
         let luna = Luna {
             weak_self,
+            ecs,
             viewport_size,
             focus_handle,
         };
