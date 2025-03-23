@@ -578,7 +578,7 @@ impl QuadTree {
     }
 }
 
-pub struct SceneGraph {
+pub struct Canvas {
     id: ElementId,
     tree: QuadTree,
     nodes: Vec<SceneNode>,
@@ -593,12 +593,12 @@ pub struct SceneGraph {
     hovered_node_id: Option<usize>,
 }
 
-impl SceneGraph {
+impl Canvas {
     pub fn new(id: impl Into<ElementId>, cx: &mut Context<Self>) -> Self {
         let boundary = BoundingBox::new(0.0, 0.0, 1000.0, 1000.0);
         let tree = QuadTree::new("scene-graph-quad-tree", boundary, 4);
 
-        let mut graph = SceneGraph {
+        let mut graph = Canvas {
             id: id.into(),
             tree,
             nodes: Vec::new(),
@@ -1180,7 +1180,7 @@ pub struct SceneGraphLayoutState {
     node_layouts: Vec<LayoutId>,
 }
 
-impl Element for SceneGraph {
+impl Element for Canvas {
     type RequestLayoutState = SceneGraphLayoutState;
     type PrepaintState = Option<Hitbox>;
 
@@ -1330,7 +1330,7 @@ impl Element for SceneGraph {
     }
 }
 
-impl IntoElement for SceneGraph {
+impl IntoElement for Canvas {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -1338,7 +1338,7 @@ impl IntoElement for SceneGraph {
     }
 }
 
-impl Render for SceneGraph {
+impl Render for Canvas {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("scene-graph")
@@ -1362,13 +1362,13 @@ impl Render for SceneGraph {
     }
 }
 
-impl Focusable for SceneGraph {
+impl Focusable for Canvas {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Clone for SceneGraph {
+impl Clone for Canvas {
     fn clone(&self) -> Self {
         Self {
             id: self.id.clone(),

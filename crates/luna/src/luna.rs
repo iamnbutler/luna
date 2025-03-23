@@ -7,12 +7,14 @@ mod layer_list;
 mod scene_graph;
 mod titlebar;
 
-use canvas::Canvas;
 use element::ElementStyle;
-use gpui::{prelude::FluentBuilder as _, *};
+use gpui::{
+    point, prelude::*, rgb, size, App, Application, Bounds, CursorStyle, Entity, FocusHandle,
+    Focusable, MouseMoveEvent, SharedString, WeakEntity, Window, WindowOptions,
+};
 
 use layer_list::LayerList;
-use scene_graph::{BoundingBox, QuadTree, SceneGraph};
+use scene_graph::{BoundingBox, Canvas, QuadTree};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -126,7 +128,7 @@ impl ResizeDirection {
 struct Luna {
     weak_self: WeakEntity<Self>,
     titlebar: Entity<Titlebar>,
-    scene_graph: Entity<SceneGraph>,
+    scene_graph: Entity<Canvas>,
     viewport_size: Size<Pixels>,
     bounds: Bounds<Pixels>,
     focus_handle: FocusHandle,
@@ -136,7 +138,7 @@ impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
         let titlebar = cx.new(|cx| Titlebar::new(window, cx));
 
-        let scene_graph = cx.new(|cx| SceneGraph::new("scene-graph", cx));
+        let scene_graph = cx.new(|cx| Canvas::new("scene-graph", cx));
 
         let weak_self = cx.entity().downgrade();
 
@@ -185,7 +187,7 @@ impl Render for Luna {
             .text_color(rgb(0xffffff))
             .child({
                 let this = cx.entity().clone();
-                canvas(
+                gpui::canvas(
                     move |bounds, window, cx| {
                         this.update(cx, |this, cx| {
                             let bounds_changed = this.bounds != bounds;
