@@ -696,49 +696,54 @@ impl SceneGraph {
         }
     }
 
-    fn node_at_point(&self, screen_point: Point<Pixels>) -> Option<usize> {
-        println!(
-            "node_at_point called with screen point: ({}, {})",
-            screen_point.x.0, screen_point.y.0
-        );
+    fn check_node_at_point(
+        node: &SceneNode,
+        parent_transform: &LocalTransform,
+        world_x: f32,
+        world_y: f32,
+    ) -> Option<usize> {
+        let world_transform = node.transform.to_world_transform(parent_transform);
 
-        // Convert screen coordinates to world coordinates by subtracting pan offset
-        let world_x = screen_point.x.0 as f32 - self.pan_offset.0;
-        let world_y = screen_point.y.0 as f32 - self.pan_offset.1;
-        println!("World coordinates: ({}, {})", world_x, world_y);
-
-        // DIRECT CHECK: Instead of relying on the quadtree query, check each node directly
-        println!("=== DIRECT NODE CHECK ===");
-
-        // Check nodes in reverse order (top to bottom visual order)
-        for i in (0..self.nodes.len()).rev() {
-            let node = &self.nodes[i];
-            if let Some(element) = &node.element {
-                let bounds = element.calculate_local_bounds(&node.transform);
-                let contains = bounds.contains_point(world_x, world_y);
-
-                println!(
-                    "Node {}: position({}, {}), bounds({:.1},{:.1} to {:.1},{:.1}), contains: {}",
-                    i,
-                    node.transform.position.x(),
-                    node.transform.position.y(),
-                    bounds.min_x(),
-                    bounds.min_y(),
-                    bounds.max_x(),
-                    bounds.max_y(),
-                    contains
-                );
-
-                // If we find a node that contains the point, return it immediately
-                if contains {
-                    println!("Direct hit on node {}", i);
-                    return Some(i);
-                }
+        // Check children first (in reverse order) so we get top-most nodes first
+        for child in node.children.iter().rev() {
+            if let Some(hit_id) =
+                Self::check_node_at_point(child, &world_transform, world_x, world_y)
+            {
+                return Some(hit_id);
             }
         }
 
-        println!("No nodes contain the point");
-        println!("=== END DIRECT CHECK ===");
+        // Then check this node
+        if let Some(element) = &node.element {
+            let bounds = element.calculate_local_bounds(&world_transform);
+            if bounds.contains_point(world_x, world_y) {
+                return Some(node.id);
+            }
+        }
+
+        None
+    }
+
+    fn node_at_point(&self, screen_point: Point<Pixels>) -> Option<usize> {
+        // Convert screen coordinates to world coordinates
+        let world_x = screen_point.x.0 as f32 - self.pan_offset.0;
+        let world_y = screen_point.y.0 as f32 - self.pan_offset.1;
+
+        let root_transform = LocalTransform {
+            position: LocalPosition::new(0.0, 0.0),
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotation: 0.0,
+        };
+
+        // Check all nodes in reverse order (top to bottom visually)
+        for node in self.nodes.iter().rev() {
+            // First check the node's children
+            if let Some(hit_id) = Self::check_node_at_point(node, &root_transform, world_x, world_y)
+            {
+                return Some(hit_id);
+            }
+        }
 
         None
     }
@@ -811,41 +816,264 @@ impl SceneGraph {
         }
     }
 
-    fn reparent_node(&mut self, node_id: usize, new_parent_id: usize) {
-        // First find and remove the node from its current location
-        let mut node_to_move = None;
+    // Helper function that returns a vec of indices representing the path to the node
+    fn find_node_indices(nodes: &[SceneNode], target_id: usize) -> Option<Vec<usize>> {
+        // First check direct children
+        for (i, node) in nodes.iter().enumerate() {
+            if node.id == target_id {
+                return Some(vec![i]);
+            }
+        }
 
-        // Check if it's a top-level node
-        if let Some(pos) = self.nodes.iter().position(|node| node.id == node_id) {
-            node_to_move = Some(self.nodes.remove(pos));
-        } else {
-            // Check if it's a child of another node
-            for node in &mut self.nodes {
-                if let Some(pos) = node.children.iter().position(|child| child.id == node_id) {
-                    node_to_move = Some(node.children.remove(pos));
+        // Then check each node's children recursively
+        for (i, node) in nodes.iter().enumerate() {
+            if let Some(mut path) = Self::find_node_indices(&node.children, target_id) {
+                path.insert(0, i);
+                return Some(path);
+            }
+        }
+
+        None
+    }
+
+    fn find_node_by_id_mut(&mut self, id: usize) -> Option<&mut SceneNode> {
+        // First find the path to the node
+        let indices = Self::find_node_indices(&self.nodes, id)?;
+
+        // Then follow the path to get a mutable reference
+        let mut current = &mut self.nodes;
+        let mut iter = indices.iter().peekable();
+
+        while let Some(&idx) = iter.next() {
+            if iter.peek().is_some() {
+                current = &mut current[idx].children;
+            } else {
+                return Some(&mut current[idx]);
+            }
+        }
+
+        None
+    }
+
+    fn find_node_in_children_mut(
+        children: &mut Vec<SceneNode>,
+        id: usize,
+    ) -> Option<&mut SceneNode> {
+        // First find the path to the node
+        let indices = Self::find_node_indices(children, id)?;
+
+        // Then follow the path to get a mutable reference
+        let mut current = children;
+        let mut iter = indices.iter().peekable();
+
+        while let Some(&idx) = iter.next() {
+            if iter.peek().is_some() {
+                current = &mut current[idx].children;
+            } else {
+                return Some(&mut current[idx]);
+            }
+        }
+
+        None
+    }
+
+    fn remove_node_by_id(&mut self, id: usize) -> Option<SceneNode> {
+        // Try to remove from top-level nodes
+        if let Some(pos) = self.nodes.iter().position(|node| node.id == id) {
+            return Some(self.nodes.remove(pos));
+        }
+
+        // Try to remove from children
+        for node in &mut self.nodes {
+            if let Some(removed) = Self::remove_node_from_children(&mut node.children, id) {
+                return Some(removed);
+            }
+        }
+        None
+    }
+
+    fn remove_node_from_children(children: &mut Vec<SceneNode>, id: usize) -> Option<SceneNode> {
+        if let Some(pos) = children.iter().position(|node| node.id == id) {
+            return Some(children.remove(pos));
+        }
+
+        for child in children {
+            if let Some(removed) = Self::remove_node_from_children(&mut child.children, id) {
+                return Some(removed);
+            }
+        }
+        None
+    }
+
+    fn add_node_to_parent_recursive(
+        nodes: &mut Vec<SceneNode>,
+        parent_id: usize,
+        node: SceneNode,
+    ) -> bool {
+        for parent in nodes.iter_mut() {
+            if parent.id == parent_id {
+                parent.children.push(node);
+                return true;
+            }
+            if Self::add_node_to_parent_recursive_helper(
+                parent_id,
+                node.clone(),
+                &mut parent.children,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn add_node_to_parent_recursive_helper(
+        parent_id: usize,
+        node: SceneNode,
+        children: &mut Vec<SceneNode>,
+    ) -> bool {
+        for child in children.iter_mut() {
+            if child.id == parent_id {
+                child.children.push(node);
+                return true;
+            }
+            if Self::add_node_to_parent_recursive_helper(
+                parent_id,
+                node.clone(),
+                &mut child.children,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn reparent_node(&mut self, node_id: usize, new_parent_id: usize, cx: &mut Context<Self>) {
+        // First calculate the world position of the node we're moving
+        let world_position = {
+            let root_transform = LocalTransform {
+                position: LocalPosition::new(0.0, 0.0),
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+            };
+
+            // Function to recursively find a node and calculate its world transform
+            fn find_node_world_transform(
+                node: &SceneNode,
+                parent_transform: &LocalTransform,
+                target_id: usize,
+            ) -> Option<LocalTransform> {
+                if node.id == target_id {
+                    return Some(node.transform.to_world_transform(parent_transform));
+                }
+
+                let node_world = node.transform.to_world_transform(parent_transform);
+                for child in &node.children {
+                    if let Some(transform) =
+                        find_node_world_transform(child, &node_world, target_id)
+                    {
+                        return Some(transform);
+                    }
+                }
+                None
+            }
+
+            // Search through all nodes to find the target node's world transform
+            let mut world_transform = None;
+            for node in &self.nodes {
+                if node.id == node_id {
+                    world_transform = Some(node.transform.to_world_transform(&root_transform));
+                    break;
+                }
+                if let Some(transform) = find_node_world_transform(node, &root_transform, node_id) {
+                    world_transform = Some(transform);
                     break;
                 }
             }
-        }
+            world_transform
+        };
 
-        // If we found the node, add it to its new parent
-        if let Some(mut node) = node_to_move {
-            // Get the new parent's world position
-            if let Some(parent) = self.nodes.get(new_parent_id) {
-                let parent_pos = parent.transform.position;
+        // Remove the node from its current location
+        let mut node_to_move = self
+            .remove_node_by_id(node_id)
+            .expect("Node to move not found");
 
-                // Convert node's position to be relative to new parent
-                node.transform.position = LocalPosition::new(
-                    node.transform.position.x() - parent_pos.x(),
-                    node.transform.position.y() - parent_pos.y(),
-                );
+        // Find the new parent's world transform
+        let parent_world_transform = {
+            let root_transform = LocalTransform {
+                position: LocalPosition::new(0.0, 0.0),
+                scale_x: 1.0,
+                scale_y: 1.0,
+                rotation: 0.0,
+            };
 
-                // Add the node to its new parent's children
-                if let Some(parent) = self.nodes.get_mut(new_parent_id) {
-                    parent.children.push(node);
+            fn find_node_world_transform(
+                node: &SceneNode,
+                parent_transform: &LocalTransform,
+                target_id: usize,
+            ) -> Option<LocalTransform> {
+                if node.id == target_id {
+                    return Some(node.transform.to_world_transform(parent_transform));
+                }
+
+                let node_world = node.transform.to_world_transform(parent_transform);
+                for child in &node.children {
+                    if let Some(transform) =
+                        find_node_world_transform(child, &node_world, target_id)
+                    {
+                        return Some(transform);
+                    }
+                }
+                None
+            }
+
+            let mut parent_transform = None;
+            for node in &self.nodes {
+                if node.id == new_parent_id {
+                    parent_transform = Some(node.transform.to_world_transform(&root_transform));
+                    break;
+                }
+                if let Some(transform) =
+                    find_node_world_transform(node, &root_transform, new_parent_id)
+                {
+                    parent_transform = Some(transform);
+                    break;
                 }
             }
+            parent_transform
+        };
+
+        // Convert the node's world position to be relative to its new parent
+        if let (Some(world_pos), Some(parent_world)) = (world_position, parent_world_transform) {
+            node_to_move.transform.position = LocalPosition::new(
+                world_pos.position.x() - parent_world.position.x(),
+                world_pos.position.y() - parent_world.position.y(),
+            );
+
+            // Find the new parent and add the node as its child
+            if !Self::add_node_to_parent_recursive(
+                &mut self.nodes,
+                new_parent_id,
+                node_to_move.clone(),
+            ) {
+                // If parent wasn't found, add back to top level
+                self.nodes.push(node_to_move.clone());
+            }
+
+            println!(
+                "Reparenting node {} into parent {}",
+                node_to_move.id, new_parent_id
+            );
+            println!(
+                "Old position: {:?}, new position: {:?}",
+                world_pos.position, node_to_move.transform.position
+            );
+        } else {
+            // If we couldn't find either transform, add back to top level
+            self.nodes.push(node_to_move);
         }
+
+        cx.notify();
     }
 
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -853,7 +1081,7 @@ impl SceneGraph {
         if let (Some(dragged_id), Some(target_id)) = (self.selected_node_id, self.hovered_node_id) {
             // Don't allow a node to become its own parent
             if dragged_id != target_id {
-                self.reparent_node(dragged_id, target_id);
+                self.reparent_node(dragged_id, target_id, cx);
             }
         }
 
