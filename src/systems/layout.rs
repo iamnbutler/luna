@@ -113,81 +113,90 @@ impl LayoutSystem {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_layout_system() {
-//         let mut ecs = LunaEcs::new();
-//         let mut layout_system = LayoutSystem::new();
+    #[gpui::test]
+    fn test_layout_system(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
+        let mut layout_system = LayoutSystem::new();
 
-//         // Create a test entity
-//         let entity = ecs.create_entity();
+        ecs.clone().update(cx, |ecs_mut, cx| {
+            // Create a test entity
+            let entity = ecs_mut.create_entity();
 
-//         // Add layout properties
-//         let layout = LayoutProperties {
-//             width: Some(100.0),
-//             height: Some(50.0),
-//             constraints: SizeConstraints {
-//                 min_width: Some(50.0),
-//                 max_width: Some(200.0),
-//                 min_height: Some(25.0),
-//                 max_height: Some(100.0),
-//             },
-//             margins: Margins {
-//                 top: 10.0,
-//                 right: 10.0,
-//                 bottom: 10.0,
-//                 left: 10.0,
-//             },
-//         };
-//         ecs.layout_mut().set_layout(entity, layout);
+            // Add layout properties
+            let layout = LayoutProperties {
+                width: Some(100.0),
+                height: Some(50.0),
+                constraints: SizeConstraints {
+                    min_width: Some(50.0),
+                    max_width: Some(200.0),
+                    min_height: Some(25.0),
+                    max_height: Some(100.0),
+                },
+                margins: Margins {
+                    top: 10.0,
+                    right: 10.0,
+                    bottom: 10.0,
+                    left: 10.0,
+                },
+            };
 
-//         // Mark entity for layout update
-//         layout_system.mark_dirty(entity);
+            ecs_mut.layout(cx).update(cx, |layout_component, cx| {
+                layout_component.set_layout(entity, layout);
+            });
 
-//         // Process layout updates
-//         layout_system.process(&mut ecs);
+            // Mark entity for layout update
+            layout_system.mark_dirty(entity);
 
-//         // Verify transform was updated correctly
-//         if let Some(transform) = ecs.transforms().get_transform(entity) {
-//             assert_eq!(transform.scale.x, 100.0);
-//             assert_eq!(transform.scale.y, 50.0);
-//             assert_eq!(transform.position.x, 10.0); // Left margin
-//             assert_eq!(transform.position.y, 10.0); // Top margin
-//         }
-//     }
+            // Process layout updates
+            layout_system.process(ecs.clone(), cx);
 
-//     #[test]
-//     fn test_layout_constraints() {
-//         let mut ecs = LunaEcs::new();
-//         let mut layout_system = LayoutSystem::new();
+            if let Some(transform) = ecs_mut.transforms(cx).read(cx).get_transform(entity) {
+                assert_eq!(transform.scale.x, 100.0);
+                assert_eq!(transform.scale.y, 50.0);
+                assert_eq!(transform.position.x, 10.0); // Left margin
+                assert_eq!(transform.position.y, 10.0); // Top margin
+            }
+        });
+    }
 
-//         let entity = ecs.create_entity();
+    #[gpui::test]
+    fn test_layout_constraints(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
+        let mut layout_system = LayoutSystem::new();
 
-//         // Add layout properties with constraints
-//         let layout = LayoutProperties {
-//             width: Some(250.0), // Exceeds max_width
-//             height: Some(20.0), // Below min_height
-//             constraints: SizeConstraints {
-//                 min_width: Some(50.0),
-//                 max_width: Some(200.0),
-//                 min_height: Some(25.0),
-//                 max_height: Some(100.0),
-//             },
-//             margins: Margins::default(),
-//         };
-//         ecs.layout_mut().set_layout(entity, layout);
+        ecs.clone().update(cx, |ecs_mut, cx| {
+            let entity = ecs_mut.create_entity();
 
-//         // Process layout
-//         layout_system.mark_dirty(entity);
-//         layout_system.process(&mut ecs);
+            // Add layout properties with constraints
+            let layout = LayoutProperties {
+                width: Some(250.0), // Exceeds max_width
+                height: Some(20.0), // Below min_height
+                constraints: SizeConstraints {
+                    min_width: Some(50.0),
+                    max_width: Some(200.0),
+                    min_height: Some(25.0),
+                    max_height: Some(100.0),
+                },
+                margins: Margins::default(),
+            };
 
-//         // Verify constraints were applied
-//         if let Some(transform) = ecs.transforms().get_transform(entity) {
-//             assert_eq!(transform.scale.x, 200.0); // Clamped to max_width
-//             assert_eq!(transform.scale.y, 25.0); // Clamped to min_height
-//         }
-//     }
-// }
+            ecs_mut.layout(cx).update(cx, |layout_component, cx| {
+                layout_component.set_layout(entity, layout);
+            });
+
+            // Process layout
+            layout_system.mark_dirty(entity);
+            layout_system.process(ecs.clone(), cx);
+
+            // Verify constraints were applied
+            if let Some(transform) = ecs_mut.transforms(cx).read(cx).get_transform(entity) {
+                assert_eq!(transform.scale.x, 200.0); // Clamped to max_width
+                assert_eq!(transform.scale.y, 25.0); // Clamped to min_height
+            }
+        });
+    }
+}

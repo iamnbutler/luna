@@ -69,56 +69,65 @@ impl TransformSystem {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_transform_system() {
-//         let mut ecs = LunaEcs::new();
-//         let mut transform_system = TransformSystem::new();
+    #[gpui::test]
+    fn test_transform_system(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
+        let mut transform_system = cx.new(|cx| TransformSystem::new());
 
-//         // Create a simple parent-child hierarchy
-//         let parent = ecs.create_entity();
-//         let child = ecs.create_entity();
+        ecs.clone().update(cx, |ecs_mut, cx| {
+            // Create a simple parent-child hierarchy
+            let parent = ecs_mut.create_entity();
+            let child = ecs_mut.create_entity();
 
-//         // Setup hierarchy
-//         ecs.hierarchy_mut().set_parent(child, Some(parent));
+            // Setup hierarchy
+            ecs_mut.hierarchy(cx).update(cx, |hierarchy, cx| {
+                hierarchy.set_parent(child, parent);
+            });
 
-//         // Add transforms
-//         ecs.transforms_mut().set_transform(
-//             parent,
-//             LocalTransform {
-//                 position: LocalPosition { x: 10.0, y: 10.0 },
-//                 scale: Vector2D { x: 2.0, y: 2.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+            // Add transforms
+            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
+                transforms.set_transform(
+                    parent,
+                    LocalTransform {
+                        position: LocalPosition { x: 10.0, y: 10.0 },
+                        scale: Vector2D { x: 2.0, y: 2.0 },
+                        rotation: 0.0,
+                    },
+                );
 
-//         ecs.transforms_mut().set_transform(
-//             child,
-//             LocalTransform {
-//                 position: LocalPosition { x: 5.0, y: 5.0 },
-//                 scale: Vector2D { x: 1.5, y: 1.5 },
-//                 rotation: 0.0,
-//             },
-//         );
+                transforms.set_transform(
+                    child,
+                    LocalTransform {
+                        position: LocalPosition { x: 5.0, y: 5.0 },
+                        scale: Vector2D { x: 1.5, y: 1.5 },
+                        rotation: 0.0,
+                    },
+                );
+            });
 
-//         // Mark parent as dirty
-//         transform_system.mark_dirty(parent);
+            transform_system.update(cx, |transform_system, cx| {
+                // Mark parent as dirty
+                transform_system.mark_dirty(parent);
 
-//         // Process updates
-//         transform_system.process(&mut ecs);
+                // Process updates
+                transform_system.process(ecs.clone(), cx);
+            });
 
-//         // Verify world transforms were updated correctly
-//         if let Some(world_transform) = ecs
-//             .transforms_mut()
-//             .compute_world_transform(child, &[parent])
-//         {
-//             assert_eq!(world_transform.position.x, 20.0); // 10 + (5 * 2)
-//             assert_eq!(world_transform.position.y, 20.0); // 10 + (5 * 2)
-//             assert_eq!(world_transform.scale.x, 3.0); // 2 * 1.5
-//             assert_eq!(world_transform.scale.y, 3.0); // 2 * 1.5
-//         }
-//     }
-// }
+            // Verify world transforms were updated correctly
+            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
+                if let Some(world_transform) =
+                    transforms.compute_world_transform(child, vec![parent])
+                {
+                    assert_eq!(world_transform.position.x, 20.0); // 10 + (5 * 2)
+                    assert_eq!(world_transform.position.y, 20.0); // 10 + (5 * 2)
+                    assert_eq!(world_transform.scale.x, 3.0); // 2 * 1.5
+                    assert_eq!(world_transform.scale.y, 3.0); // 2 * 1.5
+                }
+            });
+        });
+    }
+}

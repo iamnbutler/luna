@@ -49,7 +49,7 @@ impl HitTestSystem {
     /// Returns the topmost entity at the given point, respecting Z-order
     pub fn hit_test_point(
         &self,
-        ecs: &LunaEcs,
+        ecs: Entity<LunaEcs>,
         x: f32,
         y: f32,
         cx: &Context<LunaEcs>,
@@ -61,7 +61,12 @@ impl HitTestSystem {
         let mut depth_map: Vec<(LunaEntityId, usize)> = candidates
             .into_iter()
             .map(|entity| {
-                let depth = ecs.hierarchy(cx).read(cx).get_parent_chain(entity).len();
+                let depth = ecs
+                    .read(cx)
+                    .hierarchy(cx)
+                    .read(cx)
+                    .get_parent_chain(entity)
+                    .len();
                 (entity, depth)
             })
             .collect();
@@ -76,7 +81,7 @@ impl HitTestSystem {
     /// Returns all entities in the given region, sorted by Z-order
     pub fn hit_test_region(
         &self,
-        ecs: &LunaEcs,
+        ecs: Entity<LunaEcs>,
         x: f32,
         y: f32,
         width: f32,
@@ -89,7 +94,12 @@ impl HitTestSystem {
         let mut depth_map: Vec<(LunaEntityId, usize)> = candidates
             .into_iter()
             .map(|entity| {
-                let depth = ecs.hierarchy(cx).read(cx).get_parent_chain(entity).len();
+                let depth = ecs
+                    .read(cx)
+                    .hierarchy(cx)
+                    .read(cx)
+                    .get_parent_chain(entity)
+                    .len();
                 (entity, depth)
             })
             .collect();
@@ -108,85 +118,93 @@ impl HitTestSystem {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_hit_test_point() {
-//         let mut ecs = LunaEcs::new();
-//         let mut hit_test = HitTestSystem::new(100.0, 100.0);
+    #[gpui::test]
+    fn test_hit_test_point(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
 
-//         // Create a parent-child hierarchy
-//         let parent = ecs.create_entity();
-//         let child = ecs.create_entity();
+        let mut hit_test = HitTestSystem::new(100.0, 100.0);
 
-//         // Setup hierarchy
-//         ecs.hierarchy_mut().set_parent(child, Some(parent));
+        ecs.update(cx, |ecs_mut, cx| {
+            // Create a parent-child hierarchy
+            let parent = ecs_mut.create_entity();
+            let child = ecs_mut.create_entity();
 
-//         // Add transforms
-//         ecs.transforms_mut().set_transform(
-//             parent,
-//             LocalTransform {
-//                 position: LocalPosition { x: 10.0, y: 10.0 },
-//                 scale: Vector2D { x: 1.0, y: 1.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+            ecs_mut.hierarchy(cx).update(cx, |hierarchy, cx| {
+                hierarchy.set_parent(parent, child);
+            });
 
-//         ecs.transforms_mut().set_transform(
-//             child,
-//             LocalTransform {
-//                 position: LocalPosition { x: 5.0, y: 5.0 },
-//                 scale: Vector2D { x: 1.0, y: 1.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
+                transforms.set_transform(
+                    parent,
+                    LocalTransform {
+                        position: LocalPosition { x: 10.0, y: 10.0 },
+                        scale: Vector2D { x: 1.0, y: 1.0 },
+                        rotation: 0.0,
+                    },
+                );
+                transforms.set_transform(
+                    child,
+                    LocalTransform {
+                        position: LocalPosition { x: 5.0, y: 5.0 },
+                        scale: Vector2D { x: 1.0, y: 1.0 },
+                        rotation: 0.0,
+                    },
+                );
+            });
 
-//         // Update spatial index
-//         hit_test.update_entity(&ecs, parent);
-//         hit_test.update_entity(&ecs, child);
+            // Update spatial index
+            hit_test.update_entity(ecs.clone(), parent, cx);
+            hit_test.update_entity(ecs.clone(), child, cx);
 
-//         // Test hit testing - child should be on top
-//         if let Some(hit) = hit_test.hit_test_point(&ecs, 15.0, 15.0) {
-//             assert_eq!(hit, child);
-//         }
-//     }
+            // Test hit testing - child should be on top
+            if let Some(hit) = hit_test.hit_test_point(ecs.clone(), 15.0, 15.0, cx) {
+                assert_eq!(hit, child);
+            }
+        });
+    }
 
-//     #[test]
-//     fn test_hit_test_region() {
-//         let mut ecs = LunaEcs::new();
-//         let mut hit_test = HitTestSystem::new(100.0, 100.0);
+    #[gpui::test]
+    fn test_hit_test_region(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
 
-//         // Create some test entities
-//         let e1 = ecs.create_entity();
-//         let e2 = ecs.create_entity();
+        let mut hit_test = HitTestSystem::new(100.0, 100.0);
 
-//         // Add transforms
-//         ecs.transforms_mut().set_transform(
-//             e1,
-//             LocalTransform {
-//                 position: LocalPosition { x: 10.0, y: 10.0 },
-//                 scale: Vector2D { x: 1.0, y: 1.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+        ecs.clone().update(cx, |ecs_mut, cx| {
+            // Create some test entities
+            let e1 = ecs_mut.create_entity();
+            let e2 = ecs_mut.create_entity();
 
-//         ecs.transforms_mut().set_transform(
-//             e2,
-//             LocalTransform {
-//                 position: LocalPosition { x: 20.0, y: 20.0 },
-//                 scale: Vector2D { x: 1.0, y: 1.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
+                transforms.set_transform(
+                    e1,
+                    LocalTransform {
+                        position: LocalPosition { x: 10.0, y: 10.0 },
+                        scale: Vector2D { x: 1.0, y: 1.0 },
+                        rotation: 0.0,
+                    },
+                );
 
-//         // Update spatial index
-//         hit_test.update_entity(&ecs, e1);
-//         hit_test.update_entity(&ecs, e2);
+                transforms.set_transform(
+                    e2,
+                    LocalTransform {
+                        position: LocalPosition { x: 20.0, y: 20.0 },
+                        scale: Vector2D { x: 1.0, y: 1.0 },
+                        rotation: 0.0,
+                    },
+                );
+            });
 
-//         // Test region query
-//         let hits = hit_test.hit_test_region(&ecs, 0.0, 0.0, 30.0, 30.0);
-//         assert_eq!(hits.len(), 2);
-//     }
-// }
+            // Update spatial index
+            hit_test.update_entity(ecs.clone(), e1, cx);
+            hit_test.update_entity(ecs.clone(), e2, cx);
+
+            // Test region query
+            let hits = hit_test.hit_test_region(ecs, 0.0, 0.0, 30.0, 30.0, cx);
+            assert_eq!(hits.len(), 2);
+        });
+    }
+}

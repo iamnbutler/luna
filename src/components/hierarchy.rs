@@ -43,6 +43,32 @@ impl HierarchyComponent {
         }
     }
 
+    /// Sets a new parent for a child, removing it
+    /// from its current parent if it has one
+    pub fn set_parent(&mut self, parent: LunaEntityId, child: LunaEntityId) {
+        // Remove child from its current parent if it has one
+        if let Some(old_parent) = self.parents.get(&child) {
+            if let Some(old_siblings) = self.children.get_mut(old_parent) {
+                old_siblings.retain(|&sibling| sibling != child);
+            }
+        }
+
+        // Set new parent-child relationship
+        self.parents.insert(child, parent);
+        self.children
+            .entry(parent)
+            .or_insert_with(Vec::new)
+            .push(child);
+    }
+
+    /// Removes a parent from its child
+    pub fn remove_parent(&mut self, parent: LunaEntityId, child: LunaEntityId) {
+        self.parents.remove(&child);
+        if let Some(siblings) = self.children.get_mut(&parent) {
+            siblings.retain(|&sibling| sibling != child);
+        }
+    }
+
     /// Gets the parent of an entity
     pub fn get_parent(&self, entity: LunaEntityId) -> Option<LunaEntityId> {
         self.parents.get(&entity).copied()
@@ -82,7 +108,7 @@ impl HierarchyComponent {
     pub fn remove(&mut self, entity: LunaEntityId) {
         // Remove as a child from its parent
         self.remove_child(entity);
-        
+
         // Remove its children (they become parentless)
         if let Some(children) = self.children.remove(&entity) {
             for child in children {

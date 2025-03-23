@@ -1,7 +1,7 @@
 pub use gpui::{
-    prelude::FluentBuilder, Context, Element, Entity, FocusableElement, InteractiveElement,
-    IntoElement, ParentElement, Refineable, Render, RenderOnce, StatefulInteractiveElement, Styled,
-    StyledImage,
+    prelude::FluentBuilder, AppContext as _, Context, Element, Entity, FocusableElement,
+    InteractiveElement, IntoElement, ParentElement, Refineable, Render, RenderOnce,
+    StatefulInteractiveElement, Styled, StyledImage, TestAppContext,
 };
 pub use serde::{Deserialize, Serialize};
 pub use std::collections::HashMap;
