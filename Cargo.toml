@@ -1,17 +1,15 @@
-[workspace]
-members = ["crates/luna"]
-default-members = ["crates/luna"]
-resolver = "2"
+[package]
+name = "luna"
+version = "0.1.0"
+edition = "2021"
+publish = false
 
-[workspace.dependencies]
-luna = { path = "crates/luna" }
+[[bin]]
+name = "luna"
+path = "src/luna.rs"
 
+[dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
-# smallvec is included here for convenience, it is used by gpui when creating
-# components that can have children. uncomment this line or
-# use `cargo add smallvec` to add it to your project
-#smallvec = "1.13.2"
-
 anyhow = "1.0.97"
 schemars = "0.8.22"
 schemars_derive = "0.8.22"
@@ -23,3 +21,5 @@ strum = "0.24"
 strum_macros = "0.24"
 palette = "0.7.6"
 taffy = "0.4.3"
+rand = "0.9.0"
+slotmap = "1.0.7"

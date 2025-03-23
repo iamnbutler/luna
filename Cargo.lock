@@ -2515,6 +2515,7 @@ dependencies = [
  "schemars",
  "schemars_derive",
  "serde",
+ "serde_json",
  "slotmap",
  "smallvec",
  "strum 0.24.1",
