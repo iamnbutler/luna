@@ -171,6 +171,57 @@ impl From<Vector2D> for LocalPosition {
     }
 }
 
+/// Represents a local transform, containing position, scale, and rotation relative to the parent.
+pub struct LocalTransform {
+    pub position: LocalPosition,
+    pub scale: Vector2D,
+    pub rotation: f32,
+}
+
+/// Represents a world transform, containing absolute position, scale, and rotation.
+pub struct WorldTransform {
+    pub position: WorldPosition,
+    pub scale: Vector2D,
+    pub rotation: f32,
+}
+
+/// An unrotated, rectangular bounding box (AABB) whose edges are parallel to the coordinate axes.
+///
+/// Used for efficient collision detection and spatial partitioning.
+pub struct BoundingBox {
+    min: Vector2D,
+    max: Vector2D,
+}
+
+impl BoundingBox {
+    pub fn new(min: Vector2D, max: Vector2D) -> Self {
+        BoundingBox { min, max }
+    }
+
+    pub fn width(&self) -> f32 {
+        self.max.x - self.min.x
+    }
+
+    pub fn height(&self) -> f32 {
+        self.max.y - self.min.y
+    }
+
+    pub fn half_width(&self) -> f32 {
+        self.width() / 2.0
+    }
+
+    pub fn half_height(&self) -> f32 {
+        self.height() / 2.0
+    }
+
+    pub fn center(&self) -> Vector2D {
+        vec2(
+            self.min.x + self.width() / 2.0,
+            self.min.y + self.height() / 2.0,
+        )
+    }
+}
+
 #[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,

@@ -7,7 +7,7 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
 ## ECS Organized Components
 
 ### Entities
-- **EntityId**
+- **LunaEntityId**
   - Unique identifier for each canvas element.
   - *Role:* Acts as a handle; no data is stored in the entity itself, only in its components.
 
@@ -19,8 +19,8 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
 
 - **HierarchyComponent**
   - Stores parent–child relationships:
-    - `parent: Option<EntityId>`
-    - `children: Vec<EntityId>`
+    - `parent: Option<LunaEntityId>`
+    - `children: Vec<LunaEntityId>`
   - *Role:* Represents the scene graph in a flat data structure.
 
 - **RenderComponent (or StyleComponent)**
@@ -75,10 +75,10 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
 ## Data Storage Strategy
 
 - **Centralized State:**
-  Use flat hash maps keyed by EntityId for each component:
-  - `HashMap<EntityId, TransformComponent>`
-  - `HashMap<EntityId, RenderComponent>`
-  - `HashMap<EntityId, HierarchyComponent>`
+  Use flat hash maps keyed by LunaEntityId for each component:
+  - `HashMap<LunaEntityId, TransformComponent>`
+  - `HashMap<LunaEntityId, RenderComponent>`
+  - `HashMap<LunaEntityId, HierarchyComponent>`
 - **Separation of Concerns:**
   Possibly maintain a separate spatial index (e.g., a quadtree) built from world transforms for hit testing.
 - **TestCanvas:**
@@ -92,18 +92,18 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
 
 1. **Define Core Types and Primitives**
    - Create type definitions for:
-     - [x] `LunaEntityId`
+     - [x] `LunaLunaEntityId`
      - [x] `Vector2D`
      - [x] `LocalPosition` and `WorldPosition`
-     - [ ] `LocalTransform` (and optionally a `WorldTransform` alias)
-     - [ ] `BoundingBox` (or AABB) with helper methods (intersection, containment, etc.)
+     - [x] `LocalTransform` (and optionally a `WorldTransform` alias)
+     - [x] `BoundingBox` (or AABB) with helper methods (intersection, containment, etc.)
    - Write tests to verify basic arithmetic and conversion functions.
    - **Visual Debugging:**
      - Add helper methods to output or draw the BoundingBox as a wireframe for debugging.
 
 2. **Implement Core Components**
    - Define components: TransformComponent, HierarchyComponent, RenderComponent.
-   - Decide on a data structure (e.g., hash maps) to store these components by EntityId.
+   - Decide on a data structure (e.g., hash maps) to store these components by LunaEntityId.
    - Write unit tests for component CRUD operations.
    - **Visual Debugging:**
      - Introduce a DebugComponent flag to optionally render extra info (bounding boxes, transform markers).
