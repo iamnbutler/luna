@@ -617,6 +617,10 @@ impl Canvas {
         graph.add_rectangle(300.0, 500.0, 100.0, 100.0);
         graph.add_rectangle(500.0, 300.0, 150.0, 150.0);
         graph.add_rectangle(500.0, 500.0, 200.0, 200.0);
+        graph.add_rectangle(400.0, 100.0, 50.0, 50.0);
+        graph.add_rectangle(500.0, 100.0, 100.0, 100.0);
+        graph.add_rectangle(400.0, 100.0, 150.0, 150.0);
+        graph.add_rectangle(700.0, 100.0, 200.0, 200.0);
 
         // for _ in 0..1000 {
         //     let x = -200.0 + (rand::random::<f32>() * 2500.0);
