@@ -138,15 +138,15 @@ impl ElementStyle {
 }
 
 #[derive(Debug, Clone)]
-pub struct SceneNode {
+pub struct CanvasElement {
     id: usize,
     transform: LocalTransform,
     element: Option<ElementStyle>,
-    children: Vec<SceneNode>,
+    children: Vec<CanvasElement>,
     clip_content: bool,
 }
 
-impl SceneNode {
+impl CanvasElement {
     fn calculate_combined_bounds_with_parent(
         &self,
         parent_transform: &LocalTransform,
@@ -581,7 +581,7 @@ impl QuadTree {
 pub struct Canvas {
     id: ElementId,
     tree: QuadTree,
-    nodes: Vec<SceneNode>,
+    nodes: Vec<CanvasElement>,
     viewport_size: Option<Size<Pixels>>,
     focus_handle: FocusHandle,
     panning: bool,
@@ -632,14 +632,14 @@ impl Canvas {
         graph
     }
 
-    pub fn add_node(&mut self, node: SceneNode) -> usize {
+    pub fn add_node(&mut self, node: CanvasElement) -> usize {
         let id = self.nodes.len();
         self.nodes.push(node);
         id
     }
 
     pub fn add_rectangle(&mut self, x: f32, y: f32, width: f32, height: f32) -> usize {
-        let node = SceneNode {
+        let node = CanvasElement {
             id: self.nodes.len(),
             transform: LocalTransform {
                 position: LocalPosition::new(x, y),
@@ -660,7 +660,7 @@ impl Canvas {
     }
 
     pub fn add_circle(&mut self, x: f32, y: f32, radius: f32) -> usize {
-        let node = SceneNode {
+        let node = CanvasElement {
             id: self.nodes.len(),
             transform: LocalTransform {
                 position: LocalPosition::new(x, y),
@@ -697,7 +697,7 @@ impl Canvas {
     }
 
     fn check_node_at_point(
-        node: &SceneNode,
+        node: &CanvasElement,
         parent_transform: &LocalTransform,
         world_x: f32,
         world_y: f32,
@@ -817,7 +817,7 @@ impl Canvas {
     }
 
     // Helper function that returns a vec of indices representing the path to the node
-    fn find_node_indices(nodes: &[SceneNode], target_id: usize) -> Option<Vec<usize>> {
+    fn find_node_indices(nodes: &[CanvasElement], target_id: usize) -> Option<Vec<usize>> {
         // First check direct children
         for (i, node) in nodes.iter().enumerate() {
             if node.id == target_id {
@@ -836,7 +836,7 @@ impl Canvas {
         None
     }
 
-    fn find_node_by_id_mut(&mut self, id: usize) -> Option<&mut SceneNode> {
+    fn find_node_by_id_mut(&mut self, id: usize) -> Option<&mut CanvasElement> {
         // First find the path to the node
         let indices = Self::find_node_indices(&self.nodes, id)?;
 
@@ -856,9 +856,9 @@ impl Canvas {
     }
 
     fn find_node_in_children_mut(
-        children: &mut Vec<SceneNode>,
+        children: &mut Vec<CanvasElement>,
         id: usize,
-    ) -> Option<&mut SceneNode> {
+    ) -> Option<&mut CanvasElement> {
         // First find the path to the node
         let indices = Self::find_node_indices(children, id)?;
 
@@ -877,7 +877,7 @@ impl Canvas {
         None
     }
 
-    fn remove_node_by_id(&mut self, id: usize) -> Option<SceneNode> {
+    fn remove_node_by_id(&mut self, id: usize) -> Option<CanvasElement> {
         // Try to remove from top-level nodes
         if let Some(pos) = self.nodes.iter().position(|node| node.id == id) {
             return Some(self.nodes.remove(pos));
@@ -892,7 +892,10 @@ impl Canvas {
         None
     }
 
-    fn remove_node_from_children(children: &mut Vec<SceneNode>, id: usize) -> Option<SceneNode> {
+    fn remove_node_from_children(
+        children: &mut Vec<CanvasElement>,
+        id: usize,
+    ) -> Option<CanvasElement> {
         if let Some(pos) = children.iter().position(|node| node.id == id) {
             return Some(children.remove(pos));
         }
@@ -906,9 +909,9 @@ impl Canvas {
     }
 
     fn add_node_to_parent_recursive(
-        nodes: &mut Vec<SceneNode>,
+        nodes: &mut Vec<CanvasElement>,
         parent_id: usize,
-        node: SceneNode,
+        node: CanvasElement,
     ) -> bool {
         for parent in nodes.iter_mut() {
             if parent.id == parent_id {
@@ -928,8 +931,8 @@ impl Canvas {
 
     fn add_node_to_parent_recursive_helper(
         parent_id: usize,
-        node: SceneNode,
-        children: &mut Vec<SceneNode>,
+        node: CanvasElement,
+        children: &mut Vec<CanvasElement>,
     ) -> bool {
         for child in children.iter_mut() {
             if child.id == parent_id {
@@ -959,7 +962,7 @@ impl Canvas {
 
             // Function to recursively find a node and calculate its world transform
             fn find_node_world_transform(
-                node: &SceneNode,
+                node: &CanvasElement,
                 parent_transform: &LocalTransform,
                 target_id: usize,
             ) -> Option<LocalTransform> {
@@ -1008,7 +1011,7 @@ impl Canvas {
             };
 
             fn find_node_world_transform(
-                node: &SceneNode,
+                node: &CanvasElement,
                 parent_transform: &LocalTransform,
                 target_id: usize,
             ) -> Option<LocalTransform> {
@@ -1116,7 +1119,7 @@ impl Canvas {
 
     fn render_node(
         &self,
-        node: &SceneNode,
+        node: &CanvasElement,
         parent_transform: &LocalTransform,
         window: &mut Window,
     ) {
@@ -1663,7 +1666,7 @@ mod tests {
             4,
         );
 
-        let rect_node = SceneNode {
+        let rect_node = CanvasElement {
             id: 1,
             transform: LocalTransform {
                 position: LocalPosition::new(25.0, 25.0),
@@ -1680,7 +1683,7 @@ mod tests {
             clip_content: true,
         };
 
-        let circle_node = SceneNode {
+        let circle_node = CanvasElement {
             id: 2,
             transform: LocalTransform {
                 position: LocalPosition::new(-25.0, -25.0),
@@ -1730,7 +1733,7 @@ mod tests {
 
     #[test]
     fn test_clipped_scene_node_with_child() {
-        let parent_node = SceneNode {
+        let parent_node = CanvasElement {
             id: 1,
             transform: LocalTransform {
                 position: LocalPosition::new(0.0, 0.0),
@@ -1744,7 +1747,7 @@ mod tests {
                 corner_radius: 0.0,
             }),
             clip_content: true,
-            children: vec![SceneNode {
+            children: vec![CanvasElement {
                 id: 2,
                 transform: LocalTransform {
                     position: LocalPosition::new(60.0, 0.0),
@@ -1777,7 +1780,7 @@ mod tests {
 
     #[test]
     fn test_unclipped_scene_node_with_child() {
-        let parent_node = SceneNode {
+        let parent_node = CanvasElement {
             id: 1,
             transform: LocalTransform {
                 position: LocalPosition::new(0.0, 0.0),
@@ -1791,7 +1794,7 @@ mod tests {
                 corner_radius: 0.0,
             }),
             clip_content: false,
-            children: vec![SceneNode {
+            children: vec![CanvasElement {
                 id: 2,
                 transform: LocalTransform {
                     position: LocalPosition::new(60.0, 0.0),
