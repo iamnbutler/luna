@@ -1,4 +1,4 @@
-use gpui::App;
+use gpui::{App, AppContext as _};
 
 use crate::prelude::*;
 
@@ -16,7 +16,7 @@ pub struct LunaEcs {
 }
 
 impl LunaEcs {
-    pub fn new(cx: &mut App) -> Self {
+    pub fn new(cx: &mut Context<LunaEcs>) -> Self {
         let transform_components = cx.new(|_| TransformComponent::new());
         let hierarchy_components = cx.new(|_| HierarchyComponent::new());
         let render_components = cx.new(|_| RenderComponent::new());
@@ -115,39 +115,42 @@ impl LunaEcs {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::prelude::*;
+#[cfg(test)]
+mod tests {
+    use gpui::TestAppContext;
 
-//     #[test]
-//     fn test_entity_management() {
-//         let mut ecs = LunaEcs::new();
+    use super::*;
+    use crate::prelude::*;
 
-//         // Create entity
-//         let entity = ecs.create_entity();
-//         assert!(ecs.entity_exists(entity));
+    #[gpui::test]
+    fn test_entity_management(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
 
-//         // Remove entity
-//         ecs.remove_entity(entity);
-//         assert!(!ecs.entity_exists(entity));
-//     }
+        ecs.update(cx, |ecs, cx| {
+            // Create entity
+            let entity = ecs.create_entity();
+            assert!(ecs.entity_exists(entity));
 
-//     #[test]
-//     fn test_component_access() {
-//         let mut ecs = LunaEcs::new();
-//         let entity = ecs.create_entity();
+            ecs.remove_entity(entity, cx);
+            assert!(!ecs.entity_exists(entity));
+        });
+    }
 
-//         // Add transform component
-//         let transform = LocalTransform {
-//             position: LocalPosition { x: 10.0, y: 20.0 },
-//             scale: Vector2D { x: 1.0, y: 1.0 },
-//             rotation: 0.0,
-//         };
+    // #[gpui::test]
+    // fn test_component_access(cx: &mut TestAppContext) {
+    //     let mut ecs = LunaEcs::new(cx);
+    //     let entity = ecs.create_entity();
 
-//         ecs.transforms_mut().set_transform(entity, transform);
+    //     // Add transform component
+    //     let transform = LocalTransform {
+    //         position: LocalPosition { x: 10.0, y: 20.0 },
+    //         scale: Vector2D { x: 1.0, y: 1.0 },
+    //         rotation: 0.0,
+    //     };
 
-//         // Verify component exists
-//         assert!(ecs.transforms().get_transform(entity).is_some());
-//     }
-// }
+    //     ecs.transforms_mut().set_transform(entity, transform);
+
+    //     // Verify component exists
+    //     assert!(ecs.transforms().get_transform(entity).is_some());
+    // }
+}

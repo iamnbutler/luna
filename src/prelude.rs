@@ -1,4 +1,8 @@
-pub use gpui::{prelude::*, Entity};
+pub use gpui::{
+    prelude::FluentBuilder, Context, Element, Entity, FocusableElement, InteractiveElement,
+    IntoElement, ParentElement, Refineable, Render, RenderOnce, StatefulInteractiveElement, Styled,
+    StyledImage,
+};
 pub use serde::{Deserialize, Serialize};
 pub use std::collections::HashMap;
 

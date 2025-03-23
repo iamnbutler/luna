@@ -9,7 +9,7 @@ name = "luna"
 path = "src/luna.rs"
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
+gpui = { git = "https://github.com/zed-industries/zed", features = ['test-support']}
 anyhow = "1.0.97"
 schemars = "0.8.22"
 schemars_derive = "0.8.22"
