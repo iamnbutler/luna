@@ -87,6 +87,90 @@ impl From<Vector2D> for [f32; 2] {
     }
 }
 
+impl Default for Vector2D {
+    fn default() -> Self {
+        Vector2D { x: 0.0, y: 0.0 }
+    }
+}
+
+/// Represents a position in world space coordinates.
+///
+/// World position is absolute within the entire canvas, independent of hierarchy.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WorldPosition {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for WorldPosition {
+    fn default() -> Self {
+        WorldPosition { x: 0.0, y: 0.0 }
+    }
+}
+
+impl From<(f32, f32)> for WorldPosition {
+    fn from(tuple: (f32, f32)) -> Self {
+        WorldPosition {
+            x: tuple.0,
+            y: tuple.1,
+        }
+    }
+}
+
+impl From<[f32; 2]> for WorldPosition {
+    fn from(array: [f32; 2]) -> Self {
+        WorldPosition {
+            x: array[0],
+            y: array[1],
+        }
+    }
+}
+
+impl From<Vector2D> for WorldPosition {
+    fn from(vec: Vector2D) -> Self {
+        WorldPosition { x: vec.x, y: vec.y }
+    }
+}
+
+/// Represents a position in local space coordinates.
+///
+/// Local position is relative to the parent element in the hierarchy.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct LocalPosition {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Default for LocalPosition {
+    fn default() -> Self {
+        LocalPosition { x: 0.0, y: 0.0 }
+    }
+}
+
+impl From<(f32, f32)> for LocalPosition {
+    fn from(tuple: (f32, f32)) -> Self {
+        LocalPosition {
+            x: tuple.0,
+            y: tuple.1,
+        }
+    }
+}
+
+impl From<[f32; 2]> for LocalPosition {
+    fn from(array: [f32; 2]) -> Self {
+        LocalPosition {
+            x: array[0],
+            y: array[1],
+        }
+    }
+}
+
+impl From<Vector2D> for LocalPosition {
+    fn from(vec: Vector2D) -> Self {
+        LocalPosition { x: vec.x, y: vec.y }
+    }
+}
+
 #[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,

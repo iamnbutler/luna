@@ -94,7 +94,7 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
    - Create type definitions for:
      - [x] `LunaEntityId`
      - [x] `Vector2D`
-     - [ ] `LocalPosition` and `WorldPosition`
+     - [x] `LocalPosition` and `WorldPosition`
      - [ ] `LocalTransform` (and optionally a `WorldTransform` alias)
      - [ ] `BoundingBox` (or AABB) with helper methods (intersection, containment, etc.)
    - Write tests to verify basic arithmetic and conversion functions.
