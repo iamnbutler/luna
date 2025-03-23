@@ -309,69 +309,69 @@ impl TransformComponent {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_local_transform() {
-//         let mut transform_component = TransformComponent::new();
-//         let entity = LunaEntityId::from(1);
+    #[test]
+    fn test_local_transform() {
+        let mut transform_component = TransformComponent::new();
+        let entity = LunaEntityId::from(1);
 
-//         let local = LocalTransform {
-//             position: LocalPosition { x: 10.0, y: 20.0 },
-//             scale: Vector2D { x: 2.0, y: 2.0 },
-//             rotation: 0.0,
-//         };
+        let local = LocalTransform {
+            position: LocalPosition { x: 10.0, y: 20.0 },
+            scale: Vector2D { x: 2.0, y: 2.0 },
+            rotation: 0.0,
+        };
 
-//         transform_component.set_transform(entity, local);
+        transform_component.set_transform(entity, local);
 
-//         let retrieved = transform_component.get_transform(entity).unwrap();
-//         assert_eq!(retrieved.position.x, 10.0);
-//         assert_eq!(retrieved.position.y, 20.0);
-//         assert_eq!(retrieved.scale.x, 2.0);
-//         assert_eq!(retrieved.scale.y, 2.0);
-//     }
+        let retrieved = transform_component.get_transform(entity).unwrap();
+        assert_eq!(retrieved.position.x, 10.0);
+        assert_eq!(retrieved.position.y, 20.0);
+        assert_eq!(retrieved.scale.x, 2.0);
+        assert_eq!(retrieved.scale.y, 2.0);
+    }
 
-//     #[test]
-//     fn test_world_transform_computation() {
-//         let mut transform_component = TransformComponent::new();
+    fn test_world_transform_computation() {
+        let mut transform_component = TransformComponent::new();
 
-//         // Create a simple parent-child hierarchy
-//         let parent = LunaEntityId::from(1);
-//         let child = LunaEntityId::from(2);
+        // Create a simple parent-child hierarchy
+        let parent_chain = Vec::<LunaEntityId>::from([LunaEntityId::from(1)]);
+        let parent = parent_chain[0];
+        let child = LunaEntityId::from(2);
 
-//         // Parent at (10,10) with scale 2
-//         transform_component.set_transform(
-//             parent,
-//             LocalTransform {
-//                 position: LocalPosition { x: 10.0, y: 10.0 },
-//                 scale: Vector2D { x: 2.0, y: 2.0 },
-//                 rotation: 0.0,
-//             },
-//         );
+        // Parent at (10,10) with scale 2
+        transform_component.set_transform(
+            parent,
+            LocalTransform {
+                position: LocalPosition { x: 10.0, y: 10.0 },
+                scale: Vector2D { x: 2.0, y: 2.0 },
+                rotation: 0.0,
+            },
+        );
 
-//         // Child at (5,5) with scale 1.5
-//         transform_component.set_transform(
-//             child,
-//             LocalTransform {
-//                 position: LocalPosition { x: 5.0, y: 5.0 },
-//                 scale: Vector2D { x: 1.5, y: 1.5 },
-//                 rotation: 0.0,
-//             },
-//         );
+        // Child at (5,5) with scale 1.5
+        transform_component.set_transform(
+            child,
+            LocalTransform {
+                position: LocalPosition { x: 5.0, y: 5.0 },
+                scale: Vector2D { x: 1.5, y: 1.5 },
+                rotation: 0.0,
+            },
+        );
 
-//         // Compute world transform for child
-//         let world = transform_component
-//             .compute_world_transform(child, &[parent], cx)
-//             .unwrap();
+        // Compute world transform for child
+        let world = transform_component
+            .compute_world_transform(child, parent_chain)
+            .unwrap();
 
-//         // Child position should be: parent_pos + (child_pos * parent_scale)
-//         assert_eq!(world.position.x, 20.0); // 10 + (5 * 2)
-//         assert_eq!(world.position.y, 20.0); // 10 + (5 * 2)
+        // Child position should be: parent_pos + (child_pos * parent_scale)
+        assert_eq!(world.position.x, 20.0); // 10 + (5 * 2)
+        assert_eq!(world.position.y, 20.0); // 10 + (5 * 2)
 
-//         // Scales should multiply
-//         assert_eq!(world.scale.x, 3.0); // 2 * 1.5
-//         assert_eq!(world.scale.y, 3.0); // 2 * 1.5
-//     }
-// }
+        // Scales should multiply
+        assert_eq!(world.scale.x, 3.0); // 2 * 1.5
+        assert_eq!(world.scale.y, 3.0); // 2 * 1.5
+    }
+}
