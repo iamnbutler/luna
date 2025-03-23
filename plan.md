@@ -92,11 +92,11 @@ This plan now includes not only the core ECS-inspired design and ordered impleme
 
 1. **Define Core Types and Primitives**
    - Create type definitions for:
-     - `EntityId`
-     - `Vector2D`
-     - `LocalPosition` and `WorldPosition`
-     - `LocalTransform` (and optionally a `WorldTransform` alias)
-     - `BoundingBox` (or AABB) with helper methods (intersection, containment, etc.)
+     - [x] `LunaEntityId`
+     - [x] `Vector2D`
+     - [ ] `LocalPosition` and `WorldPosition`
+     - [ ] `LocalTransform` (and optionally a `WorldTransform` alias)
+     - [ ] `BoundingBox` (or AABB) with helper methods (intersection, containment, etc.)
    - Write tests to verify basic arithmetic and conversion functions.
    - **Visual Debugging:**
      - Add helper methods to output or draw the BoundingBox as a wireframe for debugging.

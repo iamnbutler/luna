@@ -1,180 +1,119 @@
 #![allow(dead_code, unused)]
 
-mod canvas;
-mod element;
-mod frame;
-mod layer_list;
-mod scene_graph;
-mod titlebar;
-
-use element::ElementStyle;
 use gpui::{
-    point, prelude::*, rgb, size, App, Application, Bounds, CursorStyle, Entity, FocusHandle,
-    Focusable, MouseMoveEvent, SharedString, WeakEntity, Window, WindowOptions,
+    div, impl_actions, point, prelude::*, px, rgb, size, App, Application, Bounds, CursorStyle,
+    Entity, FocusHandle, Focusable, Hsla, MouseMoveEvent, ParentElement, Pixels, Point,
+    SharedString, Size, WeakEntity, Window, WindowOptions,
 };
-
-use layer_list::LayerList;
-use scene_graph::{BoundingBox, Canvas, QuadTree};
 use schemars_derive::JsonSchema;
 use serde::{Deserialize, Serialize};
+use slotmap::KeyData;
 use std::collections::HashMap;
 use std::hash::Hash;
-use titlebar::TITLEBAR_HEIGHT;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 use uuid::Uuid;
 
-use gpui::{div, impl_actions, px, Hsla, ParentElement, Pixels, Point, Size};
-
-pub const EDGE_HITBOX_PADDING: f32 = 12.0;
-pub const CORNER_HANDLE_SIZE: f32 = 7.0;
-
-pub const THEME_SELECTED: Hsla = Hsla {
+pub const SELECTED_COLOR: Hsla = Hsla {
     h: 205.0 / 360.0,
     s: 0.9,
     l: 0.48,
     a: 1.0,
 };
 
-// TODO: Go update gpui::Corner to derive display/EnumString
-/// Identifies a corner of a 2d box.
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-pub enum Corner {
-    /// The top left corner
-    TopLeft,
-    /// The top right corner
-    TopRight,
-    /// The bottom left corner
-    BottomLeft,
-    /// The bottom right corner
-    BottomRight,
+slotmap::new_key_type! {
+    /// A Luna Entity ID, a unique identifier for an entity across the entire app.
+    pub struct LunaEntityId;
 }
 
-impl std::fmt::Display for Corner {
+impl LunaEntityId {
+    /// Converts this id to a [u64]
+    pub fn as_u64(self) -> u64 {
+        self.0.as_ffi()
+    }
+}
+
+impl From<u64> for LunaEntityId {
+    fn from(value: u64) -> Self {
+        Self(KeyData::from_ffi(value))
+    }
+}
+
+impl std::fmt::Display for LunaEntityId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Corner::TopLeft => write!(f, "TopLeft"),
-            Corner::TopRight => write!(f, "TopRight"),
-            Corner::BottomLeft => write!(f, "BottomLeft"),
-            Corner::BottomRight => write!(f, "BottomRight"),
+        write!(f, "{}", self.as_u64())
+    }
+}
+
+/// Creates a new 2D vector.
+pub fn vec2(x: f32, y: f32) -> Vector2D {
+    Vector2D { x, y }
+}
+
+/// Represents a vector in 2D space.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Vector2D {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl From<(f32, f32)> for Vector2D {
+    fn from(tuple: (f32, f32)) -> Self {
+        Vector2D {
+            x: tuple.0,
+            y: tuple.1,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
-pub enum ResizeDirection {
-    Left,
-    Right,
-    Top,
-    Bottom,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight,
+impl From<Vector2D> for (f32, f32) {
+    fn from(vec: Vector2D) -> Self {
+        (vec.x, vec.y)
+    }
 }
 
-impl std::fmt::Display for ResizeDirection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResizeDirection::Left => write!(f, "Left"),
-            ResizeDirection::Right => write!(f, "Right"),
-            ResizeDirection::Top => write!(f, "Up"),
-            ResizeDirection::Bottom => write!(f, "Down"),
-            ResizeDirection::TopLeft => write!(f, "TopLeft"),
-            ResizeDirection::TopRight => write!(f, "TopRight"),
-            ResizeDirection::BottomLeft => write!(f, "BottomLeft"),
-            ResizeDirection::BottomRight => write!(f, "BottomRight"),
+impl From<[f32; 2]> for Vector2D {
+    fn from(array: [f32; 2]) -> Self {
+        Vector2D {
+            x: array[0],
+            y: array[1],
         }
     }
 }
 
-impl ResizeDirection {
-    pub fn is_edge(&self) -> bool {
-        match self {
-            ResizeDirection::Left
-            | ResizeDirection::Right
-            | ResizeDirection::Top
-            | ResizeDirection::Bottom => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_corner(&self) -> bool {
-        match self {
-            ResizeDirection::TopLeft
-            | ResizeDirection::TopRight
-            | ResizeDirection::BottomLeft
-            | ResizeDirection::BottomRight => true,
-            _ => false,
-        }
-    }
-
-    pub fn cursor(&self) -> CursorStyle {
-        match self {
-            ResizeDirection::Left => CursorStyle::ResizeLeft,
-            ResizeDirection::Right => CursorStyle::ResizeRight,
-            ResizeDirection::Top => CursorStyle::ResizeUp,
-            ResizeDirection::Bottom => CursorStyle::ResizeDown,
-            ResizeDirection::TopLeft => CursorStyle::ResizeUpRightDownLeft,
-            ResizeDirection::TopRight => CursorStyle::ResizeUpLeftDownRight,
-            ResizeDirection::BottomLeft => CursorStyle::ResizeUpLeftDownRight,
-            ResizeDirection::BottomRight => CursorStyle::ResizeUpRightDownLeft,
-        }
+impl From<Vector2D> for [f32; 2] {
+    fn from(vec: Vector2D) -> Self {
+        [vec.x, vec.y]
     }
 }
 
 #[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,
-    titlebar: Entity<Titlebar>,
-    scene_graph: Entity<Canvas>,
     viewport_size: Size<Pixels>,
-    bounds: Bounds<Pixels>,
     focus_handle: FocusHandle,
 }
 
 impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
-        let titlebar = cx.new(|cx| Titlebar::new(window, cx));
-
-        let scene_graph = cx.new(|cx| Canvas::new("scene-graph", cx));
-
         let weak_self = cx.entity().downgrade();
-
-        let bounds = Bounds::new(
-            point(px(0.0), px(0.0)),
-            size(viewport_size.width, viewport_size.height),
-        );
-
         let focus_handle = cx.focus_handle();
 
         let luna = Luna {
             weak_self,
-            titlebar,
-            scene_graph,
             viewport_size,
-            bounds,
             focus_handle,
         };
 
-        cx.focus_self(window);
-
         luna
-    }
-
-    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
-        println!("Mouse moved: {:?}", event);
     }
 }
 
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let bounds = self.bounds;
-
         div()
             .id("luna")
-            .key_context("Canvas")
+            .key_context("App")
             .track_focus(&self.focus_handle(cx))
             .text_xs()
             .text_color(rgb(0xA9AFBC))
@@ -185,79 +124,34 @@ impl Render for Luna {
             .bg(rgb(0x3B414D))
             .size_full()
             .text_color(rgb(0xffffff))
-            .child({
-                let this = cx.entity().clone();
-                gpui::canvas(
-                    move |bounds, window, cx| {
-                        this.update(cx, |this, cx| {
-                            let bounds_changed = this.bounds != bounds;
-                            this.bounds = bounds;
-                            if bounds_changed {
-                                this.scene_graph.update(cx, |scene_graph, cx| {
-                                    scene_graph.update_viewport(bounds.size, window, cx);
-                                });
-                            }
-                        })
-                    },
-                    |_, _, _, _| {},
-                )
-                .absolute()
-                .size_full()
-            })
-            .child(self.scene_graph.clone())
-        // .child(
-        //     div()
-        //         .absolute()
-        //         .top_8()
-        //         .left_8()
-        //         .text_sm()
-        //         .text_color(gpui::red())
-        //         // .child(format!("{}x{}", bounds.size.width.0, bounds.size.height.0)),
-        //         .child(format!("{:?}, {:?}", self.focus_handle, window.focused(cx))),
-        // )
-        // .child(
-        //     div()
-        //         .absolute()
-        //         .top_0()
-        //         .left_0()
-        //         .right_0()
-        //         .bottom_0()
-        //         .size_full()
-        //         .overflow_hidden()
-
-        // )
-        // .child(self.element_list.clone())
-        // .child(self.titlebar.clone())
+        // This updates the viewport size when the window is resized
+        // reintroduce this later.
+        //
+        // .child({
+        //     let this = cx.entity().clone();
+        //     gpui::canvas(
+        //         move |bounds, window, cx| {
+        //             this.update(cx, |this, cx| {
+        //                 let bounds_changed = this.bounds != bounds;
+        //                 this.bounds = bounds;
+        //                 if bounds_changed {
+        //                     this.scene_graph.update(cx, |scene_graph, cx| {
+        //                         scene_graph.update_viewport(bounds.size, window, cx);
+        //                     });
+        //                 }
+        //             })
+        //         },
+        //         |_, _, _, _| {},
+        //     )
+        //     .absolute()
+        //     .size_full()
+        // })
     }
 }
 
 impl Focusable for Luna {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.focus_handle.clone()
-    }
-}
-
-struct Titlebar {
-    title: SharedString,
-}
-
-impl Titlebar {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let title = "Untitled".into();
-        Titlebar { title }
-    }
-}
-
-impl Render for Titlebar {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .w_full()
-            .h(px(TITLEBAR_HEIGHT))
-            .border_b_1()
-            .border_color(rgb(0x3F434C))
-            .bg(rgb(0x2A2C31))
-            .child(div().flex().items_center().h_full().px_2().child("Luna"))
     }
 }
 

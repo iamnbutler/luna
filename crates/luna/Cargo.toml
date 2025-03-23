@@ -21,3 +21,4 @@ strum_macros.workspace = true
 palette.workspace = true
 taffy.workspace = true
 rand = "0.9.0"
+slotmap = "1.0.7"
