@@ -156,6 +156,14 @@ impl BoundingBox {
         BoundingBox { min, max }
     }
 
+    pub fn min(&self) -> Vector2D {
+        self.min
+    }
+
+    pub fn max(&self) -> Vector2D {
+        self.max
+    }
+
     pub fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
@@ -210,7 +218,7 @@ impl TransformComponent {
 
     /// Computes the world transform for an entity given its parent chain
     pub fn compute_world_transform(
-        &self,
+        &mut self,
         entity: LunaEntityId,
         parent_chain: &[LunaEntityId],
     ) -> Option<WorldTransform> {
@@ -259,7 +267,7 @@ impl TransformComponent {
 
     /// Converts a point from local space to world space
     pub fn local_to_world(
-        &self,
+        &mut self,
         local_point: LocalPosition,
         entity: LunaEntityId,
         parent_chain: &[LunaEntityId],
@@ -274,7 +282,7 @@ impl TransformComponent {
 
     /// Converts a point from world space to local space
     pub fn world_to_local(
-        &self,
+        &mut self,
         world_point: WorldPosition,
         entity: LunaEntityId,
         parent_chain: &[LunaEntityId],
@@ -289,6 +297,12 @@ impl TransformComponent {
 
     /// Invalidates the cached world transform for an entity
     pub fn invalidate_cache(&mut self, entity: LunaEntityId) {
+        self.world_transform_cache.remove(&entity);
+    }
+
+    /// Removes all transform data for an entity
+    pub fn remove(&mut self, entity: LunaEntityId) {
+        self.transforms.remove(&entity);
         self.world_transform_cache.remove(&entity);
     }
 }

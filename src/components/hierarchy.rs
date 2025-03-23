@@ -77,6 +77,19 @@ impl HierarchyComponent {
         }
         false
     }
+
+    /// Removes an entity completely (both as a parent and as a child)
+    pub fn remove(&mut self, entity: LunaEntityId) {
+        // Remove as a child from its parent
+        self.remove_child(entity);
+        
+        // Remove its children (they become parentless)
+        if let Some(children) = self.children.remove(&entity) {
+            for child in children {
+                self.parents.remove(&child);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -82,6 +82,12 @@ impl RenderComponent {
     pub fn invalidate_bounds(&mut self, entity: LunaEntityId) {
         self.bounds_cache.remove(&entity);
     }
+
+    /// Removes all render data for an entity
+    pub fn remove(&mut self, entity: LunaEntityId) {
+        self.properties.remove(&entity);
+        self.bounds_cache.remove(&entity);
+    }
 }
 
 #[cfg(test)]

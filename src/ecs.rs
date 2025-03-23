@@ -89,17 +89,24 @@ impl LunaEcs {
         }
 
         // Get the parent chain for this entity
-        let parent_chain = self.hierarchy.get_parent_chain(root);
+        let parent_chain = self.hierarchy().get_parent_chain(root);
 
         // Update this entity's world transform
-        if let Some(world_transform) = self.transforms.compute_world_transform(root, &parent_chain)
+        if let Some(world_transform) = self
+            .transforms_mut()
+            .compute_world_transform(root, &parent_chain)
         {
             // Get any children
-            if let Some(children) = self.hierarchy.get_children(root) {
-                // Recursively update children
-                for &child in children {
-                    self.update_world_transforms(child);
-                }
+            // Get and clone the children to avoid borrowing issues
+            let children = if let Some(children) = self.hierarchy().get_children(root) {
+                children.clone()
+            } else {
+                Vec::new()
+            };
+
+            // Recursively update children
+            for child in children {
+                self.update_world_transforms(child);
             }
         }
     }
