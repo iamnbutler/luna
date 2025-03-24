@@ -62,7 +62,7 @@ struct Luna {
 impl Luna {
     pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
         let weak_self = cx.entity().downgrade();
-        let ecs = cx.new(|_| LunaEcs::new());
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
         let focus_handle = cx.focus_handle();
 
         let luna = Luna {

@@ -1,15 +1,12 @@
 //! Components module for Luna's ECS architecture.
 //! Each component is a data container that can be attached to entities.
 
-// Re-export common types from prelude instead of component files
-// since we've moved to a flattened ECS architecture
-pub use crate::prelude::{
-    RenderProperties,
-    LocalTransform, WorldTransform, LocalPosition, WorldPosition,
-    LayoutProperties, SizeConstraints, Margins,
-    BoundingBox, Vector2D
-};
+pub mod hierarchy;
+pub mod render;
+pub mod transform;
+pub mod layout;
 
-// Note: In our flattened ECS architecture, all component functionality has been
-// moved directly into the LunaEcs struct. These types are re-exported here
-// for backward compatibility.
+pub use hierarchy::HierarchyComponent;
+pub use render::{RenderComponent, RenderProperties};
+pub use transform::TransformComponent;
+pub use layout::{LayoutComponent, LayoutProperties, SizeConstraints, Margins};
