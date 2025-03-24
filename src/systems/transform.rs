@@ -21,49 +21,35 @@ impl TransformSystem {
     }
 
     /// Updates world transforms for all dirty entities
-    pub fn process(&mut self, ecs: Entity<LunaEcs>, cx: &mut Context<Self>) {
+    pub fn process(&mut self, ecs: &mut LunaEcs) {
         // Take the dirty entities to process
         let entities_to_process: Vec<_> = self.dirty_entities.drain(..).collect();
 
         for entity in entities_to_process {
             // Skip if entity no longer exists
-            if !ecs.read(cx).entity_exists(entity) {
+            if !ecs.entity_exists(entity) {
                 continue;
             }
 
-            ecs.update(cx, |ecs, cx| {
-                let parent_chain = ecs.hierarchy(cx).read(cx).get_parent_chain(entity);
+            // Update world transforms for this entity
+            ecs.update_world_transforms(entity);
 
-                // Update the world transform
-                if let Some(world_transform) = ecs.transforms(cx).update(cx, |transforms, cx| {
-                    transforms.compute_world_transform(entity, parent_chain)
-                }) {
-                    // Get and process any children to update their world transforms
-                    if let Some(children) = ecs.hierarchy(cx).read(cx).get_children(entity) {
-                        for child in children.clone() {
-                            self.mark_dirty(child);
-                        }
-                    }
+            // Mark children as dirty to update their transforms
+            if let Some(children) = ecs.get_children(entity).cloned() {
+                for child in children {
+                    self.mark_dirty(child);
                 }
-            })
+            }
         }
     }
 
     /// Marks an entity and all its descendants as dirty
-    ///
-    /// Call this inside a `ecs.update` closure to get a mutable reference
-    /// to [`LunaEcs`] and it's context
-    pub fn mark_branch_dirty(
-        &mut self,
-        ecs: &mut LunaEcs,
-        root: LunaEntityId,
-        cx: &mut Context<LunaEcs>,
-    ) {
+    pub fn mark_branch_dirty(&mut self, ecs: &LunaEcs, root: LunaEntityId) {
         self.mark_dirty(root);
 
-        if let Some(children) = ecs.hierarchy(cx).read(cx).get_children(root) {
-            for child in children.clone() {
-                self.mark_branch_dirty(ecs, child, cx);
+        if let Some(children) = ecs.get_children(root) {
+            for &child in children {
+                self.mark_branch_dirty(ecs, child);
             }
         }
     }
@@ -73,61 +59,49 @@ impl TransformSystem {
 mod tests {
     use super::*;
 
-    #[gpui::test]
-    fn test_transform_system(cx: &mut TestAppContext) {
-        let ecs = cx.new(|cx| LunaEcs::new(cx));
-        let mut transform_system = cx.new(|cx| TransformSystem::new());
+    #[test]
+    fn test_transform_system() {
+        let mut ecs = LunaEcs::new();
+        let mut transform_system = TransformSystem::new();
 
-        ecs.clone().update(cx, |ecs_mut, cx| {
-            // Create a simple parent-child hierarchy
-            let parent = ecs_mut.create_entity();
-            let child = ecs_mut.create_entity();
+        // Create a simple parent-child hierarchy
+        let parent = ecs.create_entity();
+        let child = ecs.create_entity();
 
-            // Setup hierarchy
-            ecs_mut.hierarchy(cx).update(cx, |hierarchy, cx| {
-                hierarchy.set_parent(child, parent);
-            });
+        // Setup hierarchy
+        ecs.set_parent(child, parent);
 
-            // Add transforms
-            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
-                transforms.set_transform(
-                    parent,
-                    LocalTransform {
-                        position: LocalPosition { x: 10.0, y: 10.0 },
-                        scale: Vector2D { x: 2.0, y: 2.0 },
-                        rotation: 0.0,
-                    },
-                );
+        // Add transforms
+        ecs.set_transform(
+            parent,
+            LocalTransform {
+                position: LocalPosition { x: 10.0, y: 10.0 },
+                scale: Vector2D { x: 2.0, y: 2.0 },
+                rotation: 0.0,
+            },
+        );
 
-                transforms.set_transform(
-                    child,
-                    LocalTransform {
-                        position: LocalPosition { x: 5.0, y: 5.0 },
-                        scale: Vector2D { x: 1.5, y: 1.5 },
-                        rotation: 0.0,
-                    },
-                );
-            });
+        ecs.set_transform(
+            child,
+            LocalTransform {
+                position: LocalPosition { x: 5.0, y: 5.0 },
+                scale: Vector2D { x: 1.5, y: 1.5 },
+                rotation: 0.0,
+            },
+        );
 
-            transform_system.update(cx, |transform_system, cx| {
-                // Mark parent as dirty
-                transform_system.mark_dirty(parent);
+        // Mark parent as dirty and process updates
+        transform_system.mark_dirty(parent);
+        transform_system.process(&mut ecs);
 
-                // Process updates
-                transform_system.process(ecs.clone(), cx);
-            });
-
-            // Verify world transforms were updated correctly
-            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
-                if let Some(world_transform) =
-                    transforms.compute_world_transform(child, vec![parent])
-                {
-                    assert_eq!(world_transform.position.x, 20.0); // 10 + (5 * 2)
-                    assert_eq!(world_transform.position.y, 20.0); // 10 + (5 * 2)
-                    assert_eq!(world_transform.scale.x, 3.0); // 2 * 1.5
-                    assert_eq!(world_transform.scale.y, 3.0); // 2 * 1.5
-                }
-            });
-        });
+        // Get the cached world transform
+        if let Some(world_transform) = ecs.world_transform_cache.get(&child) {
+            assert_eq!(world_transform.position.x, 20.0); // 10 + (5 * 2)
+            assert_eq!(world_transform.position.y, 20.0); // 10 + (5 * 2)
+            assert_eq!(world_transform.scale.x, 3.0); // 2 * 1.5
+            assert_eq!(world_transform.scale.y, 3.0); // 2 * 1.5
+        } else {
+            panic!("World transform not computed for child");
+        }
     }
 }
