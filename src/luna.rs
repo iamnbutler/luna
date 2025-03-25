@@ -66,12 +66,11 @@ struct Luna {
     weak_self: WeakEntity<Self>,
     ecs: Entity<LunaEcs>,
     canvas: Entity<Canvas>,
-    viewport_size: Size<Pixels>,
     focus_handle: FocusHandle,
 }
 
 impl Luna {
-    pub fn new(window: &mut Window, viewport_size: Size<Pixels>, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let weak_self = cx.entity().downgrade();
         let ecs = cx.new(|cx| LunaEcs::new(cx));
         let focus_handle = cx.focus_handle();
@@ -84,15 +83,12 @@ impl Luna {
                 .set_properties(new_el, RenderProperties::default())
         });
 
-        let luna = Luna {
+        Luna {
             weak_self,
             ecs,
             canvas,
-            viewport_size,
             focus_handle,
-        };
-
-        luna
+        }
     }
 }
 
@@ -103,7 +99,7 @@ impl Render for Luna {
             .key_context("App")
             .track_focus(&self.focus_handle(cx))
             .text_xs()
-            .text_color(rgb(0xA9AFBC))
+            .text_color(rgb(0x000000))
             .font_family("Berkeley Mono")
             .flex()
             .flex_col()
@@ -152,8 +148,12 @@ pub struct Canvas {
     ecs: Entity<LunaEcs>,
     /// The root entity for this canvas
     root_entity: LunaEntityId,
-    /// Current viewport size
+    /// Current viewport size (visible area)
     viewport_size: Option<Size<Pixels>>,
+    /// Total canvas size (can be larger than viewport)
+    canvas_size: Size<Pixels>,
+    /// Current viewport offset within the canvas
+    viewport_offset: Point<Pixels>,
     /// Focus handle for input events
     focus_handle: FocusHandle,
     /// Hit test system for spatial queries
@@ -164,13 +164,33 @@ impl Canvas {
     pub fn new(id: impl Into<ElementId>, ecs: Entity<LunaEcs>, cx: &mut Context<Self>) -> Self {
         let root_entity = ecs.update(cx, |ecs, _cx| ecs.create_entity());
 
+        // Default canvas size of 3000x3000 pixels
+        let canvas_size = Size {
+            width: px(3000.0),
+            height: px(3000.0),
+        };
+
+        // Use a reasonable default viewport size (will be updated in prepaint)
+        let default_viewport = Size {
+            width: px(800.0),
+            height: px(600.0),
+        };
+
+        // Initialize viewport offset to center the view on (1500,1500)
+        let viewport_offset = Point {
+            x: px(1500.0 - default_viewport.width.0 / 2.0),
+            y: px(1500.0 - default_viewport.height.0 / 2.0),
+        };
+
         Canvas {
             id: id.into(),
             ecs,
             root_entity,
-            viewport_size: None,
+            viewport_size: Some(default_viewport),
+            canvas_size,
+            viewport_offset,
             focus_handle: cx.focus_handle(),
-            hit_test: HitTestSystem::new(1000.0, 1000.0),
+            hit_test: HitTestSystem::new(canvas_size.width.0 as f32, canvas_size.height.0 as f32),
         }
     }
 
@@ -189,14 +209,10 @@ impl Canvas {
             // Add to hierarchy under root
             ecs.hierarchy_mut().add_child(self.root_entity, entity);
 
-            // Add default transform with centered position and visible size
-            let position = if let Some(viewport) = self.viewport_size {
-                LocalPosition {
-                    x: viewport.width.0 as f32 / 2.0 - 50.0, // center - half width
-                    y: viewport.height.0 as f32 / 2.0 - 50.0, // center - half height
-                }
-            } else {
-                LocalPosition { x: 100.0, y: 100.0 } // fallback position if viewport unknown
+            // Position new elements in the center of the canvas (not viewport)
+            let position = LocalPosition {
+                x: self.canvas_size.width.0 as f32 / 2.0 - 50.0, // center of canvas - half width
+                y: self.canvas_size.height.0 as f32 / 2.0 - 50.0, // center of canvas - half height
             };
 
             ecs.transforms_mut().set_transform(
@@ -273,7 +289,7 @@ impl Element for Canvas {
         if self.viewport_size.map_or(true, |size| size != bounds.size) {
             let size = bounds.size;
             self.viewport_size = Some(size);
-            self.hit_test = HitTestSystem::new(size.width.0 as f32, size.height.0 as f32);
+            // Keep using canvas_size for hit testing, only update viewport
         }
 
         // First collect all entity IDs
@@ -300,8 +316,88 @@ impl Element for Canvas {
         window: &mut Window,
         cx: &mut App,
     ) {
+        // if bounds.size.width == px(0.0) || bounds.size.height == px(0.0) {
+        //     println!("Bounds width or height is zero");
+        // }
+
+        let canvas_bounds = Bounds {
+            origin: Point {
+                x: px(0.0),
+                y: px(0.0),
+            },
+            size: self.canvas_size,
+        };
+
         // Paint background
-        window.paint_quad(quad(bounds, 0.0, rgb(0x3B414D), px(1.0), rgb(0x2B313D)));
+        window.paint_quad(quad(
+            canvas_bounds,
+            0.0,
+            rgb(0x3B414D),
+            px(1.0),
+            rgb(0x1E1E1E),
+        ));
+
+        // Calculate scrollbar visibility and dimensions
+        if let Some(viewport_size) = self.viewport_size {
+            // Only show scrollbars if viewport is smaller than canvas
+            let horizontal_ratio = viewport_size.width.0 / self.canvas_size.width.0;
+            let vertical_ratio = viewport_size.height.0 / self.canvas_size.height.0;
+
+            // Scrollbar dimensions
+            let scrollbar_thickness = px(8.0);
+            let scrollbar_color = rgb(0xFFFFFF);
+
+            // Draw horizontal scrollbar if needed
+            if horizontal_ratio < 1.0 {
+                let scrollbar_width = viewport_size.width * horizontal_ratio;
+                // Position horizontal scrollbar based on viewport offset
+                let scroll_x_ratio =
+                    self.viewport_offset.x.0 / (self.canvas_size.width.0 - viewport_size.width.0);
+                let horizontal_bounds = Bounds {
+                    origin: Point {
+                        x: bounds.origin.x + (bounds.size.width - scrollbar_width) * scroll_x_ratio,
+                        y: bounds.origin.y + bounds.size.height - scrollbar_thickness,
+                    },
+                    size: Size {
+                        width: scrollbar_width,
+                        height: scrollbar_thickness,
+                    },
+                };
+                window.paint_quad(quad(
+                    horizontal_bounds,
+                    0.0,
+                    scrollbar_color,
+                    px(0.0),
+                    scrollbar_color,
+                ));
+            }
+
+            // Draw vertical scrollbar if needed
+            if vertical_ratio < 1.0 {
+                let scrollbar_height = viewport_size.height * vertical_ratio;
+                // Position vertical scrollbar based on viewport offset
+                let scroll_y_ratio =
+                    self.viewport_offset.y.0 / (self.canvas_size.height.0 - viewport_size.height.0);
+                let vertical_bounds = Bounds {
+                    origin: Point {
+                        x: bounds.origin.x + bounds.size.width - scrollbar_thickness,
+                        y: bounds.origin.y
+                            + (bounds.size.height - scrollbar_height) * scroll_y_ratio,
+                    },
+                    size: Size {
+                        width: scrollbar_thickness,
+                        height: scrollbar_height,
+                    },
+                };
+                window.paint_quad(quad(
+                    vertical_bounds,
+                    0.0,
+                    scrollbar_color,
+                    px(0.0),
+                    scrollbar_color,
+                ));
+            }
+        }
 
         // Paint all entities
         self.ecs.update(cx, |ecs, _cx| {
@@ -318,11 +414,11 @@ impl Element for Canvas {
                         .transforms_mut()
                         .compute_world_transform(entity, parent_chain)
                     {
-                        // Create bounds for entity
+                        // Create bounds for entity, translated by viewport offset
                         let entity_bounds = Bounds {
                             origin: Point {
-                                x: px(world_transform.position.x),
-                                y: px(world_transform.position.y),
+                                x: px(world_transform.position.x) - self.viewport_offset.x,
+                                y: px(world_transform.position.y) - self.viewport_offset.y,
                             },
                             size: Size {
                                 width: px(world_transform.scale.x),
@@ -368,7 +464,7 @@ impl Render for Canvas {
 fn main() {
     Application::new().run(|cx: &mut App| {
         cx.open_window(WindowOptions::default(), |window, cx| {
-            cx.new(|cx| Luna::new(window, window.viewport_size(), cx))
+            cx.new(|cx| Luna::new(window, cx))
         })
         .unwrap();
 
