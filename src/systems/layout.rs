@@ -32,19 +32,18 @@ impl LayoutSystem {
             }
 
             // Get the layout properties
-            if let Some(layout) = ecs.read(cx).layout(cx).read(cx).get_layout(entity) {
+            if let Some(layout) = ecs.read(cx).layout().get_layout(entity) {
                 // Apply size constraints
-                let mut new_transform = if let Some(transform) =
-                    ecs.read(cx).transforms(cx).read(cx).get_transform(entity)
-                {
-                    transform.clone()
-                } else {
-                    LocalTransform {
-                        position: LocalPosition::default(),
-                        scale: Vector2D::default(),
-                        rotation: 0.0,
-                    }
-                };
+                let mut new_transform =
+                    if let Some(transform) = ecs.read(cx).transforms().get_transform(entity) {
+                        transform.clone()
+                    } else {
+                        LocalTransform {
+                            position: LocalPosition::default(),
+                            scale: Vector2D::default(),
+                            rotation: 0.0,
+                        }
+                    };
 
                 // Apply width constraint if specified
                 if let Some(width) = layout.width {
@@ -78,12 +77,10 @@ impl LayoutSystem {
 
                 ecs.update(cx, |ecs, cx| {
                     // Update the transform
-                    ecs.transforms(cx).update(cx, |transforms, cx| {
-                        transforms.set_transform(entity, new_transform);
-                    });
+                    ecs.transforms_mut().set_transform(entity, new_transform);
 
                     // Mark children as dirty since parent changed
-                    if let Some(children) = ecs.hierarchy(cx).read(cx).get_children(entity) {
+                    if let Some(children) = ecs.hierarchy().get_children(entity) {
                         for child in children {
                             self.mark_dirty(*child);
                         }
@@ -105,7 +102,7 @@ impl LayoutSystem {
     ) {
         self.mark_dirty(root);
 
-        if let Some(children) = ecs.hierarchy(cx).read(cx).get_children(root) {
+        if let Some(children) = ecs.hierarchy().get_children(root) {
             for child in children.clone() {
                 self.mark_branch_dirty(ecs, child, cx);
             }
@@ -144,9 +141,7 @@ mod tests {
                 },
             };
 
-            ecs_mut.layout(cx).update(cx, |layout_component, cx| {
-                layout_component.set_layout(entity, layout);
-            });
+            ecs_mut.layout_mut().set_layout(entity, layout);
 
             // Mark entity for layout update
             layout_system.mark_dirty(entity);
@@ -154,7 +149,7 @@ mod tests {
             // Process layout updates
             layout_system.process(ecs.clone(), cx);
 
-            if let Some(transform) = ecs_mut.transforms(cx).read(cx).get_transform(entity) {
+            if let Some(transform) = ecs_mut.transforms().get_transform(entity) {
                 assert_eq!(transform.scale.x, 100.0);
                 assert_eq!(transform.scale.y, 50.0);
                 assert_eq!(transform.position.x, 10.0); // Left margin
@@ -168,7 +163,7 @@ mod tests {
         let ecs = cx.new(|cx| LunaEcs::new(cx));
         let mut layout_system = LayoutSystem::new();
 
-        ecs.clone().update(cx, |ecs_mut, cx| {
+        ecs.update(cx, |ecs_mut, cx| {
             let entity = ecs_mut.create_entity();
 
             // Add layout properties with constraints
@@ -184,16 +179,14 @@ mod tests {
                 margins: Margins::default(),
             };
 
-            ecs_mut.layout(cx).update(cx, |layout_component, cx| {
-                layout_component.set_layout(entity, layout);
-            });
+            ecs_mut.layout_mut().set_layout(entity, layout);
 
             // Process layout
             layout_system.mark_dirty(entity);
             layout_system.process(ecs.clone(), cx);
 
             // Verify constraints were applied
-            if let Some(transform) = ecs_mut.transforms(cx).read(cx).get_transform(entity) {
+            if let Some(transform) = ecs_mut.transforms().get_transform(entity) {
                 assert_eq!(transform.scale.x, 200.0); // Clamped to max_width
                 assert_eq!(transform.scale.y, 25.0); // Clamped to min_height
             }

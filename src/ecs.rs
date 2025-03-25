@@ -7,20 +7,20 @@ pub struct LunaEcs {
     /// Map of active entities and their generation counters
     entities: HashMap<LunaEntityId, u32>,
     /// Component storage
-    transform_components: Entity<TransformComponent>,
-    hierarchy_components: Entity<HierarchyComponent>,
-    render_components: Entity<RenderComponent>,
-    layout_components: Entity<LayoutComponent>,
+    transform_components: TransformComponent,
+    hierarchy_components: HierarchyComponent,
+    render_components: RenderComponent,
+    layout_components: LayoutComponent,
     /// Counter for generating unique entity IDs
     next_entity_id: u64,
 }
 
 impl LunaEcs {
     pub fn new(cx: &mut Context<LunaEcs>) -> Self {
-        let transform_components = cx.new(|_| TransformComponent::new());
-        let hierarchy_components = cx.new(|_| HierarchyComponent::new());
-        let render_components = cx.new(|_| RenderComponent::new());
-        let layout_components = cx.new(|_| LayoutComponent::new());
+        let transform_components = TransformComponent::new();
+        let hierarchy_components = HierarchyComponent::new();
+        let render_components = RenderComponent::new();
+        let layout_components = LayoutComponent::new();
 
         LunaEcs {
             entities: HashMap::new(),
@@ -42,43 +42,54 @@ impl LunaEcs {
 
     /// Removes an entity and all its components
     pub fn remove_entity(&mut self, entity: LunaEntityId, cx: &mut Context<Self>) {
-        self.hierarchy_components.update(cx, |hierarchy, _| {
-            hierarchy.remove_child(entity);
-            hierarchy.remove(entity);
-        });
-
-        self.transform_components.update(cx, |transform, _| {
-            transform.remove(entity);
-        });
-        self.render_components.update(cx, |render, _| {
-            render.remove(entity);
-        });
-        self.layout_components.update(cx, |layout, _| {
-            layout.remove(entity);
-        });
+        self.hierarchy_components.remove_child(entity);
+        self.hierarchy_components.remove(entity);
+        self.transform_components.remove(entity);
+        self.render_components.remove(entity);
+        self.layout_components.remove(entity);
 
         // Remove entity itself
         self.entities.remove(&entity);
     }
 
     /// Gets a reference to the transform component storage
-    pub fn transforms(&self, cx: &Context<Self>) -> Entity<TransformComponent> {
-        self.transform_components.clone()
+    pub fn transforms(&self) -> &TransformComponent {
+        &self.transform_components
+    }
+
+    /// Gets a mutable reference to the transform component storage
+    pub fn transforms_mut(&mut self) -> &mut TransformComponent {
+        &mut self.transform_components
     }
 
     /// Gets a reference to the hierarchy component storage
-    pub fn hierarchy(&self, cx: &Context<Self>) -> Entity<HierarchyComponent> {
-        self.hierarchy_components.clone()
+    pub fn hierarchy(&self) -> &HierarchyComponent {
+        &self.hierarchy_components
+    }
+
+    /// Gets a mutable reference to the hierarchy component storage
+    pub fn hierarchy_mut(&mut self) -> &mut HierarchyComponent {
+        &mut self.hierarchy_components
     }
 
     /// Gets a reference to the render component storage
-    pub fn render(&self, cx: &Context<Self>) -> Entity<RenderComponent> {
-        self.render_components.clone()
+    pub fn render(&self) -> &RenderComponent {
+        &self.render_components
+    }
+
+    /// Gets a mutable reference to the render component storage
+    pub fn render_mut(&mut self) -> &mut RenderComponent {
+        &mut self.render_components
     }
 
     /// Gets a reference to the layout component storage
-    pub fn layout(&self, cx: &Context<Self>) -> Entity<LayoutComponent> {
-        self.layout_components.clone()
+    pub fn layout(&self) -> &LayoutComponent {
+        &self.layout_components
+    }
+
+    /// Gets a mutable reference to the layout component storage
+    pub fn layout_mut(&mut self) -> &mut LayoutComponent {
+        &mut self.layout_components
     }
 
     /// Checks if an entity exists
@@ -93,24 +104,23 @@ impl LunaEcs {
         }
 
         // Get the parent chain for this entity
-        let parent_chain = self.hierarchy(cx).read(cx).get_parent_chain(root);
+        let parent_chain = self.hierarchy().get_parent_chain(root);
 
-        if let Some(world_transform) = self.transforms(cx).update(cx, |transforms, cx| {
-            // Update the world transform for this entity
-            transforms.compute_world_transform(root, parent_chain)
-        }) {
-            // Get any children
-            // Get and clone the children to avoid borrowing issues
-            let children = if let Some(children) = self.hierarchy(cx).read(cx).get_children(root) {
-                children.clone()
-            } else {
-                Vec::new()
-            };
+        // Update the world transform for this entity
+        self.transforms_mut()
+            .compute_world_transform(root, parent_chain);
 
-            // Recursively update children
-            for child in children {
-                self.update_world_transforms(child, cx);
-            }
+        // Get any children
+        // Get and clone the children to avoid borrowing issues
+        let children = if let Some(children) = self.hierarchy().get_children(root) {
+            children.clone()
+        } else {
+            Vec::new()
+        };
+
+        // Recursively update children
+        for child in children {
+            self.update_world_transforms(child, cx);
         }
     }
 }

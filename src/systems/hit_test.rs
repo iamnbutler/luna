@@ -21,15 +21,14 @@ impl HitTestSystem {
         entity: LunaEntityId,
         cx: &mut Context<LunaEcs>,
     ) {
-        if let Some(transform) = ecs.read(cx).transforms(cx).read(cx).get_transform(entity) {
+        if let Some(transform) = ecs.read(cx).transforms().get_transform(entity) {
             // Get the parent chain to compute world transform
-            let parent_chain = ecs.read(cx).hierarchy(cx).read(cx).get_parent_chain(entity);
+            let parent_chain = ecs.read(cx).hierarchy().get_parent_chain(entity);
 
             // Compute world transform
             if let Some(world_transform) = ecs.update(cx, |ecs, cx| {
-                ecs.transforms(cx).update(cx, |transforms, cx| {
-                    transforms.compute_world_transform(entity, parent_chain)
-                })
+                ecs.transforms_mut()
+                    .compute_world_transform(entity, parent_chain)
             }) {
                 // Create bounding box from world transform and insert into spatial index
                 // For now, using a simple 1x1 box at the position
@@ -63,8 +62,7 @@ impl HitTestSystem {
             .map(|entity| {
                 let depth = ecs
                     .read(cx)
-                    .hierarchy(cx)
-                    .read(cx)
+                    .hierarchy()
                     .get_parent_chain(entity)
                     .len();
                 (entity, depth)
@@ -96,8 +94,7 @@ impl HitTestSystem {
             .map(|entity| {
                 let depth = ecs
                     .read(cx)
-                    .hierarchy(cx)
-                    .read(cx)
+                    .hierarchy()
                     .get_parent_chain(entity)
                     .len();
                 (entity, depth)
@@ -133,28 +130,26 @@ mod tests {
             let parent = ecs_mut.create_entity();
             let child = ecs_mut.create_entity();
 
-            ecs_mut.hierarchy(cx).update(cx, |hierarchy, cx| {
-                hierarchy.set_parent(parent, child);
-            });
+            ecs_mut.hierarchy_mut().set_parent(parent, child);
 
-            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
-                transforms.set_transform(
-                    parent,
-                    LocalTransform {
-                        position: LocalPosition { x: 10.0, y: 10.0 },
-                        scale: Vector2D { x: 1.0, y: 1.0 },
-                        rotation: 0.0,
-                    },
-                );
-                transforms.set_transform(
-                    child,
-                    LocalTransform {
-                        position: LocalPosition { x: 5.0, y: 5.0 },
-                        scale: Vector2D { x: 1.0, y: 1.0 },
-                        rotation: 0.0,
-                    },
-                );
-            });
+            let transforms_mut = ecs_mut.transforms_mut();
+
+            transforms_mut.set_transform(
+                parent,
+                LocalTransform {
+                    position: LocalPosition { x: 10.0, y: 10.0 },
+                    scale: Vector2D { x: 1.0, y: 1.0 },
+                    rotation: 0.0,
+                },
+            );
+            transforms_mut.set_transform(
+                child,
+                LocalTransform {
+                    position: LocalPosition { x: 5.0, y: 5.0 },
+                    scale: Vector2D { x: 1.0, y: 1.0 },
+                    rotation: 0.0,
+                },
+            );
 
             // Update spatial index
             hit_test.update_entity(ecs.clone(), parent, cx);
@@ -178,25 +173,24 @@ mod tests {
             let e1 = ecs_mut.create_entity();
             let e2 = ecs_mut.create_entity();
 
-            ecs_mut.transforms(cx).update(cx, |transforms, cx| {
-                transforms.set_transform(
-                    e1,
-                    LocalTransform {
-                        position: LocalPosition { x: 10.0, y: 10.0 },
-                        scale: Vector2D { x: 1.0, y: 1.0 },
-                        rotation: 0.0,
-                    },
-                );
+            let transforms = ecs_mut.transforms_mut();
+            transforms.set_transform(
+                e1,
+                LocalTransform {
+                    position: LocalPosition { x: 10.0, y: 10.0 },
+                    scale: Vector2D { x: 1.0, y: 1.0 },
+                    rotation: 0.0,
+                },
+            );
 
-                transforms.set_transform(
-                    e2,
-                    LocalTransform {
-                        position: LocalPosition { x: 20.0, y: 20.0 },
-                        scale: Vector2D { x: 1.0, y: 1.0 },
-                        rotation: 0.0,
-                    },
-                );
-            });
+            transforms.set_transform(
+                e2,
+                LocalTransform {
+                    position: LocalPosition { x: 20.0, y: 20.0 },
+                    scale: Vector2D { x: 1.0, y: 1.0 },
+                    rotation: 0.0,
+                },
+            );
 
             // Update spatial index
             hit_test.update_entity(ecs.clone(), e1, cx);
