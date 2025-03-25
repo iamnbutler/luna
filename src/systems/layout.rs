@@ -21,21 +21,21 @@ impl LayoutSystem {
     }
 
     /// Updates layouts for all dirty entities
-    pub fn process(&mut self, ecs: Entity<LunaEcs>, cx: &mut Context<LunaEcs>) {
+    pub fn process(&mut self, ecs_mut: &mut LunaEcs) {
         // Take the dirty entities to process
         let entities_to_process: Vec<_> = self.dirty_entities.drain(..).collect();
 
         for entity in entities_to_process {
             // Skip if entity no longer exists
-            if !ecs.read(cx).entity_exists(entity) {
+            if !ecs_mut.entity_exists(entity) {
                 continue;
             }
 
-            // Get the layout properties
-            if let Some(layout) = ecs.read(cx).layout().get_layout(entity) {
+            // Get the layout properties and clone it to avoid borrowing issues
+            if let Some(layout) = ecs_mut.layout().get_layout(entity).cloned() {
                 // Apply size constraints
                 let mut new_transform =
-                    if let Some(transform) = ecs.read(cx).transforms().get_transform(entity) {
+                    if let Some(transform) = ecs_mut.transforms().get_transform(entity) {
                         transform.clone()
                     } else {
                         LocalTransform {
@@ -75,17 +75,18 @@ impl LayoutSystem {
                 new_transform.position.x += layout.margins.left;
                 new_transform.position.y += layout.margins.top;
 
-                ecs.update(cx, |ecs, cx| {
+                // Use scopes to limit borrows
+                {
                     // Update the transform
-                    ecs.transforms_mut().set_transform(entity, new_transform);
+                    ecs_mut.transforms_mut().set_transform(entity, new_transform);
+                }
 
-                    // Mark children as dirty since parent changed
-                    if let Some(children) = ecs.hierarchy().get_children(entity) {
-                        for child in children {
-                            self.mark_dirty(*child);
-                        }
+                // Mark children as dirty since parent changed
+                if let Some(children) = ecs_mut.hierarchy().get_children(entity) {
+                    for child in children.clone() {
+                        self.mark_dirty(child);
                     }
-                });
+                }
             }
         }
     }
@@ -98,13 +99,12 @@ impl LayoutSystem {
         &mut self,
         ecs: &mut LunaEcs,
         root: LunaEntityId,
-        cx: &mut Context<LunaEcs>,
     ) {
         self.mark_dirty(root);
 
         if let Some(children) = ecs.hierarchy().get_children(root) {
             for child in children.clone() {
-                self.mark_branch_dirty(ecs, child, cx);
+                self.mark_branch_dirty(ecs, child);
             }
         }
     }
@@ -119,7 +119,7 @@ mod tests {
         let ecs = cx.new(|cx| LunaEcs::new(cx));
         let mut layout_system = LayoutSystem::new();
 
-        ecs.clone().update(cx, |ecs_mut, cx| {
+        ecs.update(cx, |ecs_mut, cx| {
             // Create a test entity
             let entity = ecs_mut.create_entity();
 
@@ -147,7 +147,7 @@ mod tests {
             layout_system.mark_dirty(entity);
 
             // Process layout updates
-            layout_system.process(ecs.clone(), cx);
+            layout_system.process(ecs_mut);
 
             if let Some(transform) = ecs_mut.transforms().get_transform(entity) {
                 assert_eq!(transform.scale.x, 100.0);
@@ -183,7 +183,7 @@ mod tests {
 
             // Process layout
             layout_system.mark_dirty(entity);
-            layout_system.process(ecs.clone(), cx);
+            layout_system.process(ecs_mut);
 
             // Verify constraints were applied
             if let Some(transform) = ecs_mut.transforms().get_transform(entity) {

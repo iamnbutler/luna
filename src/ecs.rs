@@ -103,7 +103,7 @@ impl LunaEcs {
     }
 
     /// Updates the world transforms for an entity and its descendants
-    pub fn update_world_transforms(&mut self, root: LunaEntityId, cx: &mut Context<Self>) {
+    pub fn update_world_transforms(&mut self, root: LunaEntityId) {
         if !self.entity_exists(root) {
             return;
         }
@@ -125,7 +125,7 @@ impl LunaEcs {
 
         // Recursively update children
         for child in children {
-            self.update_world_transforms(child, cx);
+            self.update_world_transforms(child);
         }
     }
 }
@@ -151,21 +151,24 @@ mod tests {
         });
     }
 
-    // #[gpui::test]
-    // fn test_component_access(cx: &mut TestAppContext) {
-    //     let mut ecs = LunaEcs::new(cx);
-    //     let entity = ecs.create_entity();
+    #[gpui::test]
+    fn test_component_access(cx: &mut TestAppContext) {
+        let ecs = cx.new(|cx| LunaEcs::new(cx));
 
-    //     // Add transform component
-    //     let transform = LocalTransform {
-    //         position: LocalPosition { x: 10.0, y: 20.0 },
-    //         scale: Vector2D { x: 1.0, y: 1.0 },
-    //         rotation: 0.0,
-    //     };
+        ecs.update(cx, |ecs_mut, cx| {
+            let entity = ecs_mut.create_entity();
 
-    //     ecs.transforms_mut().set_transform(entity, transform);
+            // Add transform component
+            let transform = LocalTransform {
+                position: LocalPosition { x: 10.0, y: 20.0 },
+                scale: Vector2D { x: 1.0, y: 1.0 },
+                rotation: 0.0,
+            };
 
-    //     // Verify component exists
-    //     assert!(ecs.transforms().get_transform(entity).is_some());
-    // }
+            ecs_mut.transforms_mut().set_transform(entity, transform);
+
+            // Verify component exists
+            assert!(ecs_mut.transforms().get_transform(entity).is_some());
+        });
+    }
 }

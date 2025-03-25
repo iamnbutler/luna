@@ -62,13 +62,12 @@ impl TransformSystem {
         &mut self,
         ecs: &mut LunaEcs,
         root: LunaEntityId,
-        cx: &mut Context<LunaEcs>,
     ) {
         self.mark_dirty(root);
 
         if let Some(children) = ecs.hierarchy().get_children(root) {
             for child in children.clone() {
-                self.mark_branch_dirty(ecs, child, cx);
+                self.mark_branch_dirty(ecs, child);
             }
         }
     }
