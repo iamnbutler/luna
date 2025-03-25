@@ -21,32 +21,36 @@ impl TransformSystem {
     }
 
     /// Updates world transforms for all dirty entities
-    pub fn process(&mut self, ecs: Entity<LunaEcs>, cx: &mut Context<Self>) {
+    pub fn process(&mut self, ecs_mut: &mut LunaEcs) {
         // Take the dirty entities to process
         let entities_to_process: Vec<_> = self.dirty_entities.drain(..).collect();
 
         for entity in entities_to_process {
             // Skip if entity no longer exists
-            if !ecs.read(cx).entity_exists(entity) {
+            if !ecs_mut.entity_exists(entity) {
                 continue;
             }
 
-            ecs.update(cx, |ecs, cx| {
-                let parent_chain = ecs.hierarchy().get_parent_chain(entity);
+            // Get parent chain and clone it
+            let parent_chain = ecs_mut.hierarchy().get_parent_chain(entity).clone();
 
-                // Update the world transform
-                if let Some(world_transform) = ecs
-                    .transforms_mut()
-                    .compute_world_transform(entity, parent_chain)
-                {
-                    // Get and process any children to update their world transforms
-                    if let Some(children) = ecs.hierarchy().get_children(entity) {
-                        for child in children.clone() {
-                            self.mark_dirty(child);
-                        }
+            // Use a scope to limit the mutable borrow
+            let has_transform = {
+                // Get a mutable borrow of transforms
+                let transforms_mut = ecs_mut.transforms_mut();
+                // Compute world transform and return if it was successful
+                transforms_mut.compute_world_transform(entity, parent_chain).is_some()
+            };
+
+            // If we successfully computed a world transform
+            if has_transform {
+                // Now get the children (after the mutable borrow is released)
+                if let Some(children) = ecs_mut.hierarchy().get_children(entity) {
+                    for child in children.clone() {
+                        self.mark_dirty(child);
                     }
                 }
-            })
+            }
         }
     }
 
@@ -77,7 +81,7 @@ mod tests {
     #[gpui::test]
     fn test_transform_system(cx: &mut TestAppContext) {
         let ecs = cx.new(|cx| LunaEcs::new(cx));
-        let mut transform_system = cx.new(|cx| TransformSystem::new());
+        let mut transform_system = TransformSystem::new();
 
         ecs.update(cx, |ecs_mut, cx| {
             // Create a simple parent-child hierarchy
@@ -87,34 +91,36 @@ mod tests {
             // Setup hierarchy
             ecs_mut.hierarchy_mut().set_parent(child, parent);
 
-            // Add transforms
+            // Add transforms in a scope to limit the borrow
+            {
+                let transforms_mut = ecs_mut.transforms_mut();
+
+                transforms_mut.set_transform(
+                    parent,
+                    LocalTransform {
+                        position: LocalPosition { x: 10.0, y: 10.0 },
+                        scale: Vector2D { x: 2.0, y: 2.0 },
+                        rotation: 0.0,
+                    },
+                );
+
+                transforms_mut.set_transform(
+                    child,
+                    LocalTransform {
+                        position: LocalPosition { x: 5.0, y: 5.0 },
+                        scale: Vector2D { x: 1.5, y: 1.5 },
+                        rotation: 0.0,
+                    },
+                );
+            }
+
+            transform_system.mark_dirty(parent);
+
+            // Use the simplified process method
+            transform_system.process(ecs_mut);
+
+            // Get transforms component to verify results 
             let transforms_mut = ecs_mut.transforms_mut();
-
-            transforms_mut.set_transform(
-                parent,
-                LocalTransform {
-                    position: LocalPosition { x: 10.0, y: 10.0 },
-                    scale: Vector2D { x: 2.0, y: 2.0 },
-                    rotation: 0.0,
-                },
-            );
-
-            transforms_mut.set_transform(
-                child,
-                LocalTransform {
-                    position: LocalPosition { x: 5.0, y: 5.0 },
-                    scale: Vector2D { x: 1.5, y: 1.5 },
-                    rotation: 0.0,
-                },
-            );
-
-            transform_system.update(cx, |transform_system, cx| {
-                // Mark parent as dirty
-                transform_system.mark_dirty(parent);
-
-                // Process updates
-                transform_system.process(ecs.clone(), cx);
-            });
 
             // Verify world transforms were updated correctly
             if let Some(world_transform) =

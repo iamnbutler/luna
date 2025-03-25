@@ -32,6 +32,11 @@ impl LunaEcs {
         }
     }
 
+    /// Returns a reference to the entity map
+    pub fn entities(&self) -> &HashMap<LunaEntityId, u32> {
+        &self.entities
+    }
+
     /// Creates a new entity and returns its ID
     pub fn create_entity(&mut self) -> LunaEntityId {
         let entity_id = LunaEntityId::from(self.next_entity_id);
