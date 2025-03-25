@@ -2,6 +2,7 @@ use gpui::App;
 
 use crate::{ecs::LunaEcs, prelude::*};
 
+#[derive(Clone)]
 /// System that handles hit testing and spatial queries for the canvas
 pub struct HitTestSystem {
     spatial_index: QuadTree,
@@ -15,15 +16,11 @@ impl HitTestSystem {
     }
 
     /// Updates the spatial index for an entity
-    pub fn update_entity(
-        &mut self,
-        ecs_mut: &mut LunaEcs,
-        entity: LunaEntityId,
-    ) {
+    pub fn update_entity(&mut self, ecs_mut: &mut LunaEcs, entity: LunaEntityId) {
         if !ecs_mut.entity_exists(entity) {
             return;
         }
-        
+
         if let Some(transform) = ecs_mut.transforms().get_transform(entity) {
             // Get the parent chain and clone it to avoid borrowing issues
             let parent_chain = ecs_mut.hierarchy().get_parent_chain(entity).clone();
@@ -53,12 +50,7 @@ impl HitTestSystem {
     }
 
     /// Returns the topmost entity at the given point, respecting Z-order
-    pub fn hit_test_point(
-        &self,
-        ecs: &LunaEcs,
-        x: f32,
-        y: f32,
-    ) -> Option<LunaEntityId> {
+    pub fn hit_test_point(&self, ecs: &LunaEcs, x: f32, y: f32) -> Option<LunaEntityId> {
         let candidates = self.spatial_index.query_point(x, y);
 
         // Sort candidates by Z-order (children above parents)
@@ -154,7 +146,7 @@ mod tests {
             transform_system.mark_dirty(parent);
             transform_system.mark_dirty(child);
             transform_system.process(ecs_mut);
-            
+
             // Now update the spatial index with the calculated world transforms
             hit_test.update_entity(ecs_mut, parent);
             hit_test.update_entity(ecs_mut, child);

@@ -20,16 +20,13 @@ impl Region {
     }
 
     fn contains_point(&self, x: f32, y: f32) -> bool {
-        x >= self.x
-            && x <= self.x + self.width
-            && y >= self.y
-            && y <= self.y + self.height
+        x >= self.x && x <= self.x + self.width && y >= self.y && y <= self.y + self.height
     }
 
     fn intersects_box(&self, bbox: &BoundingBox) -> bool {
         let min = bbox.min();
         let max = bbox.max();
-        
+
         !(min.x > self.x + self.width
             || max.x < self.x
             || min.y > self.y + self.height
@@ -37,6 +34,7 @@ impl Region {
     }
 }
 
+#[derive(Clone)]
 /// A node in the QuadTree containing entities and their bounding boxes
 struct QuadTreeNode {
     region: Region,
@@ -94,7 +92,12 @@ impl QuadTreeNode {
             ),
             // Top right
             QuadTreeNode::new(
-                Region::new(self.region.x + half_width, self.region.y, half_width, half_height),
+                Region::new(
+                    self.region.x + half_width,
+                    self.region.y,
+                    half_width,
+                    half_height,
+                ),
                 self.max_depth,
                 self.max_entities,
             ),
@@ -192,6 +195,7 @@ impl QuadTreeNode {
     }
 }
 
+#[derive(Clone)]
 /// A QuadTree spatial index for efficient entity queries
 pub struct QuadTree {
     root: QuadTreeNode,
@@ -224,19 +228,13 @@ mod tests {
     #[test]
     fn test_quadtree_point_query() {
         let mut tree = QuadTree::new(0.0, 0.0, 100.0, 100.0);
-        
+
         // Insert some test entities
         let e1 = LunaEntityId::from(1);
         let e2 = LunaEntityId::from(2);
-        
-        tree.insert(
-            e1,
-            BoundingBox::new(vec2(10.0, 10.0), vec2(20.0, 20.0)),
-        );
-        tree.insert(
-            e2,
-            BoundingBox::new(vec2(30.0, 30.0), vec2(40.0, 40.0)),
-        );
+
+        tree.insert(e1, BoundingBox::new(vec2(10.0, 10.0), vec2(20.0, 20.0)));
+        tree.insert(e2, BoundingBox::new(vec2(30.0, 30.0), vec2(40.0, 40.0)));
 
         // Test point queries
         let result = tree.query_point(15.0, 15.0);
@@ -254,24 +252,15 @@ mod tests {
     #[test]
     fn test_quadtree_region_query() {
         let mut tree = QuadTree::new(0.0, 0.0, 100.0, 100.0);
-        
+
         // Insert some test entities
         let e1 = LunaEntityId::from(1);
         let e2 = LunaEntityId::from(2);
         let e3 = LunaEntityId::from(3);
-        
-        tree.insert(
-            e1,
-            BoundingBox::new(vec2(10.0, 10.0), vec2(20.0, 20.0)),
-        );
-        tree.insert(
-            e2,
-            BoundingBox::new(vec2(30.0, 30.0), vec2(40.0, 40.0)),
-        );
-        tree.insert(
-            e3,
-            BoundingBox::new(vec2(15.0, 15.0), vec2(35.0, 35.0)),
-        );
+
+        tree.insert(e1, BoundingBox::new(vec2(10.0, 10.0), vec2(20.0, 20.0)));
+        tree.insert(e2, BoundingBox::new(vec2(30.0, 30.0), vec2(40.0, 40.0)));
+        tree.insert(e3, BoundingBox::new(vec2(15.0, 15.0), vec2(35.0, 35.0)));
 
         // Test region query
         let result = tree.query_region(0.0, 0.0, 25.0, 25.0);
