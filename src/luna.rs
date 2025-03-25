@@ -1,6 +1,6 @@
 #![allow(dead_code, unused)]
 
-use components::RenderProperties;
+use components::ElementStyle;
 use ecs::LunaEcs;
 use gpui::{
     div, impl_actions, point, prelude::*, px, rgb, size, App, Application, Bounds, CursorStyle,
@@ -61,6 +61,12 @@ impl std::fmt::Display for LunaEntityId {
     }
 }
 
+impl Into<ElementId> for LunaEntityId {
+    fn into(self) -> ElementId {
+        ElementId::Integer(self.as_u64() as usize)
+    }
+}
+
 #[derive(Debug)]
 struct Luna {
     weak_self: WeakEntity<Self>,
@@ -76,11 +82,17 @@ impl Luna {
         let focus_handle = cx.focus_handle();
         let canvas = cx.new(|cx| Canvas::new("canvas", ecs.clone(), cx));
 
-        let new_el = canvas.update(cx, |canvas, cx| canvas.add_element(cx));
-
-        let root_entity = ecs.update(cx, |ecs, _cx| {
-            ecs.render_mut()
-                .set_properties(new_el, RenderProperties::default())
+        let new_el = canvas.update(cx, |canvas, cx| {
+            canvas.add_element(
+                size(px(256.), px(256.)),
+                ElementStyle {
+                    corner_radius: 10.0,
+                    fill_color: [0.1, 0.3, 0.4, 0.3],
+                    ..Default::default()
+                },
+                point(px(1500.), px(1500.)),
+                cx,
+            )
         });
 
         Luna {
@@ -135,6 +147,141 @@ impl Render for Luna {
 
 impl Focusable for Luna {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+#[derive(Clone)]
+/// The primary layout element within the canvas, similar to a <div> in HTML
+pub struct FrameElement {
+    entity_id: LunaEntityId,
+    ecs: Entity<LunaEcs>,
+    viewport_offset: Point<Pixels>,
+    focus_handle: FocusHandle,
+}
+
+impl FrameElement {
+    pub fn new(
+        entity_id: LunaEntityId,
+        ecs: Entity<LunaEcs>,
+        viewport_offset: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self {
+            entity_id,
+            ecs,
+            viewport_offset,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+}
+impl Element for FrameElement {
+    type RequestLayoutState = ();
+    type PrepaintState = Option<Hitbox>;
+
+    fn id(&self) -> Option<ElementId> {
+        Some(self.entity_id.into())
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        // Request layout for the element container
+        let layout_id = window.request_layout(
+            Style {
+                position: Position::Absolute, // Positioned absolutely within the canvas
+                ..Default::default()
+            },
+            vec![],
+            cx,
+        );
+
+        (layout_id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        // Insert hitbox for the element
+        Some(window.insert_hitbox(bounds, true))
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.ecs.update(cx, |ecs, _cx| {
+            if let Some(transform) = ecs.transforms().get_transform(self.entity_id) {
+                let parent_chain = ecs.hierarchy().get_parent_chain(self.entity_id);
+
+                if let Some(world_transform) = ecs
+                    .transforms_mut()
+                    .compute_world_transform(self.entity_id, parent_chain)
+                {
+                    let entity_bounds = Bounds {
+                        origin: Point {
+                            x: px(world_transform.position.x) - self.viewport_offset.x,
+                            y: px(world_transform.position.y) - self.viewport_offset.y,
+                        },
+                        size: Size {
+                            width: px(world_transform.scale.x),
+                            height: px(world_transform.scale.y),
+                        },
+                    };
+
+                    // Get render properties if they exist
+                    let style = if let Some(props) = ecs.render().get_style(self.entity_id) {
+                        // Convert RGBA arrays to rgb values
+                        let fill = rgb(((props.fill_color[0] * 255.0) as u32) << 16
+                            | ((props.fill_color[1] * 255.0) as u32) << 8
+                            | (props.fill_color[2] * 255.0) as u32);
+
+                        let stroke = rgb(((props.stroke_color[0] * 255.0) as u32) << 16
+                            | ((props.stroke_color[1] * 255.0) as u32) << 8
+                            | (props.stroke_color[2] * 255.0) as u32);
+
+                        (props.corner_radius, fill, px(props.stroke_width), stroke)
+                    } else {
+                        // Default style
+                        (0.0, rgb(0x5A6887), px(1.0), rgb(0x3A4867))
+                    };
+
+                    window.paint_quad(quad(entity_bounds, style.0, style.1, style.2, style.3));
+                }
+            }
+        });
+    }
+}
+
+impl IntoElement for FrameElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Render for FrameElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.clone()
+    }
+}
+
+impl Focusable for FrameElement {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -202,23 +349,23 @@ impl Canvas {
     }
 
     /// Adds a child element to the canvas
-    pub fn add_element(&mut self, cx: &mut Context<Self>) -> LunaEntityId {
+    pub fn add_element(
+        &mut self,
+        size: Size<Pixels>,
+        style: ElementStyle,
+        position: impl Into<LocalPosition>,
+        cx: &mut Context<Self>,
+    ) -> LunaEntityId {
         self.ecs.update(cx, |ecs, _cx| {
             let entity = ecs.create_entity();
 
             // Add to hierarchy under root
             ecs.hierarchy_mut().add_child(self.root_entity, entity);
 
-            // Position new elements in the center of the canvas (not viewport)
-            let position = LocalPosition {
-                x: self.canvas_size.width.0 as f32 / 2.0 - 50.0, // center of canvas - half width
-                y: self.canvas_size.height.0 as f32 / 2.0 - 50.0, // center of canvas - half height
-            };
-
             ecs.transforms_mut().set_transform(
                 entity,
                 LocalTransform {
-                    position,
+                    position: position.into(),
                     scale: vec2(100.0, 100.0),
                     rotation: 0.0,
                 },
@@ -228,12 +375,14 @@ impl Canvas {
             ecs.layout_mut().set_layout(
                 entity,
                 LayoutProperties {
-                    width: None,
-                    height: None,
+                    width: Some(size.width.0),
+                    height: Some(size.height.0),
                     constraints: SizeConstraints::default(),
                     margins: Margins::default(),
                 },
             );
+
+            ecs.render_mut().set_style(entity, style);
 
             entity
         })
@@ -399,45 +548,19 @@ impl Element for Canvas {
             }
         }
 
-        // Paint all entities
-        self.ecs.update(cx, |ecs, _cx| {
-            // Get entities in render order (bottom-up)
-            let mut entities: Vec<_> = ecs.entities().keys().copied().collect();
-            entities.sort_by_key(|entity| ecs.hierarchy().get_parent_chain(*entity).len());
+        let ecs = self.ecs.clone();
 
-            for entity in entities {
-                if let Some(transform) = ecs.transforms().get_transform(entity) {
-                    let parent_chain = ecs.hierarchy().get_parent_chain(entity);
+        // Get entities in render order (bottom-up)
+        let mut entities: Vec<_> = ecs.read(cx).entities().keys().copied().collect();
+        entities.sort_by_key(|entity| ecs.read(cx).hierarchy().get_parent_chain(*entity).len());
 
-                    // Compute world transform
-                    if let Some(world_transform) = ecs
-                        .transforms_mut()
-                        .compute_world_transform(entity, parent_chain)
-                    {
-                        // Create bounds for entity, translated by viewport offset
-                        let entity_bounds = Bounds {
-                            origin: Point {
-                                x: px(world_transform.position.x) - self.viewport_offset.x,
-                                y: px(world_transform.position.y) - self.viewport_offset.y,
-                            },
-                            size: Size {
-                                width: px(world_transform.scale.x),
-                                height: px(world_transform.scale.y),
-                            },
-                        };
-
-                        // Paint entity with default style if no render component exists
-                        window.paint_quad(quad(
-                            entity_bounds,
-                            0.0,
-                            rgb(0x5A6887),
-                            px(1.0),
-                            rgb(0x3A4867),
-                        ));
-                    }
-                }
-            }
-        });
+        for entity in entities {
+            let mut frame =
+                cx.new(|cx| FrameElement::new(entity, self.ecs.clone(), self.viewport_offset, cx));
+            frame.update(cx, |frame, cx| {
+                frame.paint(None, bounds, &mut (), &mut None, window, cx);
+            })
+        }
     }
 }
 

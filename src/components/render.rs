@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 /// Visual properties for rendering an element
 #[derive(Debug, Clone)]
-pub struct RenderProperties {
+pub struct ElementStyle {
     pub width: f32,
     pub height: f32,
     pub corner_radius: f32,
@@ -11,9 +11,9 @@ pub struct RenderProperties {
     pub stroke_width: f32,
 }
 
-impl Default for RenderProperties {
+impl Default for ElementStyle {
     fn default() -> Self {
-        RenderProperties {
+        ElementStyle {
             width: 100.0,
             height: 100.0,
             corner_radius: 0.0,
@@ -27,7 +27,7 @@ impl Default for RenderProperties {
 /// Component that manages visual properties and computed bounds
 pub struct RenderComponent {
     /// Map of entity IDs to their render properties
-    properties: HashMap<LunaEntityId, RenderProperties>,
+    properties: HashMap<LunaEntityId, ElementStyle>,
     /// Cache of computed bounding boxes
     bounds_cache: HashMap<LunaEntityId, BoundingBox>,
 }
@@ -41,13 +41,13 @@ impl RenderComponent {
     }
 
     /// Sets the render properties for an entity
-    pub fn set_properties(&mut self, entity: LunaEntityId, properties: RenderProperties) {
+    pub fn set_style(&mut self, entity: LunaEntityId, properties: ElementStyle) {
         self.properties.insert(entity, properties);
         self.invalidate_bounds(entity);
     }
 
     /// Gets the render properties for an entity
-    pub fn get_properties(&self, entity: LunaEntityId) -> Option<&RenderProperties> {
+    pub fn get_style(&self, entity: LunaEntityId) -> Option<&ElementStyle> {
         self.properties.get(&entity)
     }
 
@@ -99,7 +99,7 @@ mod tests {
         let mut render_component = RenderComponent::new();
         let entity = LunaEntityId::from(1);
 
-        let properties = RenderProperties {
+        let properties = ElementStyle {
             width: 200.0,
             height: 150.0,
             corner_radius: 5.0,
@@ -108,9 +108,9 @@ mod tests {
             stroke_width: 2.0,
         };
 
-        render_component.set_properties(entity, properties);
+        render_component.set_style(entity, properties);
 
-        let retrieved = render_component.get_properties(entity).unwrap();
+        let retrieved = render_component.get_style(entity).unwrap();
         assert_eq!(retrieved.width, 200.0);
         assert_eq!(retrieved.height, 150.0);
         assert_eq!(retrieved.corner_radius, 5.0);
@@ -121,13 +121,13 @@ mod tests {
         let mut render_component = RenderComponent::new();
         let entity = LunaEntityId::from(1);
 
-        let properties = RenderProperties {
+        let properties = ElementStyle {
             width: 100.0,
             height: 50.0,
             ..Default::default()
         };
 
-        render_component.set_properties(entity, properties);
+        render_component.set_style(entity, properties);
 
         let position = Vector2D { x: 10.0, y: 20.0 };
         let bounds = render_component.compute_bounds(entity, position).unwrap();

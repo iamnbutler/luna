@@ -1,3 +1,5 @@
+use gpui::{Pixels, Point};
+
 use crate::prelude::*;
 
 /// Creates a new 2D vector.
@@ -123,6 +125,24 @@ impl From<[f32; 2]> for LocalPosition {
 impl From<Vector2D> for LocalPosition {
     fn from(vec: Vector2D) -> Self {
         LocalPosition { x: vec.x, y: vec.y }
+    }
+}
+
+impl From<Point<Pixels>> for LocalPosition {
+    fn from(point: Point<Pixels>) -> Self {
+        LocalPosition {
+            x: point.x.0,
+            y: point.y.0,
+        }
+    }
+}
+
+impl From<Point<f32>> for LocalPosition {
+    fn from(point: Point<f32>) -> Self {
+        LocalPosition {
+            x: point.x,
+            y: point.y,
+        }
     }
 }
 
