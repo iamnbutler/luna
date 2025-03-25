@@ -1,5 +1,6 @@
 #![allow(dead_code, unused)]
 
+use components::RenderProperties;
 use ecs::LunaEcs;
 use gpui::{
     div, impl_actions, point, prelude::*, px, rgb, size, App, Application, Bounds, CursorStyle,
@@ -76,8 +77,11 @@ impl Luna {
         let focus_handle = cx.focus_handle();
         let canvas = cx.new(|cx| Canvas::new("canvas", ecs.clone(), cx));
 
-        canvas.update(cx, |canvas, cx| {
-            let new_el = canvas.add_element(cx);
+        let new_el = canvas.update(cx, |canvas, cx| canvas.add_element(cx));
+
+        let root_entity = ecs.update(cx, |ecs, _cx| {
+            ecs.render_mut()
+                .set_properties(new_el, RenderProperties::default())
         });
 
         let luna = Luna {
@@ -104,7 +108,7 @@ impl Render for Luna {
             .flex()
             .flex_col()
             .relative()
-            .bg(rgb(0x3B414D))
+            .bg(rgb(0x00FF00))
             .size_full()
             .text_color(rgb(0xffffff))
             .child(self.canvas.clone())
@@ -185,12 +189,21 @@ impl Canvas {
             // Add to hierarchy under root
             ecs.hierarchy_mut().add_child(self.root_entity, entity);
 
-            // Add default transform
+            // Add default transform with centered position and visible size
+            let position = if let Some(viewport) = self.viewport_size {
+                LocalPosition {
+                    x: viewport.width.0 as f32 / 2.0 - 50.0, // center - half width
+                    y: viewport.height.0 as f32 / 2.0 - 50.0, // center - half height
+                }
+            } else {
+                LocalPosition { x: 100.0, y: 100.0 } // fallback position if viewport unknown
+            };
+
             ecs.transforms_mut().set_transform(
                 entity,
                 LocalTransform {
-                    position: LocalPosition { x: 0.0, y: 0.0 },
-                    scale: vec2(1.0, 1.0),
+                    position,
+                    scale: vec2(100.0, 100.0),
                     rotation: 0.0,
                 },
             );
