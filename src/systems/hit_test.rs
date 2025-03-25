@@ -34,14 +34,21 @@ impl HitTestSystem {
 
             // Create bounding box and insert into spatial index if we have a world transform
             if let Some(world_transform) = world_transform {
-                // Create bounding box from world transform and insert into spatial index
-                // For now, using a simple 1x1 box at the position
-                // TODO: Use actual element dimensions from RenderComponent
+                // Get layout properties and compute actual dimensions
+                let layout = ecs_mut.layout().get_layout(entity);
+                let width = layout
+                    .and_then(|l| l.width)
+                    .unwrap_or(100.0) * world_transform.scale.x;
+                let height = layout
+                    .and_then(|l| l.height)
+                    .unwrap_or(100.0) * world_transform.scale.y;
+
+                // Create bounding box using layout dimensions and world transform
                 let bbox = BoundingBox::new(
                     vec2(world_transform.position.x, world_transform.position.y),
                     vec2(
-                        world_transform.position.x + 1.0,
-                        world_transform.position.y + 1.0,
+                        world_transform.position.x + width,
+                        world_transform.position.y + height,
                     ),
                 );
                 self.spatial_index.insert(entity, bbox);

@@ -154,6 +154,16 @@ pub struct LocalTransform {
     pub rotation: f32,
 }
 
+impl Default for LocalTransform {
+    fn default() -> Self {
+        Self {
+            position: LocalPosition::default(),
+            scale: Vector2D { x: 1.0, y: 1.0 },
+            rotation: 0.0,
+        }
+    }
+}
+
 /// Represents a world transform, containing absolute position, scale, and rotation.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WorldTransform {
@@ -340,7 +350,7 @@ mod tests {
 
         let local = LocalTransform {
             position: LocalPosition { x: 10.0, y: 20.0 },
-            scale: Vector2D { x: 2.0, y: 2.0 },
+            scale: Vector2D { x: 1.0, y: 1.0 },
             rotation: 0.0,
         };
 
@@ -349,10 +359,11 @@ mod tests {
         let retrieved = transform_component.get_transform(entity).unwrap();
         assert_eq!(retrieved.position.x, 10.0);
         assert_eq!(retrieved.position.y, 20.0);
-        assert_eq!(retrieved.scale.x, 2.0);
-        assert_eq!(retrieved.scale.y, 2.0);
+        assert_eq!(retrieved.scale.x, 1.0);
+        assert_eq!(retrieved.scale.y, 1.0);
     }
 
+    #[test]
     fn test_world_transform_computation() {
         let mut transform_component = TransformComponent::new();
 

@@ -231,14 +231,23 @@ impl Element for FrameElement {
                     .transforms_mut()
                     .compute_world_transform(self.entity_id, parent_chain)
                 {
+                    // Get layout properties if they exist, otherwise use defaults
+                    let layout = ecs.layout().get_layout(self.entity_id);
+                    let width = layout
+                        .and_then(|l| l.width)
+                        .unwrap_or(100.0) * world_transform.scale.x;
+                    let height = layout
+                        .and_then(|l| l.height)
+                        .unwrap_or(100.0) * world_transform.scale.y;
+
                     let entity_bounds = Bounds {
                         origin: Point {
                             x: px(world_transform.position.x) - self.viewport_offset.x,
                             y: px(world_transform.position.y) - self.viewport_offset.y,
                         },
                         size: Size {
-                            width: px(world_transform.scale.x),
-                            height: px(world_transform.scale.y),
+                            width: px(width),
+                            height: px(height),
                         },
                     };
 
@@ -366,7 +375,7 @@ impl Canvas {
                 entity,
                 LocalTransform {
                     position: position.into(),
-                    scale: vec2(100.0, 100.0),
+                    scale: vec2(1.0, 1.0),
                     rotation: 0.0,
                 },
             );

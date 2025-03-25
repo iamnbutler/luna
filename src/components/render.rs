@@ -3,8 +3,6 @@ use crate::prelude::*;
 /// Visual properties for rendering an element
 #[derive(Debug, Clone)]
 pub struct ElementStyle {
-    pub width: f32,
-    pub height: f32,
     pub corner_radius: f32,
     pub fill_color: [f32; 4],   // RGBA
     pub stroke_color: [f32; 4], // RGBA
@@ -14,8 +12,6 @@ pub struct ElementStyle {
 impl Default for ElementStyle {
     fn default() -> Self {
         ElementStyle {
-            width: 100.0,
-            height: 100.0,
             corner_radius: 0.0,
             fill_color: [1.0, 1.0, 1.0, 1.0],   // White
             stroke_color: [0.0, 0.0, 0.0, 1.0], // Black
@@ -52,8 +48,10 @@ impl RenderComponent {
     }
 
     /// Computes the bounding box for an entity based on its properties
-    pub fn compute_bounds(&self, entity: LunaEntityId, position: Vector2D) -> Option<BoundingBox> {
+    pub fn compute_bounds(&self, entity: LunaEntityId, position: Vector2D, layout: &LayoutProperties, scale: Vector2D) -> Option<BoundingBox> {
         let props = self.properties.get(&entity)?;
+        let width = layout.width.unwrap_or(100.0) * scale.x;
+        let height = layout.height.unwrap_or(100.0) * scale.y;
 
         // Create bounding box from position and dimensions
         let min = Vector2D {
@@ -61,8 +59,8 @@ impl RenderComponent {
             y: position.y,
         };
         let max = Vector2D {
-            x: position.x + props.width,
-            y: position.y + props.height,
+            x: position.x + width,
+            y: position.y + height,
         };
 
         Some(BoundingBox::new(min, max))
@@ -100,8 +98,6 @@ mod tests {
         let entity = LunaEntityId::from(1);
 
         let properties = ElementStyle {
-            width: 200.0,
-            height: 150.0,
             corner_radius: 5.0,
             fill_color: [1.0, 0.0, 0.0, 1.0],   // Red
             stroke_color: [0.0, 0.0, 0.0, 1.0], // Black
@@ -111,9 +107,10 @@ mod tests {
         render_component.set_style(entity, properties);
 
         let retrieved = render_component.get_style(entity).unwrap();
-        assert_eq!(retrieved.width, 200.0);
-        assert_eq!(retrieved.height, 150.0);
         assert_eq!(retrieved.corner_radius, 5.0);
+        assert_eq!(retrieved.fill_color, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(retrieved.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(retrieved.stroke_width, 2.0);
     }
 
     #[test]
@@ -122,15 +119,20 @@ mod tests {
         let entity = LunaEntityId::from(1);
 
         let properties = ElementStyle {
-            width: 100.0,
-            height: 50.0,
             ..Default::default()
         };
 
         render_component.set_style(entity, properties);
 
         let position = Vector2D { x: 10.0, y: 20.0 };
-        let bounds = render_component.compute_bounds(entity, position).unwrap();
+        let layout = LayoutProperties {
+            width: Some(100.0),
+            height: Some(50.0),
+            ..Default::default()
+        };
+
+        let scale = Vector2D { x: 1.0, y: 1.0 };
+        let bounds = render_component.compute_bounds(entity, position, &layout, scale).unwrap();
 
         assert_eq!(bounds.min().x, 10.0);
         assert_eq!(bounds.min().y, 20.0);
