@@ -256,100 +256,64 @@ impl CurrentColorTool {
 impl RenderOnce for CurrentColorTool {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
 
         div()
             .id("current-color-tool")
             .group("current-color-tool")
-            .flex()
-            .flex_col()
-            .gap(px(3.))
-            .w(px(25.))
+            .relative()
+            .size(px(23.))
+            .mb_2()
             .child(
                 div()
-                    .w_full()
-                    .gap(px(7.))
-                    .flex()
-                    .child(
-                        div()
-                            .id("reset")
-                            .group("reset")
-                            .flex_1()
-                            .h_full()
-                            .child(
-                                svg()
-                                    .path(Icon::ArrowCounterClockwise.src())
-                                    .size(px(11.))
-                                    .text_color(theme.foreground_muted)
-                                    .group_hover("reset", |svg| svg.text_color(theme.foreground)),
-                            )
-                            .on_click(move |_, _, cx| {
-                                print!("resetting");
-
-                                cx.dispatch_action(&ResetCurrentColors);
-                                cx.stop_propagation();
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("swap")
-                            .group("swap")
-                            .flex_1()
-                            .h_full()
-                            .child(
-                                svg()
-                                    .path(Icon::ArrowDownRight.src())
-                                    .size(px(11.))
-                                    .text_color(theme.foreground_muted)
-                                    .group_hover("swap", |svg| svg.text_color(theme.foreground)),
-                            )
-                            .on_click(move |_, _, cx| {
-                                print!("swapping");
-                                cx.dispatch_action(&SwapCurrentColors);
-                                cx.stop_propagation();
-                            }),
-                    ),
+                    .id("current-forground-color")
+                    .absolute()
+                    .bottom_0()
+                    .right_0()
+                    .size(px(17.))
+                    .rounded(px(3.))
+                    .p_px()
+                    .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
+                    .shadow(smallvec::smallvec![BoxShadow {
+                        color: hsla(0.0, 0.0, 0.0, 0.24),
+                        offset: point(px(1.), px(0.)),
+                        blur_radius: px(0.),
+                        spread_radius: px(0.),
+                    }])
+                    .child(div().rounded(px(2.)).size_full().bg(self.border)),
             )
             .child(
                 div()
-                    .relative()
-                    .size(px(25.))
-                    .child(
-                        div()
-                            .id("current-forground-color")
-                            .absolute()
-                            .bottom_0()
-                            .right_0()
-                            .size(px(17.))
-                            .rounded(px(2.))
-                            .border_1()
-                            .border_color(theme.foreground.alpha(0.16))
-                            .child(
-                                div()
-                                    .size_full()
-                                    .border(px(3.))
-                                    .border_color(self.border)
-                                    .child(
-                                        div()
-                                            .size_full()
-                                            .border_1()
-                                            .border_color(theme.foreground.alpha(0.16)),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("current-background-color")
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .size(px(17.))
-                            .rounded(px(2.))
-                            .border_1()
-                            .border_color(theme.foreground.alpha(0.16))
-                            .child(div().size_full().bg(self.background)),
-                    ),
+                    .id("current-background-color")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size(px(17.))
+                    .rounded(px(3.))
+                    .p_px()
+                    .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
+                    .shadow(smallvec::smallvec![BoxShadow {
+                        color: hsla(0.0, 0.0, 0.0, 0.36),
+                        offset: point(px(1.), px(1.)),
+                        blur_radius: px(0.),
+                        spread_radius: px(0.),
+                    }])
+                    .child(div().rounded(px(2.)).size_full().bg(self.background)),
             )
+        // .child(
+        //     svg()
+        //         .path(Icon::ArrowDownRight.src())
+        //         .id("swap")
+        //         .size(px(11.))
+        //         .text_color(theme.foreground_muted)
+        //         .absolute()
+        //         .top(-px(4.))
+        //         .right(-px(6.))
+        //         .on_click(move |_, _, cx| {
+        //             print!("swapping");
+        //             cx.dispatch_action(&SwapCurrentColors);
+        //             cx.stop_propagation();
+        //         }),
+        // )
     }
 }
 
