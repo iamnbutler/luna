@@ -7,7 +7,6 @@ use gpui::{
 };
 
 use anyhow::Result;
-use strum::EnumIter;
 
 actions!(luna, [Quit, ToggleUI]);
 
@@ -19,6 +18,7 @@ pub struct Theme {
     pub foreground: Hsla,
     pub foreground_muted: Hsla,
     pub foreground_disabled: Hsla,
+    pub selected: Hsla,
 }
 
 impl Theme {
@@ -29,6 +29,7 @@ impl Theme {
             foreground: hsla(0.0, 1.0, 1.0, 1.0),
             foreground_muted: hsla(0.0, 1.0, 1.0, 0.6),
             foreground_disabled: hsla(0.0, 1.0, 1.0, 0.3),
+            selected: hsla(210.0 / 360.0, 0.92, 0.65, 1.0),
         }
     }
 }
@@ -41,21 +42,39 @@ impl Theme {
 
 impl Global for Theme {}
 
-#[derive(EnumIter)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub enum ToolKind {
+    /// Standard selection tool for clicking, dragging, and manipulating elements
+    #[default]
     ArrowPointer,
-    ArrowTool,
+    /// Tool for creating and editing connectors between elements
+    ///
+    /// Creates arrows that can either stand alone or connect elements while
+    /// maintaining their connection when elements are moved.
+    Arrow,
+    /// Tool for creating organizational frames or artboards to group content
     Frame,
+    /// Navigation tool for panning around the canvas by dragging
     Hand,
+    /// Tool for inserting and manipulating images and image placeholders
     Image,
-    LineTool,
-    PenTool,
+    /// Tool for drawing straight lines between two points
+    Line,
+    /// Vector tool for creating and editing bezier curves and paths
+    Pen,
+    /// Freehand tool for sketching and drawing with natural strokes
     Pencil,
+    /// Tool for generating and modifying content using text prompts
     Prompt,
-    Shapes,
+    /// Tool for quickly inserting saved elements such as icons, images and components
+    ElementLibrary,
+    /// Tool for drawing rectangles and squares of various dimensions
     Square,
+    /// Tool for adding, editing, and formatting text content
     TextCursor,
+    /// Tool for increasing canvas magnification (zooming in)
     ZoomIn,
+    /// Tool for decreasing canvas magnification (zooming out)
     ZoomOut,
 }
 
@@ -63,15 +82,15 @@ impl ToolKind {
     pub fn src(self) -> SharedString {
         match self {
             ToolKind::ArrowPointer => "svg/arrow_pointer.svg".into(),
-            ToolKind::ArrowTool => "svg/arrow_tool.svg".into(),
+            ToolKind::Arrow => "svg/arrow_tool.svg".into(),
             ToolKind::Frame => "svg/frame.svg".into(),
             ToolKind::Hand => "svg/hand.svg".into(),
             ToolKind::Image => "svg/image.svg".into(),
-            ToolKind::LineTool => "svg/line_tool.svg".into(),
-            ToolKind::PenTool => "svg/pen_tool.svg".into(),
+            ToolKind::Line => "svg/line_tool.svg".into(),
+            ToolKind::Pen => "svg/pen_tool.svg".into(),
             ToolKind::Pencil => "svg/pencil.svg".into(),
             ToolKind::Prompt => "svg/prompt.svg".into(),
-            ToolKind::Shapes => "svg/shapes.svg".into(),
+            ToolKind::ElementLibrary => "svg/shapes.svg".into(),
             ToolKind::Square => "svg/square.svg".into(),
             ToolKind::TextCursor => "svg/text_cursor.svg".into(),
             ToolKind::ZoomIn => "svg/zoom_in.svg".into(),
@@ -108,6 +127,7 @@ impl ToolButton {
 impl RenderOnce for ToolButton {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
 
         div()
             .size(px(27.))
@@ -177,17 +197,17 @@ impl RenderOnce for ToolStrip {
             .child(tool_button(ToolKind::Prompt).disabled(true))
             .child(tool_divider())
             .child(tool_button(ToolKind::Pencil).disabled(true))
-            .child(tool_button(ToolKind::PenTool).disabled(true))
+            .child(tool_button(ToolKind::Pen).disabled(true))
             .child(tool_button(ToolKind::TextCursor).disabled(true))
             .child(tool_divider())
             .child(tool_button(ToolKind::Frame).disabled(true))
             .child(tool_button(ToolKind::Square).disabled(true))
-            .child(tool_button(ToolKind::LineTool).disabled(true))
+            .child(tool_button(ToolKind::Line).disabled(true))
             .child(tool_divider())
             .child(tool_button(ToolKind::Image).disabled(true))
-            .child(tool_button(ToolKind::Shapes).disabled(true))
+            .child(tool_button(ToolKind::ElementLibrary).disabled(true))
             .child(tool_divider())
-            .child(tool_button(ToolKind::ArrowTool).disabled(true))
+            .child(tool_button(ToolKind::Arrow).disabled(true))
     }
 }
 
@@ -228,6 +248,29 @@ impl RenderOnce for Sidebar {
             .child(inner)
     }
 }
+
+/// A temporary place to throw a grab bag of various states until
+/// they can be organize and structured more clearly.
+///
+/// At the very least this will need to be refactored before adding
+/// muliple windows, as the global state will apply to all windows.
+struct GlobalState {
+    active_tool: ToolKind,
+}
+
+impl GlobalState {
+    pub fn new() -> Self {
+        Self {
+            active_tool: ToolKind::default(),
+        }
+    }
+
+    pub fn get(cx: &App) -> &GlobalState {
+        cx.global::<GlobalState>()
+    }
+}
+
+impl Global for GlobalState {}
 
 struct Luna {
     hide_sidebar: bool,
