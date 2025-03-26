@@ -44,6 +44,53 @@ impl Theme {
 
 impl Global for Theme {}
 
+pub fn keystroke_builder(str: &str) -> Keystroke {
+    let parts: Vec<&str> = str.split('-').collect();
+
+    let mut modifiers = Modifiers {
+        control: false,
+        alt: false,
+        shift: false,
+        platform: false,
+        function: false,
+    };
+
+    let mut key_char = None;
+
+    // The last part is the key, everything before it is a modifier
+    let key = if parts.is_empty() {
+        ""
+    } else {
+        parts[parts.len() - 1]
+    };
+
+    for i in 0..parts.len() - 1 {
+        match parts[i].to_lowercase().as_str() {
+            "ctrl" | "control" => modifiers.control = true,
+            "alt" | "option" => modifiers.alt = true,
+            "shift" => modifiers.shift = true,
+            "cmd" | "meta" | "command" | "platform" => modifiers.platform = true,
+            "fn" | "function" => modifiers.function = true,
+            _ => (),
+        }
+    }
+
+    if !modifiers.control
+        && !modifiers.alt
+        && !modifiers.shift
+        && !modifiers.platform
+        && !modifiers.function
+    {
+        key_char = Some(key.to_string());
+    }
+
+    Keystroke {
+        modifiers,
+        key: key.into(),
+        key_char,
+    }
+}
+
 #[derive(Default, Debug, Display, Clone, PartialEq)]
 pub enum ToolKind {
     /// Standard selection tool for clicking, dragging, and manipulating elements
