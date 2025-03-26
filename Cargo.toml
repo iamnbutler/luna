@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [[bin]]
-name = "luna"
+name = "Luna"
 path = "src/luna.rs"
 
 [dependencies]
