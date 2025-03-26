@@ -2,11 +2,13 @@ use std::{fs, path::PathBuf};
 
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
-    FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu, MenuItem, Modifiers,
-    SharedString, TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
+    ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu, MenuItem,
+    Modifiers, SharedString, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance,
+    WindowOptions,
 };
 
 use anyhow::Result;
+use strum::Display;
 
 actions!(luna, [Quit, ToggleUI]);
 
@@ -42,7 +44,7 @@ impl Theme {
 
 impl Global for Theme {}
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Display, Clone, PartialEq)]
 pub enum ToolKind {
     /// Standard selection tool for clicking, dragging, and manipulating elements
     #[default]
@@ -106,14 +108,14 @@ pub fn tool_button(tool: ToolKind) -> ToolButton {
 
 #[derive(IntoElement)]
 pub struct ToolButton {
-    src: SharedString,
+    tool_kind: ToolKind,
     disabled: bool,
 }
 
 impl ToolButton {
     pub fn new(tool: ToolKind) -> Self {
         ToolButton {
-            src: tool.src(),
+            tool_kind: tool,
             disabled: false,
         }
     }
@@ -129,8 +131,19 @@ impl RenderOnce for ToolButton {
         let theme = Theme::get_global(cx);
         let state = GlobalState::get(cx);
 
+        let tool_kind = self.tool_kind.clone();
+        let selected = state.active_tool == tool_kind;
+
+        let icon_color = match (selected, self.disabled) {
+            (true, true) => theme.selected.alpha(0.3),
+            (true, false) => theme.selected,
+            (false, true) => theme.foreground_disabled,
+            (false, false) => theme.foreground_muted,
+        };
+
         div()
-            .size(px(27.))
+            .id(ElementId::Name(tool_kind.to_string().into()))
+            .size(px(25.))
             .flex()
             .flex_none()
             .items_center()
@@ -140,15 +153,15 @@ impl RenderOnce for ToolButton {
             .when(!self.disabled, |div| {
                 div.hover(|div| div.bg(theme.foreground.opacity(0.05)))
             })
+            .on_click(move |_, _, cx| {
+                let tool_kind = tool_kind.clone();
+                GlobalState::update_global(cx, |state, _| state.active_tool = tool_kind.clone())
+            })
             .child(
                 svg()
-                    .path(self.src)
+                    .path(self.tool_kind.src())
                     .size(px(15.))
-                    .text_color(if !self.disabled {
-                        theme.foreground_muted
-                    } else {
-                        theme.foreground_disabled
-                    }),
+                    .text_color(icon_color),
             )
     }
 }
@@ -189,10 +202,10 @@ impl RenderOnce for ToolStrip {
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(7.))
+            .gap(px(9.))
             .py(px(4.))
-            .child(tool_button(ToolKind::ArrowPointer).disabled(true))
-            .child(tool_button(ToolKind::Hand).disabled(true))
+            .child(tool_button(ToolKind::ArrowPointer))
+            .child(tool_button(ToolKind::Hand))
             .child(tool_divider())
             .child(tool_button(ToolKind::Prompt).disabled(true))
             .child(tool_divider())
@@ -301,6 +314,7 @@ impl Luna {
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
 
         div()
             .id("Luna")
@@ -317,6 +331,10 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
+            .map(|div| match state.active_tool {
+                ToolKind::Hand => div.cursor_grab(),
+                _ => div.cursor_default(),
+            })
             .on_action(cx.listener(Self::toggle_ui))
             .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
                 let toggle_ui_keystroke = Keystroke {
@@ -375,6 +393,11 @@ impl AssetSource for Assets {
     }
 }
 
+fn init_globals(cx: &mut App) {
+    cx.set_global(Theme::new());
+    cx.set_global(GlobalState::new());
+}
+
 fn main() {
     Application::new()
         .with_assets(Assets {
@@ -387,7 +410,8 @@ fn main() {
                 name: "Luna".into(),
                 items: vec![MenuItem::action("Quit", Quit)],
             }]);
-            cx.set_global(Theme::new());
+
+            init_globals(cx);
 
             cx.open_window(
                 WindowOptions {
