@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use anyhow::Result;
-use strum::{EnumIter, IntoEnumIterator as _};
+use strum::EnumIter;
 
 actions!(luna, [Quit, ToggleUI]);
 
@@ -18,6 +18,7 @@ pub struct Theme {
     pub canvas_color: Hsla,
     pub foreground: Hsla,
     pub foreground_muted: Hsla,
+    pub foreground_disabled: Hsla,
 }
 
 impl Theme {
@@ -27,6 +28,7 @@ impl Theme {
             canvas_color: hsla(224.0 / 360., 0.12, 0.19, 1.0),
             foreground: hsla(0.0, 1.0, 1.0, 1.0),
             foreground_muted: hsla(0.0, 1.0, 1.0, 0.6),
+            foreground_disabled: hsla(0.0, 1.0, 1.0, 0.3),
         }
     }
 }
@@ -42,61 +44,91 @@ impl Global for Theme {}
 #[derive(EnumIter)]
 pub enum ToolKind {
     ArrowPointer,
+    ArrowTool,
     Frame,
+    Hand,
     Image,
+    LineTool,
+    PenTool,
     Pencil,
+    Prompt,
     Shapes,
     Square,
     TextCursor,
+    ZoomIn,
+    ZoomOut,
 }
 
 impl ToolKind {
     pub fn src(self) -> SharedString {
         match self {
             ToolKind::ArrowPointer => "svg/arrow_pointer.svg".into(),
+            ToolKind::ArrowTool => "svg/arrow_tool.svg".into(),
             ToolKind::Frame => "svg/frame.svg".into(),
+            ToolKind::Hand => "svg/hand.svg".into(),
             ToolKind::Image => "svg/image.svg".into(),
+            ToolKind::LineTool => "svg/line_tool.svg".into(),
+            ToolKind::PenTool => "svg/pen_tool.svg".into(),
             ToolKind::Pencil => "svg/pencil.svg".into(),
+            ToolKind::Prompt => "svg/prompt.svg".into(),
             ToolKind::Shapes => "svg/shapes.svg".into(),
             ToolKind::Square => "svg/square.svg".into(),
             ToolKind::TextCursor => "svg/text_cursor.svg".into(),
+            ToolKind::ZoomIn => "svg/zoom_in.svg".into(),
+            ToolKind::ZoomOut => "svg/zoom_out.svg".into(),
         }
     }
 }
 
 /// Returns a [ToolButton]
-pub fn tool_button(tool: ToolKind) -> impl IntoElement {
+pub fn tool_button(tool: ToolKind) -> ToolButton {
     ToolButton::new(tool)
 }
 
 #[derive(IntoElement)]
 pub struct ToolButton {
     src: SharedString,
+    disabled: bool,
 }
 
 impl ToolButton {
     pub fn new(tool: ToolKind) -> Self {
-        ToolButton { src: tool.src() }
+        ToolButton {
+            src: tool.src(),
+            disabled: false,
+        }
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 }
 
 impl RenderOnce for ToolButton {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
 
         div()
-            .size(px(21.))
+            .size(px(27.))
             .flex()
             .flex_none()
             .items_center()
             .justify_center()
-            .rounded(px(2.))
-            .hover(|div| div.bg(theme.foreground.opacity(0.05)))
+            .rounded(px(3.))
+            .my_neg_1()
+            .when(!self.disabled, |div| {
+                div.hover(|div| div.bg(theme.foreground.opacity(0.05)))
+            })
             .child(
                 svg()
                     .path(self.src)
                     .size(px(15.))
-                    .text_color(theme.foreground_muted),
+                    .text_color(if !self.disabled {
+                        theme.foreground_muted
+                    } else {
+                        theme.foreground_disabled
+                    }),
             )
     }
 }
@@ -114,14 +146,48 @@ impl RenderOnce for ToolStrip {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
 
+        let tool_divider = || {
+            div()
+                .w_full()
+                .flex()
+                .items_center()
+                .px(px(4.))
+                .h(px(5.))
+                .child(
+                    div()
+                        .h_px()
+                        .w_full()
+                        .rounded_full()
+                        .bg(theme.foreground.alpha(0.16)),
+                )
+        };
+
         div()
             .id("tool_strip")
             .h_full()
             .w(px(25.))
             .flex()
             .flex_col()
-            .gap(px(3.))
-            .children(ToolKind::iter().map(tool_button))
+            .items_center()
+            .gap(px(7.))
+            .py(px(4.))
+            .child(tool_button(ToolKind::ArrowPointer).disabled(true))
+            .child(tool_button(ToolKind::Hand).disabled(true))
+            .child(tool_divider())
+            .child(tool_button(ToolKind::Prompt).disabled(true))
+            .child(tool_divider())
+            .child(tool_button(ToolKind::Pencil).disabled(true))
+            .child(tool_button(ToolKind::PenTool).disabled(true))
+            .child(tool_button(ToolKind::TextCursor).disabled(true))
+            .child(tool_divider())
+            .child(tool_button(ToolKind::Frame).disabled(true))
+            .child(tool_button(ToolKind::Square).disabled(true))
+            .child(tool_button(ToolKind::LineTool).disabled(true))
+            .child(tool_divider())
+            .child(tool_button(ToolKind::Image).disabled(true))
+            .child(tool_button(ToolKind::Shapes).disabled(true))
+            .child(tool_divider())
+            .child(tool_button(ToolKind::ArrowTool).disabled(true))
     }
 }
 
@@ -290,7 +356,7 @@ fn main() {
                     window_background: WindowBackgroundAppearance::Transparent,
                     ..Default::default()
                 },
-                |window, cx| cx.new(|cx| Luna::new(cx)),
+                |_window, cx| cx.new(|cx| Luna::new(cx)),
             )
             .unwrap();
         });
