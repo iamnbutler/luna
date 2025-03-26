@@ -128,7 +128,7 @@ impl Render for Luna {
 
                 cx.stop_propagation();
             }))
-            .when(self.hide_sidebar, |this| this.child(Sidebar {}))
+            .when(!self.hide_sidebar, |this| this.child(Sidebar {}))
             .child(div().size_full().flex_1().bg(theme.canvas_color))
     }
 }
