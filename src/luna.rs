@@ -10,7 +10,7 @@ use gpui::{
 use anyhow::Result;
 use strum::Display;
 
-actions!(luna, [Quit, ToggleUI]);
+actions!(luna, [Quit, ToggleUI, HandTool, SelectionTool]);
 
 const TITLEBAR_HEIGHT: f32 = 31.;
 
@@ -356,6 +356,21 @@ impl Luna {
         self.hide_sidebar(!self.hide_sidebar);
         cx.notify();
     }
+
+    fn activate_hand_tool(&mut self, _: &HandTool, _window: &mut Window, cx: &mut Context<Self>) {
+        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::Hand);
+        cx.notify();
+    }
+
+    fn activate_selection_tool(
+        &mut self,
+        _: &SelectionTool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::ArrowPointer);
+        cx.notify();
+    }
 }
 
 impl Render for Luna {
@@ -383,21 +398,22 @@ impl Render for Luna {
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::toggle_ui))
+            .on_action(cx.listener(Self::activate_hand_tool))
+            .on_action(cx.listener(Self::activate_selection_tool))
             .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                let toggle_ui_keystroke = Keystroke {
-                    modifiers: Modifiers {
-                        control: false,
-                        alt: false,
-                        shift: false,
-                        platform: true,
-                        function: false,
-                    },
-                    key: ".".into(),
-                    key_char: None,
-                };
+                let toggle_ui = keystroke_builder("cmd-.");
+                let selection_tool = keystroke_builder("v");
+                let hand_tool = keystroke_builder("h");
 
-                if e.keystroke == toggle_ui_keystroke {
+                if e.keystroke == toggle_ui {
                     this.toggle_ui(&ToggleUI::default(), window, cx);
+                }
+
+                if e.keystroke == hand_tool {
+                    this.activate_hand_tool(&Default::default(), window, cx);
+                }
+                if e.keystroke == selection_tool {
+                    this.activate_selection_tool(&Default::default(), window, cx);
                 }
 
                 cx.stop_propagation();
