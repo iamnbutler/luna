@@ -119,7 +119,7 @@ impl Icon {
             Icon::ArrowDownRight => "svg/arrow_down_right.svg".into(),
             Icon::Frame => "svg/frame.svg".into(),
             Icon::Image => "svg/image.svg".into(),
-            Icon::Path => "svg/pen.svg".into(),
+            Icon::Path => "svg/pen_tool.svg".into(),
             Icon::Square => "svg/square.svg".into(),
             Icon::Text => "svg/text_cursor.svg".into(),
         }
@@ -386,6 +386,7 @@ impl RenderOnce for ToolStrip {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum ElementKind {
     Frame,
     ShapeSquare,
@@ -461,6 +462,27 @@ impl RenderOnce for LayerListItem {
 }
 
 #[derive(IntoElement)]
+struct LayerList {}
+
+impl RenderOnce for LayerList {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state = GlobalState::get(cx);
+
+        let mut layers = div().flex().flex_col().flex_1().pt_1();
+
+        // Add all elements from GlobalState to the layer list
+        for element in &state.elements {
+            layers = layers.child(
+                LayerListItem::new(element.kind.clone(), element.name.clone())
+                    .selected(element.selected),
+            );
+        }
+
+        layers
+    }
+}
+
+#[derive(IntoElement)]
 struct Sidebar {}
 
 impl RenderOnce for Sidebar {
@@ -482,41 +504,7 @@ impl RenderOnce for Sidebar {
                     .flex_1()
                     .w_full()
                     .child(ToolStrip::new())
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .pt_1()
-                            .child(LayerListItem::new(ElementKind::Frame, "Frame 2"))
-                            .child(
-                                LayerListItem::new(ElementKind::ShapeSquare, "Rectangle 29")
-                                    .selected(true),
-                            )
-                            .child(LayerListItem::new(
-                                ElementKind::Image,
-                                "CleanShot 2024-12-07 at 22.30.53@2x 1",
-                            ))
-                            .child(LayerListItem::new(
-                                ElementKind::Text,
-                                "POLYMORPHIC COLOR GENERATOR",
-                            ))
-                            .child(LayerListItem::new(ElementKind::Path, "Vector"))
-                            .child(LayerListItem::new(ElementKind::Frame, "Sidebar"))
-                            .child(LayerListItem::new(ElementKind::ShapeCircle, "Circle 1"))
-                            .child(LayerListItem::new(ElementKind::Text, "Header Text"))
-                            .child(LayerListItem::new(ElementKind::Image, "Background Image"))
-                            .child(LayerListItem::new(ElementKind::ShapeSquare, "Button Shape"))
-                            .child(LayerListItem::new(ElementKind::Text, "Button Label"))
-                            .child(LayerListItem::new(ElementKind::Path, "{icon}"))
-                            .child(LayerListItem::new(ElementKind::Frame, "Footer"))
-                            .child(LayerListItem::new(ElementKind::Text, "Copyright Text"))
-                            .child(LayerListItem::new(ElementKind::Image, "Logo"))
-                            .child(LayerListItem::new(
-                                ElementKind::ShapeSquare,
-                                "Menu Container",
-                            )),
-                    ),
+                    .child(LayerList {}),
             );
 
         div()
@@ -538,6 +526,7 @@ impl RenderOnce for Sidebar {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ElementStyles {
     border_width: f32,
     border_color: Hsla,
@@ -573,6 +562,11 @@ impl Shape {
             style: ElementStyles::default(),
         }
     }
+
+    pub fn with_style(mut self, style: ElementStyles) -> Self {
+        self.style = style;
+        self
+    }
 }
 
 impl RenderOnce for Shape {
@@ -593,6 +587,15 @@ impl RenderOnce for Shape {
     }
 }
 
+/// Represents a single element on the canvas
+pub struct Element {
+    pub id: String,
+    pub kind: ElementKind,
+    pub name: SharedString,
+    pub styles: ElementStyles,
+    pub selected: bool,
+}
+
 /// A temporary place to throw a grab bag of various states until
 /// they can be organize and structured more clearly.
 ///
@@ -602,6 +605,7 @@ struct GlobalState {
     active_tool: ToolKind,
     current_border_color: Hsla,
     current_background_color: Hsla,
+    elements: Vec<Element>,
 }
 
 impl GlobalState {
@@ -610,15 +614,81 @@ impl GlobalState {
             active_tool: ToolKind::default(),
             current_border_color: gpui::white(),
             current_background_color: gpui::black(),
+            elements: vec![
+                // Add some initial elements for testing
+                Element {
+                    id: "rect1".to_string(),
+                    kind: ElementKind::ShapeSquare,
+                    name: "Rectangle 1".into(),
+                    styles: ElementStyles {
+                        position: Point::new(50.0, 50.0),
+                        size: Size::new(100.0, 100.0),
+                        background_color: gpui::red(),
+                        ..Default::default()
+                    },
+                    selected: false,
+                },
+                Element {
+                    id: "rect2".to_string(),
+                    kind: ElementKind::ShapeSquare,
+                    name: "Rectangle 2".into(),
+                    styles: ElementStyles {
+                        position: Point::new(200.0, 100.0),
+                        size: Size::new(150.0, 80.0),
+                        background_color: gpui::blue(),
+                        ..Default::default()
+                    },
+                    selected: true,
+                },
+            ],
         }
     }
 
     pub fn get(cx: &App) -> &GlobalState {
         cx.global::<GlobalState>()
     }
+
+    pub fn add_element(&mut self, element: Element) {
+        self.elements.push(element);
+    }
 }
 
 impl Global for GlobalState {}
+
+/// Canvas is responsible for rendering all elements
+#[derive(IntoElement)]
+pub struct Canvas {}
+
+impl Canvas {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl RenderOnce for Canvas {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
+
+        // Container for all canvas elements
+        let mut canvas = div()
+            .id("canvas")
+            .size_full()
+            .flex_1()
+            .relative()
+            .bg(theme.canvas_color);
+
+        // Add all elements from GlobalState to the canvas
+        for element in &state.elements {
+            canvas = canvas.child(
+                Shape::new(ElementId::Name(element.id.clone().into()))
+                    .with_style(element.styles.clone()),
+            );
+        }
+
+        canvas
+    }
+}
 
 struct Luna {
     hide_sidebar: bool,
@@ -690,9 +760,12 @@ impl Luna {
 }
 
 impl Render for Luna {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
         let state = GlobalState::get(cx);
+
+        // Create the canvas component
+        let canvas = Canvas::new();
 
         div()
             .id("Luna")
@@ -737,13 +810,7 @@ impl Render for Luna {
                 cx.stop_propagation();
             }))
             .when(!self.hide_sidebar, |this| this.child(Sidebar {}))
-            .child(
-                div()
-                    .size_full()
-                    .flex_1()
-                    .bg(theme.canvas_color)
-                    .child(Shape::new("foo".into())),
-            )
+            .child(canvas)
     }
 }
 
