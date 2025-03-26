@@ -103,15 +103,25 @@ pub fn keystroke_builder(str: &str) -> Keystroke {
 
 #[derive(Debug, Display, Clone, PartialEq)]
 pub enum Icon {
-    ArrowDownRight,
     ArrowCounterClockwise,
+    ArrowDownRight,
+    Frame,
+    Image,
+    Path,
+    Square,
+    Text,
 }
 
 impl Icon {
     pub fn src(self) -> SharedString {
         match self {
-            Icon::ArrowDownRight => "svg/arrow_down_right.svg".into(),
             Icon::ArrowCounterClockwise => "svg/arrow_counter_clockwise.svg".into(),
+            Icon::ArrowDownRight => "svg/arrow_down_right.svg".into(),
+            Icon::Frame => "svg/frame.svg".into(),
+            Icon::Image => "svg/image.svg".into(),
+            Icon::Path => "svg/pen.svg".into(),
+            Icon::Square => "svg/square.svg".into(),
+            Icon::Text => "svg/text_cursor.svg".into(),
         }
     }
 }
@@ -299,21 +309,6 @@ impl RenderOnce for CurrentColorTool {
                     }])
                     .child(div().rounded(px(2.)).size_full().bg(self.background)),
             )
-        // .child(
-        //     svg()
-        //         .path(Icon::ArrowDownRight.src())
-        //         .id("swap")
-        //         .size(px(11.))
-        //         .text_color(theme.foreground_muted)
-        //         .absolute()
-        //         .top(-px(4.))
-        //         .right(-px(6.))
-        //         .on_click(move |_, _, cx| {
-        //             print!("swapping");
-        //             cx.dispatch_action(&SwapCurrentColors);
-        //             cx.stop_propagation();
-        //         }),
-        // )
     }
 }
 
@@ -391,6 +386,80 @@ impl RenderOnce for ToolStrip {
     }
 }
 
+pub enum ElementKind {
+    Frame,
+    ShapeSquare,
+    ShapeCircle,
+    Text,
+    Image,
+    Path,
+}
+
+impl ElementKind {
+    pub fn icon_src(&self) -> SharedString {
+        match self {
+            ElementKind::ShapeSquare => Icon::Square.src(),
+            ElementKind::Text => Icon::Text.src(),
+            ElementKind::Image => Icon::Image.src(),
+            ElementKind::Path => Icon::Path.src(),
+            _ => Icon::Frame.src(),
+        }
+    }
+}
+
+#[derive(IntoElement)]
+pub struct LayerListItem {
+    kind: ElementKind,
+    name: SharedString,
+    selected: bool,
+}
+
+impl LayerListItem {
+    pub fn new(kind: ElementKind, name: impl Into<SharedString>) -> Self {
+        Self {
+            kind,
+            name: name.into(),
+            selected: false,
+        }
+    }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+}
+
+impl RenderOnce for LayerListItem {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = Theme::get_global(cx);
+
+        let text_color = if self.selected {
+            theme.foreground
+        } else {
+            theme.foreground_muted
+        };
+
+        div()
+            .id(ElementId::Name(format!("layer-{}", self.name).into()))
+            .pl(px(10.))
+            .flex()
+            .items_center()
+            .rounded_tl(px(4.))
+            .rounded_bl(px(4.))
+            .when(self.selected, |div| div.bg(theme.selected.alpha(0.12)))
+            .active(|div| div.bg(theme.foreground.opacity(0.05)))
+            .text_color(text_color)
+            .gap(px(10.))
+            .child(
+                svg()
+                    .path(self.kind.icon_src())
+                    .size(px(11.))
+                    .text_color(text_color.alpha(0.8)),
+            )
+            .child(self.name)
+    }
+}
+
 #[derive(IntoElement)]
 struct Sidebar {}
 
@@ -407,7 +476,48 @@ impl RenderOnce for Sidebar {
             .rounded_bl(px(15.))
             .bg(theme.background_color)
             .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
-            .child(div().flex().flex_1().w_full().child(ToolStrip::new()));
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .w_full()
+                    .child(ToolStrip::new())
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .pt_1()
+                            .child(LayerListItem::new(ElementKind::Frame, "Frame 2"))
+                            .child(
+                                LayerListItem::new(ElementKind::ShapeSquare, "Rectangle 29")
+                                    .selected(true),
+                            )
+                            .child(LayerListItem::new(
+                                ElementKind::Image,
+                                "CleanShot 2024-12-07 at 22.30.53@2x 1",
+                            ))
+                            .child(LayerListItem::new(
+                                ElementKind::Text,
+                                "POLYMORPHIC COLOR GENERATOR",
+                            ))
+                            .child(LayerListItem::new(ElementKind::Path, "Vector"))
+                            .child(LayerListItem::new(ElementKind::Frame, "Sidebar"))
+                            .child(LayerListItem::new(ElementKind::ShapeCircle, "Circle 1"))
+                            .child(LayerListItem::new(ElementKind::Text, "Header Text"))
+                            .child(LayerListItem::new(ElementKind::Image, "Background Image"))
+                            .child(LayerListItem::new(ElementKind::ShapeSquare, "Button Shape"))
+                            .child(LayerListItem::new(ElementKind::Text, "Button Label"))
+                            .child(LayerListItem::new(ElementKind::Path, "{icon}"))
+                            .child(LayerListItem::new(ElementKind::Frame, "Footer"))
+                            .child(LayerListItem::new(ElementKind::Text, "Copyright Text"))
+                            .child(LayerListItem::new(ElementKind::Image, "Logo"))
+                            .child(LayerListItem::new(
+                                ElementKind::ShapeSquare,
+                                "Menu Container",
+                            )),
+                    ),
+            );
 
         div()
             .id("titlebar")
