@@ -1,6 +1,7 @@
 use gpui::{
-    actions, div, hsla, prelude::*, App, Application, FocusHandle, Focusable, Hsla, IntoElement,
-    Menu, MenuItem, Window, WindowOptions,
+    actions, div, hsla, linear_color_stop, linear_gradient, point, prelude::*, px, App,
+    Application, FocusHandle, Focusable, Hsla, IntoElement, Menu, MenuItem, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowOptions,
 };
 
 actions!(set_menus, [Quit]);
@@ -16,6 +17,25 @@ impl Theme {
             background_color: hsla(222.0 / 360.0, 0.12, 0.2, 1.0),
             text_color: hsla(0.0, 1.0, 1.0, 1.0),
         }
+    }
+}
+
+#[derive(IntoElement)]
+struct Titlebar {}
+
+impl RenderOnce for Titlebar {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        div()
+            .id("titlebar")
+            .h(px(30.))
+            .w_full()
+            .border_b_1()
+            .border_color(gpui::white().alpha(0.08))
+            .bg(linear_gradient(
+                180.,
+                linear_color_stop(gpui::white().alpha(0.02), 0.0),
+                linear_color_stop(gpui::transparent_white(), 1.0),
+            ))
     }
 }
 
@@ -50,6 +70,9 @@ impl Render for Luna {
             .text_xs()
             .bg(self.theme.background_color)
             .text_color(self.theme.text_color)
+            .border_1()
+            .border_color(gpui::white().alpha(0.08))
+            .child(Titlebar {})
     }
 }
 
@@ -68,9 +91,18 @@ fn main() {
             items: vec![MenuItem::action("Quit", Quit)],
         }]);
 
-        cx.open_window(WindowOptions::default(), |_window, cx| {
-            cx.new(|cx| Luna::new(cx))
-        })
+        cx.open_window(
+            WindowOptions {
+                titlebar: Some(TitlebarOptions {
+                    title: Some("Luna".into()),
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(8.0), px(8.0))),
+                }),
+                window_background: WindowBackgroundAppearance::Transparent,
+                ..Default::default()
+            },
+            |_window, cx| cx.new(|cx| Luna::new(cx)),
+        )
         .unwrap();
     });
 }
