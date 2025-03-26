@@ -10,7 +10,17 @@ use gpui::{
 use anyhow::Result;
 use strum::Display;
 
-actions!(luna, [Quit, ToggleUI, HandTool, SelectionTool]);
+actions!(
+    luna,
+    [
+        Quit,
+        ToggleUI,
+        HandTool,
+        SelectionTool,
+        ResetCurrentColors,
+        SwapCurrentColors
+    ]
+);
 
 const TITLEBAR_HEIGHT: f32 = 31.;
 
@@ -88,6 +98,21 @@ pub fn keystroke_builder(str: &str) -> Keystroke {
         modifiers,
         key: key.into(),
         key_char,
+    }
+}
+
+#[derive(Debug, Display, Clone, PartialEq)]
+pub enum Icon {
+    ArrowDownRight,
+    ArrowCounterClockwise,
+}
+
+impl Icon {
+    pub fn src(self) -> SharedString {
+        match self {
+            Icon::ArrowDownRight => "svg/arrow_down_right.svg".into(),
+            Icon::ArrowCounterClockwise => "svg/arrow_counter_clockwise.svg".into(),
+        }
     }
 }
 
@@ -214,6 +239,121 @@ impl RenderOnce for ToolButton {
 }
 
 #[derive(IntoElement)]
+pub struct CurrentColorTool {
+    border: Hsla,
+    background: Hsla,
+}
+
+impl CurrentColorTool {
+    pub fn new() -> Self {
+        Self {
+            border: gpui::white(),
+            background: gpui::black(),
+        }
+    }
+}
+
+impl RenderOnce for CurrentColorTool {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
+
+        div()
+            .id("current-color-tool")
+            .group("current-color-tool")
+            .flex()
+            .flex_col()
+            .gap(px(3.))
+            .w(px(25.))
+            .child(
+                div()
+                    .w_full()
+                    .gap(px(7.))
+                    .flex()
+                    .child(
+                        div()
+                            .id("reset")
+                            .group("reset")
+                            .flex_1()
+                            .h_full()
+                            .child(
+                                svg()
+                                    .path(Icon::ArrowCounterClockwise.src())
+                                    .size(px(11.))
+                                    .text_color(theme.foreground_muted)
+                                    .group_hover("reset", |svg| svg.text_color(theme.foreground)),
+                            )
+                            .on_click(move |_, _, cx| {
+                                print!("resetting");
+
+                                cx.dispatch_action(&ResetCurrentColors);
+                                cx.stop_propagation();
+                            }),
+                    )
+                    .child(
+                        div()
+                            .id("swap")
+                            .group("swap")
+                            .flex_1()
+                            .h_full()
+                            .child(
+                                svg()
+                                    .path(Icon::ArrowDownRight.src())
+                                    .size(px(11.))
+                                    .text_color(theme.foreground_muted)
+                                    .group_hover("swap", |svg| svg.text_color(theme.foreground)),
+                            )
+                            .on_click(move |_, _, cx| {
+                                print!("swapping");
+                                cx.dispatch_action(&SwapCurrentColors);
+                                cx.stop_propagation();
+                            }),
+                    ),
+            )
+            .child(
+                div()
+                    .relative()
+                    .size(px(25.))
+                    .child(
+                        div()
+                            .id("current-forground-color")
+                            .absolute()
+                            .bottom_0()
+                            .right_0()
+                            .size(px(17.))
+                            .rounded(px(2.))
+                            .border_1()
+                            .border_color(theme.foreground.alpha(0.16))
+                            .child(
+                                div()
+                                    .size_full()
+                                    .border(px(3.))
+                                    .border_color(self.border)
+                                    .child(
+                                        div()
+                                            .size_full()
+                                            .border_1()
+                                            .border_color(theme.foreground.alpha(0.16)),
+                                    ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .id("current-background-color")
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size(px(17.))
+                            .rounded(px(2.))
+                            .border_1()
+                            .border_color(theme.foreground.alpha(0.16))
+                            .child(div().size_full().bg(self.background)),
+                    ),
+            )
+    }
+}
+
+#[derive(IntoElement)]
 struct ToolStrip {}
 
 impl ToolStrip {
@@ -231,43 +371,59 @@ impl RenderOnce for ToolStrip {
                 .w_full()
                 .flex()
                 .items_center()
-                .px(px(4.))
+                .px(px(9.))
                 .h(px(5.))
                 .child(
                     div()
                         .h_px()
                         .w_full()
                         .rounded_full()
-                        .bg(theme.foreground.alpha(0.16)),
+                        .bg(theme.foreground.alpha(0.12)),
                 )
         };
 
         div()
             .id("tool_strip")
             .h_full()
-            .w(px(25.))
+            .w(px(35.))
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(9.))
+            .justify_between()
             .py(px(4.))
-            .child(tool_button(ToolKind::ArrowPointer))
-            .child(tool_button(ToolKind::Hand))
-            .child(tool_divider())
-            .child(tool_button(ToolKind::Prompt).disabled(true))
-            .child(tool_divider())
-            .child(tool_button(ToolKind::Pencil).disabled(true))
-            .child(tool_button(ToolKind::Pen).disabled(true))
-            .child(tool_button(ToolKind::TextCursor).disabled(true))
-            .child(tool_divider())
-            .child(tool_button(ToolKind::Frame).disabled(true))
-            .child(tool_button(ToolKind::Square).disabled(true))
-            .child(tool_button(ToolKind::Line).disabled(true))
-            .child(tool_divider())
-            .child(tool_button(ToolKind::Image).disabled(true))
-            .child(tool_button(ToolKind::ElementLibrary).disabled(true))
-            .child(tool_divider())
-            .child(tool_button(ToolKind::Arrow).disabled(true))
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(9.))
+                    .child(tool_button(ToolKind::ArrowPointer))
+                    .child(tool_button(ToolKind::Hand))
+                    .child(tool_divider())
+                    .child(tool_button(ToolKind::Prompt).disabled(true))
+                    .child(tool_divider())
+                    .child(tool_button(ToolKind::Pencil).disabled(true))
+                    .child(tool_button(ToolKind::Pen).disabled(true))
+                    .child(tool_button(ToolKind::TextCursor).disabled(true))
+                    .child(tool_divider())
+                    .child(tool_button(ToolKind::Frame).disabled(true))
+                    .child(tool_button(ToolKind::Square).disabled(true))
+                    .child(tool_button(ToolKind::Line).disabled(true))
+                    .child(tool_divider())
+                    .child(tool_button(ToolKind::Image).disabled(true))
+                    .child(tool_button(ToolKind::ElementLibrary).disabled(true))
+                    .child(tool_divider())
+                    .child(tool_button(ToolKind::Arrow).disabled(true)),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(CurrentColorTool::new()),
+            )
     }
 }
 
@@ -285,7 +441,6 @@ impl RenderOnce for Sidebar {
             .w(px(260.))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .px(px(4.))
             .bg(theme.background_color)
             .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
             .child(div().flex().flex_1().w_full().child(ToolStrip::new()));
@@ -316,12 +471,16 @@ impl RenderOnce for Sidebar {
 /// muliple windows, as the global state will apply to all windows.
 struct GlobalState {
     active_tool: ToolKind,
+    current_border_color: Hsla,
+    current_background_color: Hsla,
 }
 
 impl GlobalState {
     pub fn new() -> Self {
         Self {
             active_tool: ToolKind::default(),
+            current_border_color: gpui::white(),
+            current_background_color: gpui::black(),
         }
     }
 
@@ -371,6 +530,34 @@ impl Luna {
         GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::ArrowPointer);
         cx.notify();
     }
+
+    fn swap_current_colors(
+        &mut self,
+        _: &SwapCurrentColors,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        GlobalState::update_global(cx, |state, _| {
+            std::mem::swap(
+                &mut state.current_border_color,
+                &mut state.current_background_color,
+            );
+        });
+        cx.notify();
+    }
+
+    fn reset_current_colors(
+        &mut self,
+        _: &ResetCurrentColors,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        GlobalState::update_global(cx, |state, _| {
+            state.current_border_color = gpui::white();
+            state.current_background_color = gpui::black();
+        });
+        cx.notify();
+    }
 }
 
 impl Render for Luna {
@@ -400,6 +587,8 @@ impl Render for Luna {
             .on_action(cx.listener(Self::toggle_ui))
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
+            .on_action(cx.listener(Self::reset_current_colors))
+            .on_action(cx.listener(Self::swap_current_colors))
             .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
                 let toggle_ui = keystroke_builder("cmd-.");
                 let selection_tool = keystroke_builder("v");
