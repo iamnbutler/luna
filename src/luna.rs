@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu, MenuItem,
-    Modifiers, SharedString, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance,
-    WindowOptions,
+    Modifiers, Point, SharedString, Size, TitlebarOptions, UpdateGlobal, Window,
+    WindowBackgroundAppearance, WindowOptions,
 };
 
 use anyhow::Result;
@@ -538,6 +538,61 @@ impl RenderOnce for Sidebar {
     }
 }
 
+pub struct ElementStyles {
+    border_width: f32,
+    border_color: Hsla,
+    background_color: Hsla,
+    corner_radius: f32,
+    size: Size<f32>,
+    position: Point<f32>,
+}
+
+impl Default for ElementStyles {
+    fn default() -> Self {
+        ElementStyles {
+            border_width: 1.0,
+            border_color: gpui::black(),
+            background_color: gpui::white(),
+            corner_radius: 0.0,
+            size: Size::new(100.0, 100.0),
+            position: Point::new(0.0, 0.0),
+        }
+    }
+}
+
+#[derive(IntoElement)]
+pub struct Shape {
+    id: ElementId,
+    style: ElementStyles,
+}
+
+impl Shape {
+    pub fn new(id: ElementId) -> Self {
+        Shape {
+            id,
+            style: ElementStyles::default(),
+        }
+    }
+}
+
+impl RenderOnce for Shape {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = Theme::get_global(cx);
+
+        div()
+            .id(self.id)
+            .absolute()
+            .left(px(self.style.position.x))
+            .top(px(self.style.position.y))
+            .w(px(self.style.size.width))
+            .h(px(self.style.size.height))
+            .bg(self.style.background_color)
+            .border(px(self.style.border_width))
+            .border_color(self.style.border_color)
+            .rounded(px(self.style.corner_radius))
+    }
+}
+
 /// A temporary place to throw a grab bag of various states until
 /// they can be organize and structured more clearly.
 ///
@@ -682,7 +737,13 @@ impl Render for Luna {
                 cx.stop_propagation();
             }))
             .when(!self.hide_sidebar, |this| this.child(Sidebar {}))
-            .child(div().size_full().flex_1().bg(theme.canvas_color))
+            .child(
+                div()
+                    .size_full()
+                    .flex_1()
+                    .bg(theme.canvas_color)
+                    .child(Shape::new("foo".into())),
+            )
     }
 }
 
