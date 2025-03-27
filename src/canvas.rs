@@ -238,7 +238,7 @@ impl Canvas {
                 // Get the computed layout
                 if let Ok(layout) = self.taffy.layout(*taffy_node) {
                     // Update our node layout
-                    let mut node_common = node.common_mut();
+                    let node_common = node.common_mut();
                     node_common.layout = Some(Layout {
                         order: layout.order,
                         size: taffy::prelude::Size {

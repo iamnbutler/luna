@@ -1,5 +1,8 @@
-use gpui::{Hsla, Point, Size};
-use std::{any::Any, fmt::{Debug, Display}};
+use gpui::{px, solid_background, Hsla, Point, Size};
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+};
 use taffy::prelude::*;
 
 /// A unique identifier for a canvas node
@@ -42,43 +45,43 @@ pub enum NodeType {
 pub struct NodeCommon {
     /// Unique identifier for this node
     pub id: NodeId,
-    
+
     /// Human-readable name for this node
     pub name: String,
-    
+
     /// Type of node
     pub node_type: NodeType,
-    
+
     /// Parent node (if any)
     pub parent: Option<NodeId>,
-    
+
     /// Children of this node (if any)
     pub children: Vec<NodeId>,
-    
+
     /// The layout style for this node (ties into taffy)
     pub style: Style,
-    
+
     /// The computed layout (filled in during layout calculation)
     pub layout: Option<Layout>,
-    
+
     /// Fill color for the node
     pub fill: Option<Hsla>,
-    
+
     /// Border color for the node
     pub border_color: Option<Hsla>,
-    
+
     /// Border width for the node
     pub border_width: f32,
-    
+
     /// Corner radius for rounded elements
     pub corner_radius: f32,
-    
+
     /// Whether this node is visible
     pub visible: bool,
-    
+
     /// Transform properties (rotation in degrees)
     pub rotation: f32,
-    
+
     /// Node opacity (0.0 to 1.0)
     pub opacity: f32,
 }
@@ -141,36 +144,36 @@ impl NodeCommon {
         self.style.size.width = Dimension::Length(width);
         self.style.size.height = Dimension::Length(height);
     }
-    
+
     /// Set the fill color
     pub fn set_fill(&mut self, color: Option<Hsla>) {
         self.fill = color;
     }
-    
+
     /// Set the border properties
     pub fn set_border(&mut self, color: Option<Hsla>, width: f32) {
         self.border_color = color;
         self.border_width = width;
-        
+
         // Update taffy style
         self.style.border.left = LengthPercentage::Length(width);
         self.style.border.right = LengthPercentage::Length(width);
         self.style.border.top = LengthPercentage::Length(width);
         self.style.border.bottom = LengthPercentage::Length(width);
     }
-    
+
     /// Set corner radius for rounded elements
     pub fn set_corner_radius(&mut self, radius: f32) {
         self.corner_radius = radius;
     }
-    
+
     /// Add a child to this node
     pub fn add_child(&mut self, child_id: NodeId) {
         if !self.children.contains(&child_id) {
             self.children.push(child_id);
         }
     }
-    
+
     /// Remove a child from this node
     pub fn remove_child(&mut self, child_id: NodeId) {
         self.children.retain(|id| *id != child_id);
@@ -182,7 +185,7 @@ trait CanvasNodeObject: 'static {
     // These are our escape hatches for downcasting, similar to ElementObject in gpui
     fn inner_node(&mut self) -> &mut dyn Any;
     fn inner_node_ref(&self) -> &dyn Any;
-    
+
     // Forward the common operations that don't require knowing the concrete type
     fn common(&self) -> &NodeCommon;
     fn common_mut(&mut self) -> &mut NodeCommon;
@@ -195,20 +198,20 @@ trait CanvasNodeObject: 'static {
 pub trait CanvasNode: Debug + 'static + Sized {
     /// Get the common properties of this node
     fn common(&self) -> &NodeCommon;
-    
+
     /// Get mutable access to common properties
     fn common_mut(&mut self) -> &mut NodeCommon;
-    
+
     /// Get the node's ID
     fn id(&self) -> NodeId {
         self.common().id
     }
-    
-    /// Get the node type 
+
+    /// Get the node type
     fn node_type(&self) -> NodeType {
         self.common().node_type.clone()
     }
-    
+
     /// Determine if this node should be rendered
     fn should_render(&self) -> bool {
         self.common().visible
@@ -230,27 +233,27 @@ impl<T: CanvasNode> CanvasNodeObject for NodeAdapter<T> {
     fn inner_node(&mut self) -> &mut dyn Any {
         &mut self.node
     }
-    
+
     fn inner_node_ref(&self) -> &dyn Any {
         &self.node
     }
-    
+
     fn common(&self) -> &NodeCommon {
         self.node.common()
     }
-    
+
     fn common_mut(&mut self) -> &mut NodeCommon {
         self.node.common_mut()
     }
-    
+
     fn id(&self) -> NodeId {
         self.node.id()
     }
-    
+
     fn node_type(&self) -> NodeType {
         self.node.node_type()
     }
-    
+
     fn should_render(&self) -> bool {
         self.node.should_render()
     }
@@ -264,37 +267,37 @@ impl AnyNode {
     pub fn new<T: CanvasNode>(node: T) -> Self {
         Self(Box::new(NodeAdapter::new(node)))
     }
-    
+
     /// Attempt to downcast to a specific node type (immutable)
     pub fn downcast_ref<T: CanvasNode>(&self) -> Option<&T> {
         self.0.inner_node_ref().downcast_ref::<T>()
     }
-    
+
     /// Attempt to downcast to a specific node type (mutable)
     pub fn downcast_mut<T: CanvasNode>(&mut self) -> Option<&mut T> {
         self.0.inner_node().downcast_mut::<T>()
     }
-    
+
     /// Get a reference to the common properties
     pub fn common(&self) -> &NodeCommon {
         self.0.common()
     }
-    
+
     /// Get a mutable reference to the common properties
     pub fn common_mut(&mut self) -> &mut NodeCommon {
         self.0.common_mut()
     }
-    
+
     /// Get the node's ID
     pub fn id(&self) -> NodeId {
         self.0.id()
     }
-    
+
     /// Get the node type
     pub fn node_type(&self) -> NodeType {
         self.0.node_type()
     }
-    
+
     /// Determine if this node should be rendered
     pub fn should_render(&self) -> bool {
         self.0.should_render()
@@ -342,7 +345,7 @@ impl RectangleNode {
             common: NodeCommon::new(id, NodeType::Rectangle),
         }
     }
-    
+
     /// Create a rectangle with specific dimensions and position
     pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
         let mut node = Self::new(id);
@@ -356,7 +359,7 @@ impl CanvasNode for RectangleNode {
     fn common(&self) -> &NodeCommon {
         &self.common
     }
-    
+
     fn common_mut(&mut self) -> &mut NodeCommon {
         &mut self.common
     }
@@ -364,53 +367,162 @@ impl CanvasNode for RectangleNode {
 
 impl ShapeNode for RectangleNode {}
 
-// TODO: This is a placeholder implementation that will need to be completed later
-// Implementing Element for nodes will be complex as mentioned in the requirements
+// Implementing Element trait for RectangleNode
 impl gpui::Element for RectangleNode {
-    // The type of state returned from request_layout
-    type RequestLayoutState = (); // TODO: Define proper state type
+    // For RectangleNode, we just need to store the layout ID
+    type RequestLayoutState = gpui::LayoutId;
 
-    // The type of state returned from prepaint
-    type PrepaintState = (); // TODO: Define proper state type
+    // For prepaint, we store the hitbox ID for interaction
+    type PrepaintState = Option<gpui::Hitbox>;
 
     fn id(&self) -> Option<gpui::ElementId> {
-        // TODO: Implement this
-        None
+        // Use the node's ID as the element ID - use &str instead of String
+        let id_str = format!("node-{}", self.common.id.0);
+        Some(gpui::ElementId::Name(id_str.into()))
     }
 
     fn request_layout(
         &mut self,
         _id: Option<&gpui::GlobalElementId>,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::App,
+        window: &mut gpui::Window,
+        cx: &mut gpui::App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        // TODO: Implement this
-        todo!("Implement request_layout for RectangleNode")
+        // Create a GPUI style from our node's properties
+        let mut style = gpui::Style::default();
+
+        // Set position type (relative/absolute)
+        style.position = self.common.style.position;
+
+        // Convert taffy dimensions to GPUI dimensions for width/height
+        if let Dimension::Length(width) = self.common.style.size.width {
+            style.size.width = px(width).into();
+        }
+
+        if let Dimension::Length(height) = self.common.style.size.height {
+            style.size.height = px(height).into();
+        }
+
+        // Set fill color from our node properties
+        if let Some(fill) = self.common.fill {
+            style.background = Some(solid_background(fill).into());
+        }
+
+        // Set border properties
+        if self.common.border_width > 0.0 {
+            style.border_widths = gpui::Edges {
+                top: gpui::Pixels(self.common.border_width).into(),
+                right: gpui::Pixels(self.common.border_width).into(),
+                bottom: gpui::Pixels(self.common.border_width).into(),
+                left: gpui::Pixels(self.common.border_width).into(),
+            };
+
+            if let Some(border_color) = self.common.border_color {
+                style.border_color = Some(border_color);
+            }
+        }
+
+        // Set corner radius
+        if self.common.corner_radius > 0.0 {
+            style.corner_radii = gpui::Corners::all(px(self.common.corner_radius).into());
+        }
+
+        // Set opacity
+        style.opacity = Some(self.common.opacity);
+
+        // Request layout from window
+        let layout_id = window.request_layout(style, [], cx);
+
+        (layout_id, layout_id)
     }
 
     fn prepaint(
         &mut self,
         _id: Option<&gpui::GlobalElementId>,
-        _bounds: gpui::Bounds<gpui::Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        _window: &mut gpui::Window,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        _layout_id: &mut Self::RequestLayoutState,
+        window: &mut gpui::Window,
         _cx: &mut gpui::App,
     ) -> Self::PrepaintState {
-        // TODO: Implement this
-        todo!("Implement prepaint for RectangleNode")
+        // Update our node's layout with the computed bounds from GPUI
+        self.common.layout = Some(taffy::prelude::Layout {
+            order: 0,
+            size: taffy::prelude::Size {
+                width: bounds.size.width.0,
+                height: bounds.size.height.0,
+            },
+            location: taffy::Point {
+                x: bounds.origin.x.0,
+                y: bounds.origin.y.0,
+            },
+            border: taffy::prelude::Rect {
+                left: self.common.border_width,
+                right: self.common.border_width,
+                top: self.common.border_width,
+                bottom: self.common.border_width,
+            },
+            padding: taffy::prelude::Rect::zero(),
+            scrollbar_size: taffy::prelude::Size::zero(),
+            ..Default::default()
+        });
+
+        // Create a hitbox for this node so it can receive mouse events
+        if self.common.visible {
+            let hitbox = window.insert_hitbox(bounds, false);
+            Some(hitbox)
+        } else {
+            None
+        }
     }
 
     fn paint(
         &mut self,
         _id: Option<&gpui::GlobalElementId>,
-        _bounds: gpui::Bounds<gpui::Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        _prepaint: &mut Self::PrepaintState,
-        _window: &mut gpui::Window,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        _layout_id: &mut Self::RequestLayoutState,
+        hitbox: &mut Self::PrepaintState,
+        window: &mut gpui::Window,
         _cx: &mut gpui::App,
     ) {
-        // TODO: Implement this
-        todo!("Implement paint for RectangleNode")
+        if !self.common.visible {
+            return;
+        }
+
+        // just skip opacity for now
+        // window.with_opacity(self.common.opacity, |window| {
+        // Paint background/fill
+        if let Some(fill) = self.common.fill {
+            // Draw the fill with correct parameters
+            window.paint_quad(gpui::fill(bounds, fill));
+        }
+
+        // Paint border
+        if self.common.border_width > 0.0 && self.common.border_color.is_some() {
+            let border_color = self.common.border_color.unwrap();
+            // Draw the outline with correct parameters
+            window.paint_quad(gpui::outline(bounds, border_color));
+        }
+
+        // TODO: Implement selection logic
+        let is_selected = false;
+
+        // Draw selection indicator if node is selected
+        if let Some(hitbox) = hitbox {
+            if is_selected {
+                // Create a slightly larger bounds manually instead of using inflate
+                let selection_bounds = gpui::Bounds {
+                    origin: gpui::Point::new(
+                        bounds.origin.x - gpui::Pixels(2.0),
+                        bounds.origin.y - gpui::Pixels(2.0),
+                    ),
+                    size: gpui::Size::new(
+                        bounds.size.width + gpui::Pixels(4.0),
+                        bounds.size.height + gpui::Pixels(4.0),
+                    ),
+                };
+                window.paint_quad(gpui::outline(selection_bounds, gpui::Hsla::blue()));
+            }
+        };
+        // });
     }
 }
 
@@ -496,23 +608,23 @@ mod tests {
         // Similarly for bounding_box
         assert!(rect.bounding_box().is_none());
     }
-    
+
     #[test]
     fn test_any_node() {
         let id = NodeId::new(1);
         let rect = RectangleNode::new(id);
         let mut any_node = AnyNode::new(rect);
-        
+
         assert_eq!(any_node.id(), id);
         assert_eq!(any_node.node_type(), NodeType::Rectangle);
-        
+
         // Test downcasting
         let rect_mut = any_node.downcast_mut::<RectangleNode>();
         assert!(rect_mut.is_some());
         if let Some(rect) = rect_mut {
             rect.common_mut().set_corner_radius(5.0);
         }
-        
+
         assert_eq!(any_node.common().corner_radius, 5.0);
     }
 }

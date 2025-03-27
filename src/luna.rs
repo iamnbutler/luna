@@ -581,7 +581,7 @@ impl Shape {
 }
 
 impl RenderOnce for Shape {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         div()
             .id(self.id)
             .absolute()
