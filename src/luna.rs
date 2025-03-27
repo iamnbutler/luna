@@ -7,18 +7,12 @@ use gpui::{
     Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-// Helper function to round pixel values to whole numbers
-fn round_to_pixel(value: Pixels) -> Pixels {
-    px(value.0.round())
-}
-
-// Helper to create a point with rounded pixel values
-fn rounded_point(x: Pixels, y: Pixels) -> Point<Pixels> {
-    Point::new(round_to_pixel(x), round_to_pixel(y))
-}
+mod element;
+mod util;
 
 use anyhow::Result;
 use strum::Display;
+use util::{round_to_pixel, rounded_point};
 
 actions!(
     luna,
@@ -771,34 +765,8 @@ impl GlobalState {
             active_tool: ToolKind::default(),
             current_border_color: gpui::white(),
             current_background_color: gpui::black(),
-            elements: vec![
-                // // Add some initial elements for testing
-                // LunaElement {
-                //     id: "rect1".to_string(),
-                //     kind: ElementKind::ShapeSquare,
-                //     name: "Rectangle 1".into(),
-                //     styles: ElementStyles {
-                //         position: Point::new(50.0, 50.0),
-                //         size: Size::new(100.0, 100.0),
-                //         background_color: gpui::red(),
-                //         ..Default::default()
-                //     },
-                //     selected: false,
-                // },
-                // LunaElement {
-                //     id: "rect2".to_string(),
-                //     kind: ElementKind::ShapeSquare,
-                //     name: "Rectangle 2".into(),
-                //     styles: ElementStyles {
-                //         position: Point::new(200.0, 100.0),
-                //         size: Size::new(150.0, 80.0),
-                //         background_color: gpui::blue(),
-                //         ..Default::default()
-                //     },
-                //     selected: true,
-                // },
-            ],
-            next_id: 3,
+            elements: vec![],
+            next_id: 1,
             hide_sidebar: false,
             sidebar_width: px(260.0),
             active_rectangle_drag: None,
@@ -958,7 +926,6 @@ impl RenderOnce for Canvas {
 }
 
 struct Luna {
-    hide_sidebar: bool,
     focus_handle: FocusHandle,
 }
 
@@ -966,23 +933,12 @@ impl Luna {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        Luna {
-            hide_sidebar: false,
-            focus_handle,
-        }
-    }
-
-    pub fn hide_sidebar(&mut self, hide: bool) -> &mut Self {
-        self.hide_sidebar = hide;
-        self
+        Luna { focus_handle }
     }
 
     pub fn toggle_ui(&mut self, _: &ToggleUI, _window: &mut Window, cx: &mut Context<Self>) {
-        let new_hide_state = !self.hide_sidebar;
-        self.hide_sidebar(new_hide_state);
-
-        // Update the global state to match
         GlobalState::update_global(cx, |state, _| {
+            let new_hide_state = !state.hide_sidebar;
             state.hide_sidebar = new_hide_state;
         });
 
@@ -1104,7 +1060,7 @@ impl Render for Luna {
 
                 cx.stop_propagation();
             }))
-            .when(!self.hide_sidebar, |this| this.child(Sidebar {}))
+            .when(!state.hide_sidebar, |this| this.child(Sidebar {}))
             .child(canvas)
     }
 }
