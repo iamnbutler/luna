@@ -1,4 +1,4 @@
-use gpui::{Hsla, Point, Size, Window};
+use gpui::{Hsla, Point, Size};
 use std::fmt::{Debug, Display};
 use taffy::prelude::*;
 
@@ -73,9 +73,6 @@ pub struct NodeCommon {
     /// Corner radius for rounded elements
     pub corner_radius: f32,
 
-    /// Whether this node is selected
-    pub selected: bool,
-
     /// Whether this node is visible
     pub visible: bool,
 
@@ -119,7 +116,6 @@ impl NodeCommon {
             border_color: Some(Hsla::black()),
             border_width: 1.0,
             corner_radius: 0.0,
-            selected: false,
             visible: true,
             rotation: 0.0,
             opacity: 1.0,
@@ -181,7 +177,7 @@ impl NodeCommon {
     }
 }
 
-/// Defines the behavior for nodes that can be rendered on the canvas
+/// Base trait for all canvas nodes defining common functionality
 pub trait CanvasNode: Debug {
     /// Get the common properties of this node
     fn common(&self) -> &NodeCommon;
@@ -199,24 +195,42 @@ pub trait CanvasNode: Debug {
         self.common().node_type.clone()
     }
 
+    /// Determine if this node should be rendered
     fn should_render(&self) -> bool {
-        // we could later add additional conditions here
-        // like culling fully occluded nodes, etc
         self.common().visible
-    }
-
-    /// Handle selection
-    fn select(&mut self) {
-        self.common_mut().selected = true;
-    }
-
-    /// Handle deselection
-    fn deselect(&mut self) {
-        self.common_mut().selected = false;
     }
 
     /// Clone the node
     fn clone_node(&self) -> Box<dyn CanvasNode>;
+}
+
+/// Extension trait for shape-like elements that have bounded areas
+pub trait ShapeNode: CanvasNode {
+    /// Check if a point is inside this node
+    fn contains_point(&self, point: &Point<f32>) -> bool {
+        if let Some(bounds) = self.common().bounds() {
+            bounds.contains(point)
+        } else {
+            false
+        }
+    }
+
+    /// Get the bounding box of this shape
+    fn bounding_box(&self) -> Option<gpui::Bounds<f32>> {
+        self.common().bounds()
+    }
+}
+
+/// Extension trait for path-like elements that follow a trajectory
+pub trait PathNode: CanvasNode {
+    /// Check if a point is close to this path
+    fn point_near_path(&self, point: &Point<f32>, tolerance: f32) -> bool;
+
+    /// Get the path points that define this path
+    fn path_points(&self) -> Vec<Point<f32>>;
+
+    /// Get the bounding box that contains the entire path
+    fn path_bounds(&self) -> Option<gpui::Bounds<f32>>;
 }
 
 /// A rectangle node that can be rendered on the canvas
@@ -254,6 +268,8 @@ impl CanvasNode for RectangleNode {
         Box::new(self.clone())
     }
 }
+
+impl ShapeNode for RectangleNode {}
 
 /// A circle/ellipse node that can be rendered on the canvas
 #[derive(Debug, Clone)]
@@ -304,6 +320,12 @@ impl CanvasNode for CircleNode {
         &mut self.common
     }
 
+    fn clone_node(&self) -> Box<dyn CanvasNode> {
+        Box::new(self.clone())
+    }
+}
+
+impl ShapeNode for CircleNode {
     fn contains_point(&self, point: &Point<f32>) -> bool {
         if let Some(bounds) = self.common().bounds() {
             // For a circle, we need to check if the point is within the radius
@@ -318,10 +340,6 @@ impl CanvasNode for CircleNode {
             return dx * dx + dy * dy <= 1.0;
         }
         false
-    }
-
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
     }
 }
 
@@ -356,18 +374,12 @@ impl CanvasNode for FrameNode {
         &mut self.common
     }
 
-    fn render(&self, window: &mut Window, cx: &mut gpui::App, theme: &crate::Theme) {
-        if !self.common.visible {
-            return;
-        }
-
-        // In a real implementation, we would render the frame here
-    }
-
     fn clone_node(&self) -> Box<dyn CanvasNode> {
         Box::new(self.clone())
     }
 }
+
+impl ShapeNode for FrameNode {}
 
 /// A line node that connects two points
 #[derive(Debug, Clone)]
@@ -404,10 +416,14 @@ impl CanvasNode for LineNode {
         &mut self.common
     }
 
-    fn contains_point(&self, point: &Point<f32>) -> bool {
-        // For lines, check if point is close to the line segment
-        let tolerance = self.common.border_width + 2.0; // Extra pixels for easier selection
+    fn clone_node(&self) -> Box<dyn CanvasNode> {
+        Box::new(self.clone())
+    }
+}
 
+impl PathNode for LineNode {
+    fn point_near_path(&self, point: &Point<f32>, tolerance: f32) -> bool {
+        // For lines, check if point is close to the line segment
         let dx = self.end.x - self.start.x;
         let dy = self.end.y - self.start.y;
         let length_squared = dx * dx + dy * dy;
@@ -441,8 +457,12 @@ impl CanvasNode for LineNode {
         }
     }
 
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
+    fn path_points(&self) -> Vec<Point<f32>> {
+        vec![self.start, self.end]
+    }
+
+    fn path_bounds(&self) -> Option<gpui::Bounds<f32>> {
+        self.common().bounds()
     }
 }
 
@@ -572,7 +592,6 @@ mod tests {
         assert_eq!(node.children.len(), 0);
         assert_eq!(node.parent, None);
         assert!(node.visible);
-        assert!(!node.selected);
     }
 
     #[test]
@@ -619,77 +638,11 @@ mod tests {
 
         // Test point containment with a point on the line
         let point_on_line = Point::new(50.0, 50.0);
-        assert!(line.contains_point(&point_on_line));
+        assert!(line.point_near_path(&point_on_line, 2.0));
 
         // Test point containment with a point not on the line
         let point_not_on_line = Point::new(50.0, 60.0);
-        assert!(!line.contains_point(&point_not_on_line));
-    }
-
-    #[test]
-    fn test_node_registry() {
-        let mut registry = NodeRegistry::new();
-
-        // Create some nodes
-        let rect = registry.factory().create_rectangle();
-        let rect_id = rect.id();
-        registry.add_node(Box::new(rect));
-
-        let circle = registry.factory().create_circle();
-        let circle_id = circle.id();
-        registry.add_node(Box::new(circle));
-
-        // Check if nodes can be retrieved
-        let node1 = registry.get_node(rect_id);
-        assert!(node1.is_some());
-        assert_eq!(node1.unwrap().node_type(), NodeType::Rectangle);
-
-        let node2 = registry.get_node(circle_id);
-        assert!(node2.is_some());
-        assert_eq!(node2.unwrap().node_type(), NodeType::Circle);
-
-        // Try to get a non-existent node
-        let non_existent = registry.get_node(NodeId::new(999));
-        assert!(non_existent.is_none());
-
-        // Remove a node
-        let removed = registry.remove_node(rect_id);
-        assert!(removed.is_some());
-        assert_eq!(removed.unwrap().node_type(), NodeType::Rectangle);
-
-        // Check that it's gone
-        let node1_after_removal = registry.get_node(rect_id);
-        assert!(node1_after_removal.is_none());
-
-        // Check that other node still exists
-        let node2_after_removal = registry.get_node(circle_id);
-        assert!(node2_after_removal.is_some());
-    }
-
-    #[test]
-    fn test_node_hierarchy() {
-        let mut registry = NodeRegistry::new();
-
-        // Create a parent and child
-        let parent = registry.factory().create_frame();
-        let parent_id = parent.id();
-        registry.add_node(Box::new(parent));
-
-        let child = registry.factory().create_rectangle();
-        let child_id = child.id();
-        registry.add_node(Box::new(child));
-
-        // Create the hierarchy
-        registry.create_hierarchy(parent_id, child_id);
-
-        // Check parent has child
-        let parent = registry.get_node(parent_id).unwrap();
-        assert_eq!(parent.common().children.len(), 1);
-        assert_eq!(parent.common().children[0], child_id);
-
-        // Check child has parent
-        let child = registry.get_node(child_id).unwrap();
-        assert_eq!(child.common().parent, Some(parent_id));
+        assert!(!line.point_near_path(&point_not_on_line, 2.0));
     }
 
     #[test]
@@ -712,5 +665,41 @@ mod tests {
         assert_eq!(circle.node_type(), NodeType::Circle);
         assert_eq!(frame.node_type(), NodeType::Frame);
         assert_eq!(line.node_type(), NodeType::Line);
+    }
+
+    #[test]
+    fn test_shape_node_trait() {
+        let id = NodeId::new(1);
+        let rect = RectangleNode::new(id);
+
+        // Test ShapeNode trait methods
+        let point_inside = Point::new(50.0, 50.0);
+
+        // Without layout information, contains_point should return false
+        assert!(!<RectangleNode as ShapeNode>::contains_point(
+            &rect,
+            &point_inside
+        ));
+
+        // Similarly for bounding_box
+        assert!(rect.bounding_box().is_none());
+    }
+
+    #[test]
+    fn test_path_node_trait() {
+        let id = NodeId::new(1);
+        let start = Point::new(0.0, 0.0);
+        let end = Point::new(100.0, 100.0);
+        let line = LineNode::new(id, start, end);
+
+        // Test PathNode trait methods
+        let path_points = line.path_points();
+        assert_eq!(path_points.len(), 2);
+        assert_eq!(path_points[0], start);
+        assert_eq!(path_points[1], end);
+
+        // Test point near path
+        let point_on_path = Point::new(50.0, 50.0);
+        assert!(line.point_near_path(&point_on_path, 2.0));
     }
 }

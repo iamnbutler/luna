@@ -7,6 +7,7 @@ use gpui::{
     Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
 };
 
+mod canvas;
 mod node;
 mod util;
 
