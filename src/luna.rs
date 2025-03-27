@@ -3,8 +3,8 @@ use std::{fs, path::PathBuf};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu, MenuItem,
-    Modifiers, Point, SharedString, Size, TitlebarOptions, UpdateGlobal, Window,
-    WindowBackgroundAppearance, WindowOptions,
+    Modifiers, MouseDownEvent, MouseEvent, Pixels, Point, SharedString, Size, TitlebarOptions,
+    UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
 };
 
 use anyhow::Result;
@@ -18,7 +18,8 @@ actions!(
         HandTool,
         SelectionTool,
         ResetCurrentColors,
-        SwapCurrentColors
+        SwapCurrentColors,
+        RectangleTool
     ]
 );
 
@@ -153,7 +154,7 @@ pub enum ToolKind {
     /// Tool for quickly inserting saved elements such as icons, images and components
     ElementLibrary,
     /// Tool for drawing rectangles and squares of various dimensions
-    Square,
+    Rectangle,
     /// Tool for adding, editing, and formatting text content
     TextCursor,
     /// Tool for increasing canvas magnification (zooming in)
@@ -175,7 +176,7 @@ impl ToolKind {
             ToolKind::Pencil => "svg/pencil.svg".into(),
             ToolKind::Prompt => "svg/prompt.svg".into(),
             ToolKind::ElementLibrary => "svg/shapes.svg".into(),
-            ToolKind::Square => "svg/square.svg".into(),
+            ToolKind::Rectangle => "svg/square.svg".into(),
             ToolKind::TextCursor => "svg/text_cursor.svg".into(),
             ToolKind::ZoomIn => "svg/zoom_in.svg".into(),
             ToolKind::ZoomOut => "svg/zoom_out.svg".into(),
@@ -372,7 +373,7 @@ impl RenderOnce for ToolStrip {
                     .child(tool_button(ToolKind::TextCursor).disabled(true))
                     .child(tool_divider())
                     .child(tool_button(ToolKind::Frame).disabled(true))
-                    .child(tool_button(ToolKind::Square).disabled(true))
+                    .child(tool_button(ToolKind::Rectangle))
                     .child(tool_button(ToolKind::Line).disabled(true))
                     .child(tool_divider())
                     .child(tool_button(ToolKind::Image).disabled(true))
@@ -533,23 +534,23 @@ impl RenderOnce for Sidebar {
 
 #[derive(Clone, Debug)]
 pub struct ElementStyles {
-    border_width: f32,
+    border_width: Pixels,
     border_color: Hsla,
     background_color: Hsla,
-    corner_radius: f32,
-    size: Size<f32>,
-    position: Point<f32>,
+    corner_radius: Pixels,
+    size: Size<Pixels>,
+    position: Point<Pixels>,
 }
 
 impl Default for ElementStyles {
     fn default() -> Self {
         ElementStyles {
-            border_width: 1.0,
+            border_width: px(1.0),
             border_color: gpui::black(),
             background_color: gpui::white(),
-            corner_radius: 0.0,
-            size: Size::new(100.0, 100.0),
-            position: Point::new(0.0, 0.0),
+            corner_radius: px(0.0),
+            size: Size::new(px(100.), px(100.)),
+            position: Point::new(px(0.), px(0.)),
         }
     }
 }
@@ -579,24 +580,64 @@ impl RenderOnce for Shape {
         div()
             .id(self.id)
             .absolute()
-            .left(px(self.style.position.x))
-            .top(px(self.style.position.y))
-            .w(px(self.style.size.width))
-            .h(px(self.style.size.height))
+            .left(self.style.position.x)
+            .top(self.style.position.y)
+            .w(self.style.size.width)
+            .h(self.style.size.height)
             .bg(self.style.background_color)
-            .border(px(self.style.border_width))
+            .border(self.style.border_width)
             .border_color(self.style.border_color)
-            .rounded(px(self.style.corner_radius))
+            .rounded(self.style.corner_radius)
     }
 }
 
 /// Represents a single element on the canvas
-pub struct Element {
-    pub id: String,
-    pub kind: ElementKind,
-    pub name: SharedString,
-    pub styles: ElementStyles,
-    pub selected: bool,
+pub struct LunaElement {
+    id: ElementId,
+    kind: ElementKind,
+    name: SharedString,
+    styles: ElementStyles,
+    selected: bool,
+}
+
+impl LunaElement {
+    pub fn new(id: ElementId, kind: ElementKind) -> Self {
+        Self {
+            id,
+            kind,
+            name: SharedString::new("Untitled"),
+            styles: ElementStyles::default(),
+            selected: false,
+        }
+    }
+
+    pub fn name(&self) -> SharedString {
+        self.name.clone()
+    }
+
+    pub fn set_name(&mut self, name: impl Into<SharedString>) {
+        self.name = name.into();
+    }
+
+    pub fn styles(&self) -> &ElementStyles {
+        &self.styles
+    }
+
+    pub fn styles_mut(&mut self) -> &mut ElementStyles {
+        &mut self.styles
+    }
+
+    pub fn set_styles(&mut self, styles: ElementStyles) {
+        self.styles = styles;
+    }
+
+    pub fn selected(&self) -> bool {
+        self.selected
+    }
+
+    pub fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
 }
 
 /// A temporary place to throw a grab bag of various states until
@@ -608,7 +649,10 @@ struct GlobalState {
     active_tool: ToolKind,
     current_border_color: Hsla,
     current_background_color: Hsla,
-    elements: Vec<Element>,
+    elements: Vec<LunaElement>,
+    next_id: usize,
+    hide_sidebar: bool,
+    sidebar_width: Pixels,
 }
 
 impl GlobalState {
@@ -618,32 +662,35 @@ impl GlobalState {
             current_border_color: gpui::white(),
             current_background_color: gpui::black(),
             elements: vec![
-                // Add some initial elements for testing
-                Element {
-                    id: "rect1".to_string(),
-                    kind: ElementKind::ShapeSquare,
-                    name: "Rectangle 1".into(),
-                    styles: ElementStyles {
-                        position: Point::new(50.0, 50.0),
-                        size: Size::new(100.0, 100.0),
-                        background_color: gpui::red(),
-                        ..Default::default()
-                    },
-                    selected: false,
-                },
-                Element {
-                    id: "rect2".to_string(),
-                    kind: ElementKind::ShapeSquare,
-                    name: "Rectangle 2".into(),
-                    styles: ElementStyles {
-                        position: Point::new(200.0, 100.0),
-                        size: Size::new(150.0, 80.0),
-                        background_color: gpui::blue(),
-                        ..Default::default()
-                    },
-                    selected: true,
-                },
+                // // Add some initial elements for testing
+                // LunaElement {
+                //     id: "rect1".to_string(),
+                //     kind: ElementKind::ShapeSquare,
+                //     name: "Rectangle 1".into(),
+                //     styles: ElementStyles {
+                //         position: Point::new(50.0, 50.0),
+                //         size: Size::new(100.0, 100.0),
+                //         background_color: gpui::red(),
+                //         ..Default::default()
+                //     },
+                //     selected: false,
+                // },
+                // LunaElement {
+                //     id: "rect2".to_string(),
+                //     kind: ElementKind::ShapeSquare,
+                //     name: "Rectangle 2".into(),
+                //     styles: ElementStyles {
+                //         position: Point::new(200.0, 100.0),
+                //         size: Size::new(150.0, 80.0),
+                //         background_color: gpui::blue(),
+                //         ..Default::default()
+                //     },
+                //     selected: true,
+                // },
             ],
+            next_id: 3,
+            hide_sidebar: false,
+            sidebar_width: px(260.0),
         }
     }
 
@@ -651,8 +698,14 @@ impl GlobalState {
         cx.global::<GlobalState>()
     }
 
-    pub fn add_element(&mut self, element: Element) {
+    pub fn add_element(&mut self, element: LunaElement) {
         self.elements.push(element);
+    }
+
+    pub fn next_id(&mut self) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 }
 
@@ -665,6 +718,39 @@ pub struct Canvas {}
 impl Canvas {
     pub fn new() -> Self {
         Self {}
+    }
+
+    pub fn handle_left_mouse_down(event: &MouseDownEvent, window: &mut gpui::Window, cx: &mut App) {
+        let state = GlobalState::get(cx);
+        let mut position = event.position;
+
+        // Adjust for sidebar width if it's visible
+        if !state.hide_sidebar {
+            position.x -= state.sidebar_width;
+        }
+
+        // Handle mouse down event
+        match event.button {
+            gpui::MouseButton::Left => {
+                // Handle left click
+                match state.active_tool {
+                    ToolKind::ArrowPointer => {
+                        // Implement selection logic
+                    }
+                    ToolKind::Hand => {
+                        // Implement panning logic
+                    }
+                    ToolKind::Rectangle => GlobalState::update_global(cx, |state, cx| {
+                        let id = state.next_id();
+                        let mut element = LunaElement::new(id.into(), ElementKind::ShapeSquare);
+                        element.styles_mut().position = position.into();
+                        state.add_element(element);
+                    }),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -679,14 +765,13 @@ impl RenderOnce for Canvas {
             .size_full()
             .flex_1()
             .relative()
-            .bg(theme.canvas_color);
+            .bg(theme.canvas_color)
+            .on_mouse_down(gpui::MouseButton::Left, Self::handle_left_mouse_down);
 
         // Add all elements from GlobalState to the canvas
         for element in &state.elements {
-            canvas = canvas.child(
-                Shape::new(ElementId::Name(element.id.clone().into()))
-                    .with_style(element.styles.clone()),
-            );
+            canvas =
+                canvas.child(Shape::new(element.id.clone()).with_style(element.styles.clone()));
         }
 
         canvas
@@ -714,7 +799,14 @@ impl Luna {
     }
 
     pub fn toggle_ui(&mut self, _: &ToggleUI, _window: &mut Window, cx: &mut Context<Self>) {
-        self.hide_sidebar(!self.hide_sidebar);
+        let new_hide_state = !self.hide_sidebar;
+        self.hide_sidebar(new_hide_state);
+
+        // Update the global state to match
+        GlobalState::update_global(cx, |state, _| {
+            state.hide_sidebar = new_hide_state;
+        });
+
         cx.notify();
     }
 
@@ -730,6 +822,15 @@ impl Luna {
         cx: &mut Context<Self>,
     ) {
         GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::ArrowPointer);
+        cx.notify();
+    }
+    fn activate_rectangle_tool(
+        &mut self,
+        _: &RectangleTool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::Rectangle);
         cx.notify();
     }
 
@@ -788,6 +889,9 @@ impl Render for Luna {
             .overflow_hidden()
             .map(|div| match state.active_tool {
                 ToolKind::Hand => div.cursor_grab(),
+                ToolKind::Frame | ToolKind::Rectangle | ToolKind::Line | ToolKind::TextCursor => {
+                    div.cursor_crosshair()
+                }
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::toggle_ui))
@@ -800,6 +904,7 @@ impl Render for Luna {
                 let selection_tool = keystroke_builder("v");
                 let hand_tool = keystroke_builder("h");
                 let swap_colors = keystroke_builder("x");
+                let rectangle_tool = keystroke_builder("r");
 
                 if e.keystroke == toggle_ui {
                     this.toggle_ui(&ToggleUI::default(), window, cx);
@@ -813,6 +918,9 @@ impl Render for Luna {
                 }
                 if e.keystroke == swap_colors {
                     this.swap_current_colors(&Default::default(), window, cx);
+                }
+                if e.keystroke == rectangle_tool {
+                    this.activate_rectangle_tool(&Default::default(), window, cx);
                 }
 
                 cx.stop_propagation();
