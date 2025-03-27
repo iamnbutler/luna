@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 use std::{fs, path::PathBuf};
 
 use gpui::{

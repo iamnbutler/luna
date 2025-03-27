@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
 use gpui::{size, Bounds, Context, Point, Size, Window};
 use std::collections::{HashMap, HashSet};

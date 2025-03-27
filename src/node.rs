@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 use gpui::{px, solid_background, Hsla, Point, Size};
 use std::{
     any::Any,
