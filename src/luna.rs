@@ -642,11 +642,40 @@ impl LunaElement {
 }
 
 /// Represents a rectangle drag operation in progress
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, IntoElement)]
 struct RectangleDrag {
     start_position: Point<Pixels>,
     current_position: Point<Pixels>,
-    element_id: ElementId,
+}
+
+impl RenderOnce for RectangleDrag {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        // Calculate rectangle bounds
+        let min_x = self.start_position.x.min(self.current_position.x);
+        let min_y = self.start_position.y.min(self.current_position.y);
+        let width = (self.start_position.x - self.current_position.x).abs();
+        let height = (self.start_position.y - self.current_position.y).abs();
+
+        // Use canvas to draw the preview rectangle
+        canvas(
+            |_bounds, _window, _cx| (), // No prepaint needed
+            move |_bounds, _, window, cx| {
+                let state = GlobalState::get(cx);
+                let position = point(min_x, min_y);
+                let adjusted_position = state.adjust_position(position);
+                // Create bounds for the rectangle
+                let rect_bounds = gpui::Bounds {
+                    origin: adjusted_position,
+                    size: gpui::Size::new(width, height),
+                };
+
+                // Draw the rectangle with current fill and border colors
+                window.paint_quad(gpui::fill(rect_bounds, state.current_background_color));
+                window.paint_quad(gpui::outline(rect_bounds, state.current_border_color));
+                window.request_animation_frame();
+            },
+        )
+    }
 }
 
 /// A temporary place to throw a grab bag of various states until
@@ -663,6 +692,17 @@ struct GlobalState {
     hide_sidebar: bool,
     sidebar_width: Pixels,
     active_rectangle_drag: Option<RectangleDrag>,
+}
+
+impl GlobalState {
+    // Helper function to adjust a position for sidebar offset
+    fn adjust_position(&self, position: Point<Pixels>) -> Point<Pixels> {
+        let mut adjusted = position;
+        if !self.hide_sidebar {
+            adjusted.x -= self.sidebar_width;
+        }
+        adjusted
+    }
 }
 
 impl GlobalState {
@@ -733,12 +773,7 @@ impl Canvas {
 
     pub fn handle_left_mouse_down(event: &MouseDownEvent, window: &mut gpui::Window, cx: &mut App) {
         let state = GlobalState::get(cx);
-        let mut position = event.position;
-
-        // Adjust for sidebar width if it's visible
-        if !state.hide_sidebar {
-            position.x -= state.sidebar_width;
-        }
+        let position = state.adjust_position(event.position);
 
         // Handle mouse down event
         match event.button {
@@ -752,20 +787,10 @@ impl Canvas {
                         // Implement panning logic
                     }
                     ToolKind::Rectangle => GlobalState::update_global(cx, |state, cx| {
-                        let id = state.next_id();
-                        // Create a new rectangle element with zero size initially
-                        let mut element = LunaElement::new(id.into(), ElementKind::ShapeSquare);
-                        element.styles_mut().position = position.into();
-                        element.styles_mut().size = Size::new(px(0.), px(0.));
-                        element.styles_mut().background_color = state.current_background_color;
-                        element.styles_mut().border_color = state.current_border_color;
-                        state.add_element(element);
-
-                        // Start tracking the drag operation
+                        // Start tracking the drag operation - we only create the element on mouse up
                         state.active_rectangle_drag = Some(RectangleDrag {
                             start_position: position,
                             current_position: position,
-                            element_id: id.into(),
                         });
                     }),
                     _ => {}
@@ -776,29 +801,12 @@ impl Canvas {
     }
 
     pub fn handle_mouse_move(event: &MouseMoveEvent, window: &mut gpui::Window, cx: &mut App) {
+        let adjusted_position = GlobalState::get(cx).adjust_position(event.position);
+
         GlobalState::update_global(cx, |state, cx| {
             if let Some(drag) = &mut state.active_rectangle_drag {
-                // Adjust for sidebar if it's visible
-                let mut position = event.position;
-                if !state.hide_sidebar {
-                    position.x -= state.sidebar_width;
-                }
-
-                // Update current position
-                drag.current_position = position;
-
-                // Find the element and update its size and position
-                if let Some(element) = state.elements.iter_mut().find(|e| e.id == drag.element_id) {
-                    // Determine top-left corner and size
-                    let min_x = drag.start_position.x.min(position.x);
-                    let min_y = drag.start_position.y.min(position.y);
-                    let width = (drag.start_position.x - position.x).abs();
-                    let height = (drag.start_position.y - position.y).abs();
-
-                    // Update the element's styles
-                    element.styles_mut().position = Point::new(min_x, min_y);
-                    element.styles_mut().size = Size::new(width, height);
-                }
+                // Update current position with adjusted position
+                drag.current_position = adjusted_position;
             }
         });
     }
@@ -806,14 +814,25 @@ impl Canvas {
     pub fn handle_mouse_up(event: &MouseUpEvent, window: &mut gpui::Window, cx: &mut App) {
         GlobalState::update_global(cx, |state, cx| {
             if let Some(drag) = state.active_rectangle_drag.take() {
-                // If the rectangle is too small (just a click with no drag),
-                // we can optionally remove it or set a minimum size
-                if let Some(element) = state.elements.iter_mut().find(|e| e.id == drag.element_id) {
-                    let size = element.styles().size;
-                    if size.width < px(2.) && size.height < px(2.) {
-                        // Remove elements that are too small
-                        state.elements.retain(|e| e.id != drag.element_id);
-                    }
+                // Calculate rectangle dimensions
+                let min_x = drag.start_position.x.min(drag.current_position.x);
+                let min_y = drag.start_position.y.min(drag.current_position.y);
+                let width = (drag.start_position.x - drag.current_position.x).abs();
+                let height = (drag.start_position.y - drag.current_position.y).abs();
+
+                // Only create a rectangle if it has a meaningful size
+                if width >= px(2.) && height >= px(2.) {
+                    // Create the actual rectangle element now that we know its final size
+                    let id = state.next_id();
+                    let mut element = LunaElement::new(id.into(), ElementKind::ShapeSquare);
+
+                    // Set styles based on the drag operation
+                    element.styles_mut().position = Point::new(min_x, min_y);
+                    element.styles_mut().size = Size::new(width, height);
+                    element.styles_mut().background_color = state.current_background_color;
+                    element.styles_mut().border_color = state.current_border_color;
+
+                    state.add_element(element);
                 }
             }
         });
@@ -840,6 +859,11 @@ impl RenderOnce for Canvas {
         for element in &state.elements {
             canvas =
                 canvas.child(Shape::new(element.id.clone()).with_style(element.styles.clone()));
+        }
+
+        // Add the rectangle drag preview if there's an active drag
+        if let Some(rectangle_drag) = &state.active_rectangle_drag {
+            canvas = canvas.child(rectangle_drag.clone());
         }
 
         canvas
