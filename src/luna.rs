@@ -3,10 +3,19 @@ use std::{fs, path::PathBuf};
 use gpui::{
     actions, canvas, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource,
     BoxShadow, ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, MouseDownEvent, MouseEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance,
-    WindowOptions,
+    MenuItem, Modifiers, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString,
+    Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
 };
+
+// Helper function to round pixel values to whole numbers
+fn round_to_pixel(value: Pixels) -> Pixels {
+    px(value.0.round())
+}
+
+// Helper to create a point with rounded pixel values
+fn rounded_point(x: Pixels, y: Pixels) -> Point<Pixels> {
+    Point::new(round_to_pixel(x), round_to_pixel(y))
+}
 
 use anyhow::Result;
 use strum::Display;
@@ -650,15 +659,15 @@ struct RectangleDrag {
 
 impl RenderOnce for RectangleDrag {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        // Calculate rectangle bounds
-        let min_x = self.start_position.x.min(self.current_position.x);
-        let min_y = self.start_position.y.min(self.current_position.y);
-        let width = (self.start_position.x - self.current_position.x).abs();
-        let height = (self.start_position.y - self.current_position.y).abs();
+        // Calculate rectangle bounds with rounded values
+        let min_x = round_to_pixel(self.start_position.x.min(self.current_position.x));
+        let min_y = round_to_pixel(self.start_position.y.min(self.current_position.y));
+        let width = round_to_pixel((self.start_position.x - self.current_position.x).abs());
+        let height = round_to_pixel((self.start_position.y - self.current_position.y).abs());
 
         // Use canvas to draw the preview rectangle
         canvas(
-            |_bounds, _window, _cx| (), // No prepaint needed
+            |_bounds, _window, _cx| (),
             move |_bounds, _, window, cx| {
                 let state = GlobalState::get(cx);
                 // Canvas coordinates need to be converted back to window coordinates for painting
@@ -667,7 +676,9 @@ impl RenderOnce for RectangleDrag {
                 if !state.hide_sidebar {
                     position.x += state.sidebar_width;
                 }
-                // Create bounds for the rectangle
+                // Round the final position to ensure pixel-perfect rendering
+                position = rounded_point(position.x, position.y);
+                // Create bounds for the rectangle with rounded values
                 let rect_bounds = gpui::Bounds {
                     origin: position,
                     size: gpui::Size::new(width, height),
@@ -692,10 +703,11 @@ struct SelectionDrag {
 
 impl RenderOnce for SelectionDrag {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let min_x = self.start_position.x.min(self.current_position.x);
-        let min_y = self.start_position.y.min(self.current_position.y);
-        let width = (self.start_position.x - self.current_position.x).abs();
-        let height = (self.start_position.y - self.current_position.y).abs();
+        // Calculate rectangle bounds with rounded values
+        let min_x = round_to_pixel(self.start_position.x.min(self.current_position.x));
+        let min_y = round_to_pixel(self.start_position.y.min(self.current_position.y));
+        let width = round_to_pixel((self.start_position.x - self.current_position.x).abs());
+        let height = round_to_pixel((self.start_position.y - self.current_position.y).abs());
 
         canvas(
             |_bounds, _window, _cx| (),
@@ -708,7 +720,9 @@ impl RenderOnce for SelectionDrag {
                 if !state.hide_sidebar {
                     position.x += state.sidebar_width;
                 }
-                // Create bounds for the rectangle
+                // Round the final position to ensure pixel-perfect rendering
+                position = rounded_point(position.x, position.y);
+                // Create bounds for the rectangle with rounded values
                 let rect_bounds = gpui::Bounds {
                     origin: position,
                     size: gpui::Size::new(width, height),
@@ -818,7 +832,11 @@ impl Canvas {
         Self {}
     }
 
-    pub fn handle_left_mouse_down(event: &MouseDownEvent, window: &mut gpui::Window, cx: &mut App) {
+    pub fn handle_left_mouse_down(
+        event: &MouseDownEvent,
+        _window: &mut gpui::Window,
+        cx: &mut App,
+    ) {
         let state = GlobalState::get(cx);
         let position = state.adjust_position(event.position);
 
@@ -859,7 +877,7 @@ impl Canvas {
                 // Update current position with adjusted position
                 drag.current_position = adjusted_position;
             }
-            
+
             if let Some(drag) = &mut state.active_selection_drag {
                 // Update current position with adjusted position
                 drag.current_position = adjusted_position;
@@ -870,11 +888,12 @@ impl Canvas {
     pub fn handle_mouse_up(event: &MouseUpEvent, window: &mut gpui::Window, cx: &mut App) {
         GlobalState::update_global(cx, |state, cx| {
             if let Some(drag) = state.active_rectangle_drag.take() {
-                // Calculate rectangle dimensions
-                let min_x = drag.start_position.x.min(drag.current_position.x);
-                let min_y = drag.start_position.y.min(drag.current_position.y);
-                let width = (drag.start_position.x - drag.current_position.x).abs();
-                let height = (drag.start_position.y - drag.current_position.y).abs();
+                // Calculate rectangle dimensions with rounded values
+                let min_x = round_to_pixel(drag.start_position.x.min(drag.current_position.x));
+                let min_y = round_to_pixel(drag.start_position.y.min(drag.current_position.y));
+                let width = round_to_pixel((drag.start_position.x - drag.current_position.x).abs());
+                let height =
+                    round_to_pixel((drag.start_position.y - drag.current_position.y).abs());
 
                 // Only create a rectangle if it has a meaningful size
                 if width >= px(2.) && height >= px(2.) {
@@ -891,7 +910,7 @@ impl Canvas {
                     state.add_element(element);
                 }
             }
-            
+
             // For selection, just clear the drag without creating an element
             // In a full implementation, this would select elements under the drag area
             if let Some(_) = state.active_selection_drag.take() {
