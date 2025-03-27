@@ -7,7 +7,7 @@ use gpui::{
     Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-mod element;
+mod node;
 mod util;
 
 use anyhow::Result;
