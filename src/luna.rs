@@ -1,10 +1,11 @@
 use std::{fs, path::PathBuf};
 
 use gpui::{
-    actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
-    ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu, MenuItem,
-    Modifiers, MouseDownEvent, MouseEvent, Pixels, Point, SharedString, Size, TitlebarOptions,
-    UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
+    actions, canvas, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource,
+    BoxShadow, ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
+    MenuItem, Modifiers, MouseDownEvent, MouseEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance,
+    WindowOptions,
 };
 
 use anyhow::Result;
@@ -640,6 +641,14 @@ impl LunaElement {
     }
 }
 
+/// Represents a rectangle drag operation in progress
+#[derive(Clone, Debug)]
+struct RectangleDrag {
+    start_position: Point<Pixels>,
+    current_position: Point<Pixels>,
+    element_id: ElementId,
+}
+
 /// A temporary place to throw a grab bag of various states until
 /// they can be organize and structured more clearly.
 ///
@@ -653,6 +662,7 @@ struct GlobalState {
     next_id: usize,
     hide_sidebar: bool,
     sidebar_width: Pixels,
+    active_rectangle_drag: Option<RectangleDrag>,
 }
 
 impl GlobalState {
@@ -691,6 +701,7 @@ impl GlobalState {
             next_id: 3,
             hide_sidebar: false,
             sidebar_width: px(260.0),
+            active_rectangle_drag: None,
         }
     }
 
@@ -742,15 +753,70 @@ impl Canvas {
                     }
                     ToolKind::Rectangle => GlobalState::update_global(cx, |state, cx| {
                         let id = state.next_id();
+                        // Create a new rectangle element with zero size initially
                         let mut element = LunaElement::new(id.into(), ElementKind::ShapeSquare);
                         element.styles_mut().position = position.into();
+                        element.styles_mut().size = Size::new(px(0.), px(0.));
+                        element.styles_mut().background_color = state.current_background_color;
+                        element.styles_mut().border_color = state.current_border_color;
                         state.add_element(element);
+
+                        // Start tracking the drag operation
+                        state.active_rectangle_drag = Some(RectangleDrag {
+                            start_position: position,
+                            current_position: position,
+                            element_id: id.into(),
+                        });
                     }),
                     _ => {}
                 }
             }
             _ => {}
         }
+    }
+
+    pub fn handle_mouse_move(event: &MouseMoveEvent, window: &mut gpui::Window, cx: &mut App) {
+        GlobalState::update_global(cx, |state, cx| {
+            if let Some(drag) = &mut state.active_rectangle_drag {
+                // Adjust for sidebar if it's visible
+                let mut position = event.position;
+                if !state.hide_sidebar {
+                    position.x -= state.sidebar_width;
+                }
+
+                // Update current position
+                drag.current_position = position;
+
+                // Find the element and update its size and position
+                if let Some(element) = state.elements.iter_mut().find(|e| e.id == drag.element_id) {
+                    // Determine top-left corner and size
+                    let min_x = drag.start_position.x.min(position.x);
+                    let min_y = drag.start_position.y.min(position.y);
+                    let width = (drag.start_position.x - position.x).abs();
+                    let height = (drag.start_position.y - position.y).abs();
+
+                    // Update the element's styles
+                    element.styles_mut().position = Point::new(min_x, min_y);
+                    element.styles_mut().size = Size::new(width, height);
+                }
+            }
+        });
+    }
+
+    pub fn handle_mouse_up(event: &MouseUpEvent, window: &mut gpui::Window, cx: &mut App) {
+        GlobalState::update_global(cx, |state, cx| {
+            if let Some(drag) = state.active_rectangle_drag.take() {
+                // If the rectangle is too small (just a click with no drag),
+                // we can optionally remove it or set a minimum size
+                if let Some(element) = state.elements.iter_mut().find(|e| e.id == drag.element_id) {
+                    let size = element.styles().size;
+                    if size.width < px(2.) && size.height < px(2.) {
+                        // Remove elements that are too small
+                        state.elements.retain(|e| e.id != drag.element_id);
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -766,7 +832,9 @@ impl RenderOnce for Canvas {
             .flex_1()
             .relative()
             .bg(theme.canvas_color)
-            .on_mouse_down(gpui::MouseButton::Left, Self::handle_left_mouse_down);
+            .on_mouse_down(gpui::MouseButton::Left, Self::handle_left_mouse_down)
+            .on_mouse_move(Self::handle_mouse_move)
+            .on_mouse_up(gpui::MouseButton::Left, Self::handle_mouse_up);
 
         // Add all elements from GlobalState to the canvas
         for element in &state.elements {
