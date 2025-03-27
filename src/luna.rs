@@ -661,17 +661,62 @@ impl RenderOnce for RectangleDrag {
             |_bounds, _window, _cx| (), // No prepaint needed
             move |_bounds, _, window, cx| {
                 let state = GlobalState::get(cx);
-                let position = point(min_x, min_y);
-                let adjusted_position = state.adjust_position(position);
+                // Canvas coordinates need to be converted back to window coordinates for painting
+                let mut position = point(min_x, min_y);
+                // Add sidebar width back for proper rendering in window coordinates
+                if !state.hide_sidebar {
+                    position.x += state.sidebar_width;
+                }
                 // Create bounds for the rectangle
                 let rect_bounds = gpui::Bounds {
-                    origin: adjusted_position,
+                    origin: position,
                     size: gpui::Size::new(width, height),
                 };
 
                 // Draw the rectangle with current fill and border colors
                 window.paint_quad(gpui::fill(rect_bounds, state.current_background_color));
                 window.paint_quad(gpui::outline(rect_bounds, state.current_border_color));
+                window.request_animation_frame();
+            },
+        )
+    }
+}
+
+/// Renders a visual representation of the active
+/// selection bounds  as the mouse is dragged
+#[derive(Clone, Debug, IntoElement)]
+struct SelectionDrag {
+    start_position: Point<Pixels>,
+    current_position: Point<Pixels>,
+}
+
+impl RenderOnce for SelectionDrag {
+    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+        let min_x = self.start_position.x.min(self.current_position.x);
+        let min_y = self.start_position.y.min(self.current_position.y);
+        let width = (self.start_position.x - self.current_position.x).abs();
+        let height = (self.start_position.y - self.current_position.y).abs();
+
+        canvas(
+            |_bounds, _window, _cx| (),
+            move |_bounds, _, window, cx| {
+                let theme = Theme::get_global(cx);
+                let state = GlobalState::get(cx);
+                // Canvas coordinates need to be converted back to window coordinates for painting
+                let mut position = point(min_x, min_y);
+                // Add sidebar width back for proper rendering in window coordinates
+                if !state.hide_sidebar {
+                    position.x += state.sidebar_width;
+                }
+                // Create bounds for the rectangle
+                let rect_bounds = gpui::Bounds {
+                    origin: position,
+                    size: gpui::Size::new(width, height),
+                };
+
+                // Draw the rectangle with current fill and border colors
+                window.paint_quad(gpui::fill(rect_bounds, theme.selected.opacity(0.08)));
+                window.paint_quad(gpui::outline(rect_bounds, theme.selected));
                 window.request_animation_frame();
             },
         )
@@ -692,6 +737,7 @@ struct GlobalState {
     hide_sidebar: bool,
     sidebar_width: Pixels,
     active_rectangle_drag: Option<RectangleDrag>,
+    active_selection_drag: Option<SelectionDrag>,
 }
 
 impl GlobalState {
@@ -742,6 +788,7 @@ impl GlobalState {
             hide_sidebar: false,
             sidebar_width: px(260.0),
             active_rectangle_drag: None,
+            active_selection_drag: None,
         }
     }
 
@@ -780,9 +827,13 @@ impl Canvas {
             gpui::MouseButton::Left => {
                 // Handle left click
                 match state.active_tool {
-                    ToolKind::ArrowPointer => {
-                        // Implement selection logic
-                    }
+                    ToolKind::ArrowPointer => GlobalState::update_global(cx, |state, cx| {
+                        // Start selection drag
+                        state.active_selection_drag = Some(SelectionDrag {
+                            start_position: position,
+                            current_position: position,
+                        });
+                    }),
                     ToolKind::Hand => {
                         // Implement panning logic
                     }
@@ -805,6 +856,11 @@ impl Canvas {
 
         GlobalState::update_global(cx, |state, cx| {
             if let Some(drag) = &mut state.active_rectangle_drag {
+                // Update current position with adjusted position
+                drag.current_position = adjusted_position;
+            }
+            
+            if let Some(drag) = &mut state.active_selection_drag {
                 // Update current position with adjusted position
                 drag.current_position = adjusted_position;
             }
@@ -835,6 +891,13 @@ impl Canvas {
                     state.add_element(element);
                 }
             }
+            
+            // For selection, just clear the drag without creating an element
+            // In a full implementation, this would select elements under the drag area
+            if let Some(_) = state.active_selection_drag.take() {
+                // Here we would implement selection logic
+                // For now, we just clear the drag
+            }
         });
     }
 }
@@ -864,6 +927,11 @@ impl RenderOnce for Canvas {
         // Add the rectangle drag preview if there's an active drag
         if let Some(rectangle_drag) = &state.active_rectangle_drag {
             canvas = canvas.child(rectangle_drag.clone());
+        }
+
+        // Add the selection drag preview if there's an active drag
+        if let Some(selection_drag) = &state.active_selection_drag {
+            canvas = canvas.child(selection_drag.clone());
         }
 
         canvas
