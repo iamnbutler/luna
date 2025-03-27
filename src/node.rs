@@ -1,5 +1,5 @@
 use gpui::{Hsla, Point, Size};
-use std::fmt::{Debug, Display};
+use std::{any::Any, fmt::{Debug, Display}};
 use taffy::prelude::*;
 
 /// A unique identifier for a canvas node
@@ -42,43 +42,43 @@ pub enum NodeType {
 pub struct NodeCommon {
     /// Unique identifier for this node
     pub id: NodeId,
-
+    
     /// Human-readable name for this node
     pub name: String,
-
+    
     /// Type of node
     pub node_type: NodeType,
-
+    
     /// Parent node (if any)
     pub parent: Option<NodeId>,
-
+    
     /// Children of this node (if any)
     pub children: Vec<NodeId>,
-
+    
     /// The layout style for this node (ties into taffy)
     pub style: Style,
-
+    
     /// The computed layout (filled in during layout calculation)
     pub layout: Option<Layout>,
-
+    
     /// Fill color for the node
     pub fill: Option<Hsla>,
-
+    
     /// Border color for the node
     pub border_color: Option<Hsla>,
-
+    
     /// Border width for the node
     pub border_width: f32,
-
+    
     /// Corner radius for rounded elements
     pub corner_radius: f32,
-
+    
     /// Whether this node is visible
     pub visible: bool,
-
+    
     /// Transform properties (rotation in degrees)
     pub rotation: f32,
-
+    
     /// Node opacity (0.0 to 1.0)
     pub opacity: f32,
 }
@@ -141,67 +141,164 @@ impl NodeCommon {
         self.style.size.width = Dimension::Length(width);
         self.style.size.height = Dimension::Length(height);
     }
-
+    
     /// Set the fill color
     pub fn set_fill(&mut self, color: Option<Hsla>) {
         self.fill = color;
     }
-
+    
     /// Set the border properties
     pub fn set_border(&mut self, color: Option<Hsla>, width: f32) {
         self.border_color = color;
         self.border_width = width;
-
+        
         // Update taffy style
         self.style.border.left = LengthPercentage::Length(width);
         self.style.border.right = LengthPercentage::Length(width);
         self.style.border.top = LengthPercentage::Length(width);
         self.style.border.bottom = LengthPercentage::Length(width);
     }
-
+    
     /// Set corner radius for rounded elements
     pub fn set_corner_radius(&mut self, radius: f32) {
         self.corner_radius = radius;
     }
-
+    
     /// Add a child to this node
     pub fn add_child(&mut self, child_id: NodeId) {
         if !self.children.contains(&child_id) {
             self.children.push(child_id);
         }
     }
-
+    
     /// Remove a child from this node
     pub fn remove_child(&mut self, child_id: NodeId) {
         self.children.retain(|id| *id != child_id);
     }
 }
 
+// This is the main trait object that allows downcasting
+trait CanvasNodeObject: 'static {
+    // These are our escape hatches for downcasting, similar to ElementObject in gpui
+    fn inner_node(&mut self) -> &mut dyn Any;
+    fn inner_node_ref(&self) -> &dyn Any;
+    
+    // Forward the common operations that don't require knowing the concrete type
+    fn common(&self) -> &NodeCommon;
+    fn common_mut(&mut self) -> &mut NodeCommon;
+    fn id(&self) -> NodeId;
+    fn node_type(&self) -> NodeType;
+    fn should_render(&self) -> bool;
+}
+
 /// Base trait for all canvas nodes defining common functionality
-pub trait CanvasNode: Debug {
+pub trait CanvasNode: Debug + 'static + Sized {
     /// Get the common properties of this node
     fn common(&self) -> &NodeCommon;
-
+    
     /// Get mutable access to common properties
     fn common_mut(&mut self) -> &mut NodeCommon;
-
+    
     /// Get the node's ID
     fn id(&self) -> NodeId {
         self.common().id
     }
-
-    /// Get the node type
+    
+    /// Get the node type 
     fn node_type(&self) -> NodeType {
         self.common().node_type.clone()
     }
-
+    
     /// Determine if this node should be rendered
     fn should_render(&self) -> bool {
         self.common().visible
     }
+}
 
-    /// Clone the node
-    fn clone_node(&self) -> Box<dyn CanvasNode>;
+// Adapter to convert any CanvasNode to a CanvasNodeObject
+struct NodeAdapter<T: CanvasNode> {
+    node: T,
+}
+
+impl<T: CanvasNode> NodeAdapter<T> {
+    fn new(node: T) -> Self {
+        Self { node }
+    }
+}
+
+impl<T: CanvasNode> CanvasNodeObject for NodeAdapter<T> {
+    fn inner_node(&mut self) -> &mut dyn Any {
+        &mut self.node
+    }
+    
+    fn inner_node_ref(&self) -> &dyn Any {
+        &self.node
+    }
+    
+    fn common(&self) -> &NodeCommon {
+        self.node.common()
+    }
+    
+    fn common_mut(&mut self) -> &mut NodeCommon {
+        self.node.common_mut()
+    }
+    
+    fn id(&self) -> NodeId {
+        self.node.id()
+    }
+    
+    fn node_type(&self) -> NodeType {
+        self.node.node_type()
+    }
+    
+    fn should_render(&self) -> bool {
+        self.node.should_render()
+    }
+}
+
+/// A wrapper around a boxed canvas node that allows for dynamic dispatch and downcasting
+pub struct AnyNode(Box<dyn CanvasNodeObject>);
+
+impl AnyNode {
+    /// Create a new AnyNode from a CanvasNode
+    pub fn new<T: CanvasNode>(node: T) -> Self {
+        Self(Box::new(NodeAdapter::new(node)))
+    }
+    
+    /// Attempt to downcast to a specific node type (immutable)
+    pub fn downcast_ref<T: CanvasNode>(&self) -> Option<&T> {
+        self.0.inner_node_ref().downcast_ref::<T>()
+    }
+    
+    /// Attempt to downcast to a specific node type (mutable)
+    pub fn downcast_mut<T: CanvasNode>(&mut self) -> Option<&mut T> {
+        self.0.inner_node().downcast_mut::<T>()
+    }
+    
+    /// Get a reference to the common properties
+    pub fn common(&self) -> &NodeCommon {
+        self.0.common()
+    }
+    
+    /// Get a mutable reference to the common properties
+    pub fn common_mut(&mut self) -> &mut NodeCommon {
+        self.0.common_mut()
+    }
+    
+    /// Get the node's ID
+    pub fn id(&self) -> NodeId {
+        self.0.id()
+    }
+    
+    /// Get the node type
+    pub fn node_type(&self) -> NodeType {
+        self.0.node_type()
+    }
+    
+    /// Determine if this node should be rendered
+    pub fn should_render(&self) -> bool {
+        self.0.should_render()
+    }
 }
 
 /// Extension trait for shape-like elements that have bounded areas
@@ -234,7 +331,7 @@ pub trait PathNode: CanvasNode {
 }
 
 /// A rectangle node that can be rendered on the canvas
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RectangleNode {
     pub common: NodeCommon,
 }
@@ -245,7 +342,7 @@ impl RectangleNode {
             common: NodeCommon::new(id, NodeType::Rectangle),
         }
     }
-
+    
     /// Create a rectangle with specific dimensions and position
     pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
         let mut node = Self::new(id);
@@ -259,210 +356,69 @@ impl CanvasNode for RectangleNode {
     fn common(&self) -> &NodeCommon {
         &self.common
     }
-
+    
     fn common_mut(&mut self) -> &mut NodeCommon {
         &mut self.common
-    }
-
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
     }
 }
 
 impl ShapeNode for RectangleNode {}
 
-/// A circle/ellipse node that can be rendered on the canvas
-#[derive(Debug, Clone)]
-pub struct CircleNode {
-    pub common: NodeCommon,
-}
+// TODO: This is a placeholder implementation that will need to be completed later
+// Implementing Element for nodes will be complex as mentioned in the requirements
+impl gpui::Element for RectangleNode {
+    // The type of state returned from request_layout
+    type RequestLayoutState = (); // TODO: Define proper state type
 
-impl CircleNode {
-    pub fn new(id: NodeId) -> Self {
-        let mut node = Self {
-            common: NodeCommon::new(id, NodeType::Circle),
-        };
-        node.common.corner_radius = f32::MAX; // Make it fully rounded
-        node
+    // The type of state returned from prepaint
+    type PrepaintState = (); // TODO: Define proper state type
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        // TODO: Implement this
+        None
     }
 
-    /// Create a circle with specific center point and radius
-    pub fn with_circle(id: NodeId, center_x: f32, center_y: f32, radius: f32) -> Self {
-        let mut node = Self::new(id);
-        node.common
-            .set_position(center_x - radius, center_y - radius);
-        node.common.set_size(radius * 2.0, radius * 2.0);
-        node
+    fn request_layout(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        // TODO: Implement this
+        todo!("Implement request_layout for RectangleNode")
     }
 
-    /// Create an ellipse with specific center point and radii
-    pub fn with_ellipse(
-        id: NodeId,
-        center_x: f32,
-        center_y: f32,
-        radius_x: f32,
-        radius_y: f32,
-    ) -> Self {
-        let mut node = Self::new(id);
-        node.common
-            .set_position(center_x - radius_x, center_y - radius_y);
-        node.common.set_size(radius_x * 2.0, radius_y * 2.0);
-        node
-    }
-}
-
-impl CanvasNode for CircleNode {
-    fn common(&self) -> &NodeCommon {
-        &self.common
+    fn prepaint(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        _bounds: gpui::Bounds<gpui::Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Self::PrepaintState {
+        // TODO: Implement this
+        todo!("Implement prepaint for RectangleNode")
     }
 
-    fn common_mut(&mut self) -> &mut NodeCommon {
-        &mut self.common
-    }
-
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
+    fn paint(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        _bounds: gpui::Bounds<gpui::Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) {
+        // TODO: Implement this
+        todo!("Implement paint for RectangleNode")
     }
 }
 
-impl ShapeNode for CircleNode {
-    fn contains_point(&self, point: &Point<f32>) -> bool {
-        if let Some(bounds) = self.common().bounds() {
-            // For a circle, we need to check if the point is within the radius
-            let center_x = bounds.origin.x + bounds.size.width / 2.0;
-            let center_y = bounds.origin.y + bounds.size.height / 2.0;
-            let radius_x = bounds.size.width / 2.0;
-            let radius_y = bounds.size.height / 2.0;
+impl gpui::IntoElement for RectangleNode {
+    type Element = Self;
 
-            let dx = (point.x - center_x) / radius_x;
-            let dy = (point.y - center_y) / radius_y;
-
-            return dx * dx + dy * dy <= 1.0;
-        }
-        false
-    }
-}
-
-/// A frame node that acts as a container for other nodes
-#[derive(Debug, Clone)]
-pub struct FrameNode {
-    pub common: NodeCommon,
-}
-
-impl FrameNode {
-    pub fn new(id: NodeId) -> Self {
-        Self {
-            common: NodeCommon::new(id, NodeType::Frame),
-        }
-    }
-
-    /// Create a frame with specific dimensions and position
-    pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
-        let mut node = Self::new(id);
-        node.common.set_position(x, y);
-        node.common.set_size(width, height);
-        node
-    }
-}
-
-impl CanvasNode for FrameNode {
-    fn common(&self) -> &NodeCommon {
-        &self.common
-    }
-
-    fn common_mut(&mut self) -> &mut NodeCommon {
-        &mut self.common
-    }
-
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
-    }
-}
-
-impl ShapeNode for FrameNode {}
-
-/// A line node that connects two points
-#[derive(Debug, Clone)]
-pub struct LineNode {
-    pub common: NodeCommon,
-    pub start: Point<f32>,
-    pub end: Point<f32>,
-}
-
-impl LineNode {
-    pub fn new(id: NodeId, start: Point<f32>, end: Point<f32>) -> Self {
-        let mut common = NodeCommon::new(id, NodeType::Line);
-        common.fill = None; // Lines don't have fill
-
-        // Calculate the position and size for layout
-        let min_x = start.x.min(end.x);
-        let min_y = start.y.min(end.y);
-        let width = (start.x - end.x).abs();
-        let height = (start.y - end.y).abs();
-
-        common.set_position(min_x, min_y);
-        common.set_size(width.max(1.0), height.max(1.0)); // Ensure non-zero size
-
-        Self { common, start, end }
-    }
-}
-
-impl CanvasNode for LineNode {
-    fn common(&self) -> &NodeCommon {
-        &self.common
-    }
-
-    fn common_mut(&mut self) -> &mut NodeCommon {
-        &mut self.common
-    }
-
-    fn clone_node(&self) -> Box<dyn CanvasNode> {
-        Box::new(self.clone())
-    }
-}
-
-impl PathNode for LineNode {
-    fn point_near_path(&self, point: &Point<f32>, tolerance: f32) -> bool {
-        // For lines, check if point is close to the line segment
-        let dx = self.end.x - self.start.x;
-        let dy = self.end.y - self.start.y;
-        let length_squared = dx * dx + dy * dy;
-
-        if length_squared == 0.0 {
-            // Start and end are the same point
-            let distance_squared =
-                (point.x - self.start.x).powi(2) + (point.y - self.start.y).powi(2);
-            return distance_squared <= tolerance.powi(2);
-        }
-
-        // Calculate projection of point onto line
-        let t = ((point.x - self.start.x) * dx + (point.y - self.start.y) * dy) / length_squared;
-
-        if t < 0.0 {
-            // Point is beyond the start point
-            let distance_squared =
-                (point.x - self.start.x).powi(2) + (point.y - self.start.y).powi(2);
-            return distance_squared <= tolerance.powi(2);
-        } else if t > 1.0 {
-            // Point is beyond the end point
-            let distance_squared = (point.x - self.end.x).powi(2) + (point.y - self.end.y).powi(2);
-            return distance_squared <= tolerance.powi(2);
-        } else {
-            // Point projects onto the line segment
-            let projection_x = self.start.x + t * dx;
-            let projection_y = self.start.y + t * dy;
-            let distance_squared =
-                (point.x - projection_x).powi(2) + (point.y - projection_y).powi(2);
-            return distance_squared <= tolerance.powi(2);
-        }
-    }
-
-    fn path_points(&self) -> Vec<Point<f32>> {
-        vec![self.start, self.end]
-    }
-
-    fn path_bounds(&self) -> Option<gpui::Bounds<f32>> {
-        self.common().bounds()
+    fn into_element(self) -> Self::Element {
+        self
     }
 }
 
@@ -494,87 +450,6 @@ impl NodeFactory {
     pub fn create_rectangle(&mut self) -> RectangleNode {
         RectangleNode::new(self.next_id())
     }
-
-    /// Create a new circle node
-    pub fn create_circle(&mut self) -> CircleNode {
-        CircleNode::new(self.next_id())
-    }
-
-    /// Create a new frame node
-    pub fn create_frame(&mut self) -> FrameNode {
-        FrameNode::new(self.next_id())
-    }
-
-    /// Create a new line node
-    pub fn create_line(&mut self, start: Point<f32>, end: Point<f32>) -> LineNode {
-        LineNode::new(self.next_id(), start, end)
-    }
-}
-
-/// A registry that manages all nodes in the canvas
-#[derive(Debug, Default)]
-pub struct NodeRegistry {
-    nodes: Vec<Box<dyn CanvasNode>>,
-    factory: NodeFactory,
-}
-
-impl NodeRegistry {
-    pub fn new() -> Self {
-        Self {
-            nodes: Vec::new(),
-            factory: NodeFactory::new(),
-        }
-    }
-
-    /// Get the node factory
-    pub fn factory(&mut self) -> &mut NodeFactory {
-        &mut self.factory
-    }
-
-    /// Add a node to the registry
-    pub fn add_node(&mut self, node: Box<dyn CanvasNode>) {
-        self.nodes.push(node);
-    }
-
-    /// Get a reference to a node by ID
-    pub fn get_node(&self, id: NodeId) -> Option<&dyn CanvasNode> {
-        self.nodes
-            .iter()
-            .find(|node| node.id() == id)
-            .map(|node| node.as_ref())
-    }
-
-    /// Get a mutable reference to a node by ID
-    pub fn get_node_mut(&mut self, id: NodeId) -> Option<&mut Box<dyn CanvasNode>> {
-        self.nodes.iter_mut().find(|node| node.id() == id)
-    }
-
-    /// Remove a node from the registry
-    pub fn remove_node(&mut self, id: NodeId) -> Option<Box<dyn CanvasNode>> {
-        if let Some(index) = self.nodes.iter().position(|node| node.id() == id) {
-            Some(self.nodes.remove(index))
-        } else {
-            None
-        }
-    }
-
-    /// Get all nodes in the registry
-    pub fn get_all_nodes(&self) -> &[Box<dyn CanvasNode>] {
-        &self.nodes
-    }
-
-    /// Create a node hierarchy - sets up parent-child relationships
-    pub fn create_hierarchy(&mut self, parent_id: NodeId, child_id: NodeId) {
-        // Update the parent node to add the child
-        if let Some(parent) = self.get_node_mut(parent_id) {
-            parent.common_mut().add_child(child_id);
-        }
-
-        // Update the child node to set its parent
-        if let Some(child) = self.get_node_mut(child_id) {
-            child.common_mut().parent = Some(parent_id);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -605,69 +480,6 @@ mod tests {
     }
 
     #[test]
-    fn test_circle_node() {
-        let id = NodeId::new(3);
-        let circle = CircleNode::new(id);
-
-        assert_eq!(circle.node_type(), NodeType::Circle);
-        assert_eq!(circle.common().id, id);
-        assert_eq!(circle.common().corner_radius, f32::MAX);
-    }
-
-    #[test]
-    fn test_frame_node() {
-        let id = NodeId::new(4);
-        let frame = FrameNode::new(id);
-
-        assert_eq!(frame.node_type(), NodeType::Frame);
-        assert_eq!(frame.common().id, id);
-        assert_eq!(frame.common().name, "Frame 4");
-    }
-
-    #[test]
-    fn test_line_node() {
-        let id = NodeId::new(5);
-        let start = Point::new(10.0, 10.0);
-        let end = Point::new(100.0, 100.0);
-        let line = LineNode::new(id, start, end);
-
-        assert_eq!(line.node_type(), NodeType::Line);
-        assert_eq!(line.common().id, id);
-        assert_eq!(line.start, start);
-        assert_eq!(line.end, end);
-
-        // Test point containment with a point on the line
-        let point_on_line = Point::new(50.0, 50.0);
-        assert!(line.point_near_path(&point_on_line, 2.0));
-
-        // Test point containment with a point not on the line
-        let point_not_on_line = Point::new(50.0, 60.0);
-        assert!(!line.point_near_path(&point_not_on_line, 2.0));
-    }
-
-    #[test]
-    fn test_factory() {
-        let mut factory = NodeFactory::new();
-
-        let rect = factory.create_rectangle();
-        let circle = factory.create_circle();
-        let frame = factory.create_frame();
-        let line = factory.create_line(Point::new(0.0, 0.0), Point::new(10.0, 10.0));
-
-        // Check that IDs are sequential and unique
-        assert_eq!(rect.id().0, 1);
-        assert_eq!(circle.id().0, 2);
-        assert_eq!(frame.id().0, 3);
-        assert_eq!(line.id().0, 4);
-
-        // Check correct node types
-        assert_eq!(rect.node_type(), NodeType::Rectangle);
-        assert_eq!(circle.node_type(), NodeType::Circle);
-        assert_eq!(frame.node_type(), NodeType::Frame);
-        assert_eq!(line.node_type(), NodeType::Line);
-    }
-
-    #[test]
     fn test_shape_node_trait() {
         let id = NodeId::new(1);
         let rect = RectangleNode::new(id);
@@ -684,22 +496,23 @@ mod tests {
         // Similarly for bounding_box
         assert!(rect.bounding_box().is_none());
     }
-
+    
     #[test]
-    fn test_path_node_trait() {
+    fn test_any_node() {
         let id = NodeId::new(1);
-        let start = Point::new(0.0, 0.0);
-        let end = Point::new(100.0, 100.0);
-        let line = LineNode::new(id, start, end);
-
-        // Test PathNode trait methods
-        let path_points = line.path_points();
-        assert_eq!(path_points.len(), 2);
-        assert_eq!(path_points[0], start);
-        assert_eq!(path_points[1], end);
-
-        // Test point near path
-        let point_on_path = Point::new(50.0, 50.0);
-        assert!(line.point_near_path(&point_on_path, 2.0));
+        let rect = RectangleNode::new(id);
+        let mut any_node = AnyNode::new(rect);
+        
+        assert_eq!(any_node.id(), id);
+        assert_eq!(any_node.node_type(), NodeType::Rectangle);
+        
+        // Test downcasting
+        let rect_mut = any_node.downcast_mut::<RectangleNode>();
+        assert!(rect_mut.is_some());
+        if let Some(rect) = rect_mut {
+            rect.common_mut().set_corner_radius(5.0);
+        }
+        
+        assert_eq!(any_node.common().corner_radius, 5.0);
     }
 }
