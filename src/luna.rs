@@ -249,23 +249,18 @@ impl RenderOnce for ToolButton {
 }
 
 #[derive(IntoElement)]
-pub struct CurrentColorTool {
-    border: Hsla,
-    background: Hsla,
-}
+pub struct CurrentColorTool {}
 
 impl CurrentColorTool {
     pub fn new() -> Self {
-        Self {
-            border: gpui::white(),
-            background: gpui::black(),
-        }
+        Self {}
     }
 }
 
 impl RenderOnce for CurrentColorTool {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
 
         div()
             .id("current-color-tool")
@@ -289,7 +284,12 @@ impl RenderOnce for CurrentColorTool {
                         blur_radius: px(0.),
                         spread_radius: px(0.),
                     }])
-                    .child(div().rounded(px(2.)).size_full().bg(self.border)),
+                    .child(
+                        div()
+                            .rounded(px(2.))
+                            .size_full()
+                            .bg(state.current_border_color),
+                    ),
             )
             .child(
                 div()
@@ -307,7 +307,12 @@ impl RenderOnce for CurrentColorTool {
                         blur_radius: px(0.),
                         spread_radius: px(0.),
                     }])
-                    .child(div().rounded(px(2.)).size_full().bg(self.background)),
+                    .child(
+                        div()
+                            .rounded(px(2.))
+                            .size_full()
+                            .bg(state.current_background_color),
+                    ),
             )
     }
 }
@@ -571,8 +576,6 @@ impl Shape {
 
 impl RenderOnce for Shape {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let theme = Theme::get_global(cx);
-
         div()
             .id(self.id)
             .absolute()
@@ -736,13 +739,14 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        GlobalState::update_global(cx, |state, _| {
-            std::mem::swap(
-                &mut state.current_border_color,
-                &mut state.current_background_color,
-            );
+        GlobalState::update_global(cx, |state, cx| {
+            let border_color = state.current_border_color;
+            let background_color = state.current_background_color;
+
+            state.current_border_color = background_color;
+            state.current_background_color = border_color;
+            cx.notify();
         });
-        cx.notify();
     }
 
     fn reset_current_colors(
@@ -795,6 +799,7 @@ impl Render for Luna {
                 let toggle_ui = keystroke_builder("cmd-.");
                 let selection_tool = keystroke_builder("v");
                 let hand_tool = keystroke_builder("h");
+                let swap_colors = keystroke_builder("x");
 
                 if e.keystroke == toggle_ui {
                     this.toggle_ui(&ToggleUI::default(), window, cx);
@@ -805,6 +810,9 @@ impl Render for Luna {
                 }
                 if e.keystroke == selection_tool {
                     this.activate_selection_tool(&Default::default(), window, cx);
+                }
+                if e.keystroke == swap_colors {
+                    this.swap_current_colors(&Default::default(), window, cx);
                 }
 
                 cx.stop_propagation();
