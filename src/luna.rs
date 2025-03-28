@@ -3,6 +3,7 @@
 use std::{fs, path::PathBuf};
 
 use canvas::Canvas;
+use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -44,6 +45,7 @@ pub struct Theme {
     pub foreground: Hsla,
     pub foreground_muted: Hsla,
     pub foreground_disabled: Hsla,
+    pub cursor_color: Hsla,
     pub selected: Hsla,
 }
 
@@ -55,6 +57,7 @@ impl Theme {
             foreground: hsla(0.0, 1.0, 1.0, 1.0),
             foreground_muted: hsla(0.0, 1.0, 1.0, 0.6),
             foreground_disabled: hsla(0.0, 1.0, 1.0, 0.3),
+            cursor_color: hsla(0.0, 1.0, 1.0, 1.0),
             selected: hsla(210.0 / 360.0, 0.92, 0.65, 1.0),
         }
     }
@@ -1067,7 +1070,6 @@ impl Render for CanvasView {
 
 struct Luna {
     focus_handle: FocusHandle,
-    canvas_view: Entity<CanvasView>,
     canvas: Entity<Canvas>,
     sidebar: Entity<Sidebar>,
 }
@@ -1078,12 +1080,10 @@ impl Luna {
         let canvas = cx.new(|cx| Canvas::new(window, cx));
         let weak_canvas = canvas.downgrade();
 
-        let canvas_view = cx.new(|cx| CanvasView::new(weak_canvas.clone()));
         let sidebar = cx.new(|cx| Sidebar::new(weak_canvas));
 
         Luna {
             focus_handle,
-            canvas_view,
             canvas,
             sidebar,
         }
@@ -1215,7 +1215,7 @@ impl Render for Luna {
                 cx.stop_propagation();
             }))
             .when(!state.hide_sidebar, |this| this.child(self.sidebar.clone()))
-            .child(self.canvas_view.clone())
+            .child(CanvasElement::new(&self.canvas, cx))
     }
 }
 

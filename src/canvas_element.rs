@@ -1,11 +1,11 @@
 #[allow(unused, dead_code)]
 use gpui::prelude::*;
 use gpui::{
-    hsla, px, relative, ContentMask, ElementId, Entity, Focusable, Hsla, Pixels, Style, TextStyle,
-    TextStyleRefinement,
+    hsla, px, relative, solid_background, App, ContentMask, ElementId, Entity, Focusable, Hitbox,
+    Hsla, Pixels, Style, TextStyle, TextStyleRefinement, Window,
 };
 
-use crate::{canvas::Canvas, node::RootNodeLayout};
+use crate::{canvas::Canvas, node::RootNodeLayout, Theme};
 
 #[derive(Clone)]
 pub struct CanvasStyle {
@@ -13,6 +13,18 @@ pub struct CanvasStyle {
     pub cursor_color: Hsla,
     pub scrollbar_thickness: Pixels,
     pub text: TextStyle,
+}
+
+impl CanvasStyle {
+    pub fn new(cx: &App) -> Self {
+        let theme = Theme::get_global(cx);
+
+        Self {
+            background: theme.canvas_color,
+            cursor_color: theme.cursor_color,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for CanvasStyle {
@@ -27,6 +39,7 @@ impl Default for CanvasStyle {
 }
 
 pub struct CanvasLayout {
+    hitbox: Hitbox,
     root_nodes: Vec<RootNodeLayout>,
 }
 
@@ -42,7 +55,9 @@ pub struct CanvasElement {
 }
 
 impl CanvasElement {
-    pub fn new(canvas: &Entity<Canvas>, style: CanvasStyle) -> Self {
+    pub fn new(canvas: &Entity<Canvas>, cx: &mut App) -> Self {
+        let style = CanvasStyle::new(cx);
+
         Self {
             canvas: canvas.clone(),
             style,
@@ -67,7 +82,23 @@ impl CanvasElement {
     // render_root_nodes
     // render_context_menu
 
-    // paint_canvas_background
+    // paint_canvas_background might also include any features like:
+    // - canvas grids
+    // - background images or textures
+    /// Paint the background layer of the canvas.
+    ///
+    /// Everything on this layer has the same draw order.
+    pub fn paint_canvas_background(
+        &self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            window.paint_quad(gpui::fill(layout.hitbox.bounds, self.style.background));
+        });
+    }
+
     // paint_scrollbars
     // paint_dimension_guides
     // paint_root_nodes
@@ -98,8 +129,8 @@ impl Element for CanvasElement {
                 // TODO: impl actual size
                 // style.size.height = relative(1.).into();
                 // style.size.width = relative(1.).into();
-                style.size.height = px(800.).into();
-                style.size.width = px(800.).into();
+                style.size.height = px(500.).into();
+                style.size.width = px(700.).into();
 
                 // TODO: use data_furthest_node_positions to calculate
                 // how big the initial canvas should be
@@ -132,9 +163,10 @@ impl Element for CanvasElement {
                 // todo: we probably need somethink like zed::editor::EditorSnapshot here
 
                 let style = self.style.clone();
+                let hitbox = window.insert_hitbox(bounds, false);
 
                 // let nodes = self.layout_nodes(..);
-                let nodes = Vec::new();
+                let root_nodes = Vec::new();
 
                 if !cx.has_active_drag() {
                     // anything that shouldn't be painted when
@@ -144,7 +176,7 @@ impl Element for CanvasElement {
                     // );
                 }
 
-                CanvasLayout { root_nodes: nodes }
+                CanvasLayout { hitbox, root_nodes }
             })
         })
     }
@@ -171,7 +203,7 @@ impl Element for CanvasElement {
 
         window.with_text_style(Some(text_style), |window| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                // self.paint_canvas_background(..);
+                self.paint_canvas_background(layout, window, cx);
 
                 if !layout.root_nodes.is_empty() {
                     // self.paint_nodes(..);
@@ -179,7 +211,7 @@ impl Element for CanvasElement {
 
                 // paint_scrollbars
                 // paint_context_menu
-            })
+            });
         })
     }
 }
