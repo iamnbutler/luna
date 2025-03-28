@@ -1,7 +1,7 @@
 #![allow(unused, dead_code)]
 
 use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
-use gpui::{size, Bounds, Context, Point, Size, Window};
+use gpui::{size, App, Bounds, Context, Point, Size, Window};
 use std::collections::{HashMap, HashSet};
 use taffy::{prelude::*, Rect};
 
@@ -40,7 +40,7 @@ pub struct Canvas {
 
 impl Canvas {
     /// Create a new canvas
-    pub fn new(window: &Window, _cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &Window, cx: &mut Context<Self>) -> Self {
         // Create the taffy layout engine
         let taffy = TaffyTree::new();
 

@@ -4,14 +4,17 @@ use std::{fs, path::PathBuf};
 
 use gpui::{
     actions, canvas, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource,
-    BoxShadow, ElementId, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString,
-    Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance, WindowOptions,
+    BoxShadow, ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke,
+    Menu, MenuItem, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    Point, SharedString, Size, TitlebarOptions, UpdateGlobal, Window, WindowBackgroundAppearance,
+    WindowOptions,
 };
 
 mod canvas;
 mod node;
 mod util;
+
+use crate::node::CanvasNode;
 
 use anyhow::Result;
 use strum::Display;
@@ -483,12 +486,24 @@ impl RenderOnce for LayerList {
 
         let mut layers = div().flex().flex_col().flex_1().pt_1();
 
-        // Add all elements from GlobalState to the layer list
-        for element in &state.elements {
-            layers = layers.child(
-                LayerListItem::new(element.kind.clone(), element.name.clone())
-                    .selected(element.selected),
-            );
+        // Add all nodes from Canvas to the layer list
+        if let Some(canvas) = state.canvas() {
+            for (node_id, node) in &canvas.nodes {
+                let kind = match node.node_type() {
+                    crate::node::NodeType::Rectangle => ElementKind::ShapeSquare,
+                    crate::node::NodeType::Circle => ElementKind::ShapeCircle,
+                    crate::node::NodeType::Frame => ElementKind::Frame,
+                    crate::node::NodeType::Text => ElementKind::Text,
+                    crate::node::NodeType::Image => ElementKind::Image,
+                    crate::node::NodeType::Path => ElementKind::Path,
+                    _ => ElementKind::Frame,
+                };
+
+                let name = format!("Node {}", node_id.0);
+                let selected = canvas.is_node_selected(*node_id);
+
+                layers = layers.child(LayerListItem::new(kind, name).selected(selected));
+            }
         }
 
         layers
@@ -743,12 +758,22 @@ struct GlobalState {
     active_tool: ToolKind,
     current_border_color: Hsla,
     current_background_color: Hsla,
-    elements: Vec<LunaElement>,
-    next_id: usize,
     hide_sidebar: bool,
     sidebar_width: Pixels,
+
+    // Canvas drag operation states
     active_rectangle_drag: Option<RectangleDrag>,
     active_selection_drag: Option<SelectionDrag>,
+
+    // For panning the canvas with Hand tool
+    drag_start_position: Option<Point<Pixels>>,
+    scroll_start_position: Option<Point<f32>>,
+
+    // For tracking mouse movement
+    last_mouse_position: Option<Point<Pixels>>,
+
+    // The canvas from canvas.rs that manages nodes
+    canvas: Option<crate::canvas::Canvas>,
 }
 
 impl GlobalState {
@@ -768,12 +793,14 @@ impl GlobalState {
             active_tool: ToolKind::default(),
             current_border_color: gpui::white(),
             current_background_color: gpui::black(),
-            elements: vec![],
-            next_id: 1,
             hide_sidebar: false,
             sidebar_width: px(260.0),
             active_rectangle_drag: None,
             active_selection_drag: None,
+            drag_start_position: None,
+            scroll_start_position: None,
+            last_mouse_position: None,
+            canvas: None,
         }
     }
 
@@ -781,162 +808,311 @@ impl GlobalState {
         cx.global::<GlobalState>()
     }
 
-    pub fn add_element(&mut self, element: LunaElement) {
-        self.elements.push(element);
+    // Flag to indicate canvas needs initialization
+    pub fn need_canvas_init(&self) -> bool {
+        self.canvas.is_none()
     }
 
-    pub fn next_id(&mut self) -> usize {
-        let id = self.next_id;
-        self.next_id += 1;
-        id
+    // Get a reference to the canvas
+    pub fn canvas(&self) -> Option<&crate::canvas::Canvas> {
+        self.canvas.as_ref()
+    }
+
+    // Get a mutable reference to the canvas
+    pub fn canvas_mut(&mut self) -> Option<&mut crate::canvas::Canvas> {
+        self.canvas.as_mut()
     }
 }
 
 impl Global for GlobalState {}
 
-/// Canvas is responsible for rendering all elements
-#[derive(IntoElement)]
-pub struct Canvas {}
+/// CanvasView is responsible for rendering the Canvas from canvas.rs
+pub struct CanvasView {
+    pending_refresh: bool,
+}
 
-impl Canvas {
+impl CanvasView {
     pub fn new() -> Self {
-        Self {}
-    }
-
-    pub fn handle_left_mouse_down(
-        event: &MouseDownEvent,
-        _window: &mut gpui::Window,
-        cx: &mut App,
-    ) {
-        let state = GlobalState::get(cx);
-        let position = state.adjust_position(event.position);
-
-        // Handle mouse down event
-        match event.button {
-            gpui::MouseButton::Left => {
-                // Handle left click
-                match state.active_tool {
-                    ToolKind::ArrowPointer => GlobalState::update_global(cx, |state, cx| {
-                        // Start selection drag
-                        state.active_selection_drag = Some(SelectionDrag {
-                            start_position: position,
-                            current_position: position,
-                        });
-                    }),
-                    ToolKind::Hand => {
-                        // Implement panning logic
-                    }
-                    ToolKind::Rectangle => GlobalState::update_global(cx, |state, cx| {
-                        // Start tracking the drag operation - we only create the element on mouse up
-                        state.active_rectangle_drag = Some(RectangleDrag {
-                            start_position: position,
-                            current_position: position,
-                        });
-                    }),
-                    _ => {}
-                }
-            }
-            _ => {}
+        Self {
+            pending_refresh: false,
         }
-    }
-
-    pub fn handle_mouse_move(event: &MouseMoveEvent, window: &mut gpui::Window, cx: &mut App) {
-        let adjusted_position = GlobalState::get(cx).adjust_position(event.position);
-
-        GlobalState::update_global(cx, |state, cx| {
-            if let Some(drag) = &mut state.active_rectangle_drag {
-                // Update current position with adjusted position
-                drag.current_position = adjusted_position;
-            }
-
-            if let Some(drag) = &mut state.active_selection_drag {
-                // Update current position with adjusted position
-                drag.current_position = adjusted_position;
-            }
-        });
-    }
-
-    pub fn handle_mouse_up(event: &MouseUpEvent, window: &mut gpui::Window, cx: &mut App) {
-        GlobalState::update_global(cx, |state, cx| {
-            if let Some(drag) = state.active_rectangle_drag.take() {
-                // Calculate rectangle dimensions with rounded values
-                let min_x = round_to_pixel(drag.start_position.x.min(drag.current_position.x));
-                let min_y = round_to_pixel(drag.start_position.y.min(drag.current_position.y));
-                let width = round_to_pixel((drag.start_position.x - drag.current_position.x).abs());
-                let height =
-                    round_to_pixel((drag.start_position.y - drag.current_position.y).abs());
-
-                // Only create a rectangle if it has a meaningful size
-                if width >= px(2.) && height >= px(2.) {
-                    // Create the actual rectangle element now that we know its final size
-                    let id = state.next_id();
-                    let mut element = LunaElement::new(id.into(), ElementKind::ShapeSquare);
-
-                    // Set styles based on the drag operation
-                    element.styles_mut().position = Point::new(min_x, min_y);
-                    element.styles_mut().size = Size::new(width, height);
-                    element.styles_mut().background_color = state.current_background_color;
-                    element.styles_mut().border_color = state.current_border_color;
-
-                    state.add_element(element);
-                }
-            }
-
-            // For selection, just clear the drag without creating an element
-            // In a full implementation, this would select elements under the drag area
-            if let Some(_) = state.active_selection_drag.take() {
-                // Here we would implement selection logic
-                // For now, we just clear the drag
-            }
-        });
     }
 }
 
-impl RenderOnce for Canvas {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Render for CanvasView {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
         let state = GlobalState::get(cx);
 
         // Container for all canvas elements
-        let mut canvas = div()
-            .id("canvas")
+        let canvas_div = div()
+            .id("canvas-view")
             .size_full()
             .flex_1()
             .relative()
             .bg(theme.canvas_color)
-            .on_mouse_down(gpui::MouseButton::Left, Self::handle_left_mouse_down)
-            .on_mouse_move(Self::handle_mouse_move)
-            .on_mouse_up(gpui::MouseButton::Left, Self::handle_mouse_up);
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_, event: &MouseDownEvent, window, cx| {
+                    let state = GlobalState::get(cx);
+                    let position = state.adjust_position(event.position);
 
-        // Add all elements from GlobalState to the canvas
-        for element in &state.elements {
-            canvas =
-                canvas.child(Shape::new(element.id.clone()).with_style(element.styles.clone()));
-        }
+                    // Handle mouse down event
+                    match event.button {
+                        gpui::MouseButton::Left => {
+                            // Handle left click based on active tool
+                            match state.active_tool {
+                                ToolKind::ArrowPointer => {
+                                    GlobalState::update_global(cx, |state, _| {
+                                        // See if we clicked on a node in the canvas
+                                        if let Some(canvas) = &mut state.canvas {
+                                            // Convert pixel position to float for canvas
+                                            let canvas_point =
+                                                Point::new(position.x.0, position.y.0);
 
-        // Add the rectangle drag preview if there's an active drag
-        if let Some(rectangle_drag) = &state.active_rectangle_drag {
-            canvas = canvas.child(rectangle_drag.clone());
-        }
+                                            // Check if we hit any node
+                                            if let Some(node_id) =
+                                                canvas.top_node_at_point(canvas_point)
+                                            {
+                                                // Clear any previous selection and select this node
+                                                canvas.clear_selection();
+                                                canvas.select_node(node_id);
+                                                canvas.mark_dirty();
+                                            } else {
+                                                // If we didn't hit a node, start a selection drag
+                                                state.active_selection_drag = Some(SelectionDrag {
+                                                    start_position: position,
+                                                    current_position: position,
+                                                });
 
-        // Add the selection drag preview if there's an active drag
-        if let Some(selection_drag) = &state.active_selection_drag {
-            canvas = canvas.child(selection_drag.clone());
-        }
+                                                // Clear any previous selection
+                                                canvas.clear_selection();
+                                                canvas.mark_dirty();
+                                            }
+                                        }
+                                    })
+                                }
+                                ToolKind::Hand => {
+                                    // Pan the canvas
+                                    GlobalState::update_global(cx, |state, _| {
+                                        if let Some(_canvas) = &mut state.canvas {
+                                            // Just store the starting position of the drag
+                                            state.drag_start_position = Some(position);
+                                            // We'll track delta from this position instead of absolute scroll
+                                            state.last_mouse_position = Some(position);
+                                        }
+                                    });
+                                }
+                                ToolKind::Rectangle => {
+                                    GlobalState::update_global(cx, |state, _| {
+                                        // Start tracking the drag operation for a new rectangle
+                                        state.active_rectangle_drag = Some(RectangleDrag {
+                                            start_position: position,
+                                            current_position: position,
+                                        });
+                                    })
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }),
+            )
+            .on_mouse_move(cx.listener(|_, event: &MouseMoveEvent, window, cx| {
+                let adjusted_position = GlobalState::get(cx).adjust_position(event.position);
 
-        canvas
+                GlobalState::update_global(cx, |state, cx| {
+                    if let Some(drag) = &mut state.active_rectangle_drag {
+                        // Update current position with adjusted position`
+                        drag.current_position = adjusted_position;
+                    }
+
+                    if let Some(drag) = &mut state.active_selection_drag {
+                        // Update current position with adjusted position
+                        drag.current_position = adjusted_position;
+                    }
+
+                    // If we have a drag start position and we're in hand tool, handle panning
+                    if let (Some(drag_start), ToolKind::Hand) =
+                        (&state.drag_start_position, &state.active_tool)
+                    {
+                        if let (Some(canvas), Some(scroll_start)) =
+                            (&mut state.canvas, &state.scroll_start_position)
+                        {
+                            // Calculate delta since drag start
+                            let delta_x = (drag_start.x - adjusted_position.x).0;
+                            let delta_y = (drag_start.y - adjusted_position.y).0;
+
+                            // We can't access private fields directly, so just pass the delta to move_selected_nodes
+                            // which internally handles scroll position updates
+                            let delta = Point::new(delta_x, delta_y);
+                            canvas.move_selected_nodes(delta);
+                            canvas.mark_dirty();
+                        }
+                    }
+
+                    // If we have selected nodes and are in selection tool with mouse down, handle node moving
+                    if state.active_tool == ToolKind::ArrowPointer
+                        && event.pressed_button == Some(gpui::MouseButton::Left)
+                    {
+                        if let Some(canvas) = &mut state.canvas {
+                            if !canvas.selected_nodes.is_empty()
+                                && state.active_selection_drag.is_none()
+                            {
+                                // Calculate movement delta since last frame
+                                if let Some(last_pos) = state.last_mouse_position {
+                                    let delta_x = (adjusted_position.x - last_pos.x).0;
+                                    let delta_y = (adjusted_position.y - last_pos.y).0;
+
+                                    if delta_x != 0.0 || delta_y != 0.0 {
+                                        // Move selected nodes
+                                        canvas.move_selected_nodes(Point::new(delta_x, delta_y));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Update last known mouse position
+                    state.last_mouse_position = Some(adjusted_position);
+                });
+
+                cx.notify();
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|_, event: &MouseUpEvent, window, cx| {
+                    GlobalState::update_global(cx, |state, _| {
+                        if let Some(drag) = state.active_rectangle_drag.take() {
+                            // Calculate rectangle dimensions with rounded values
+                            let min_x =
+                                round_to_pixel(drag.start_position.x.min(drag.current_position.x));
+                            let min_y =
+                                round_to_pixel(drag.start_position.y.min(drag.current_position.y));
+                            let width = round_to_pixel(
+                                (drag.start_position.x - drag.current_position.x).abs(),
+                            );
+                            let height = round_to_pixel(
+                                (drag.start_position.y - drag.current_position.y).abs(),
+                            );
+
+                            // Only create a rectangle if it has a meaningful size
+                            if width >= px(2.) && height >= px(2.) {
+                                // Create the node in our Canvas from canvas.rs
+                                if let Some(canvas) = &mut state.canvas {
+                                    // Convert from pixels to float for the canvas API
+                                    let position = Point::new(min_x.0, min_y.0);
+
+                                    // Create a node in the canvas
+                                    let node_id = canvas
+                                        .create_node(crate::node::NodeType::Rectangle, position);
+
+                                    // Get the rectangle node and update its properties
+                                    if let Some(node) = canvas.nodes.get_mut(&node_id) {
+                                        if let Some(rect_node) =
+                                            node.downcast_mut::<crate::node::RectangleNode>()
+                                        {
+                                            // Set size and styles
+                                            rect_node.common_mut().set_size(width.0, height.0);
+                                            rect_node
+                                                .common_mut()
+                                                .set_fill(Some(state.current_background_color));
+                                            rect_node
+                                                .common_mut()
+                                                .set_border(Some(state.current_border_color), 1.0);
+
+                                            // Mark as needing redraw
+                                            canvas.mark_dirty();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Handle selection drag
+                        if let Some(selection_drag) = state.active_selection_drag.take() {
+                            if let Some(canvas) = &mut state.canvas {
+                                // Convert the selection area to a rectangle for the canvas
+                                let min_x = selection_drag
+                                    .start_position
+                                    .x
+                                    .min(selection_drag.current_position.x)
+                                    .0;
+                                let min_y = selection_drag
+                                    .start_position
+                                    .y
+                                    .min(selection_drag.current_position.y)
+                                    .0;
+                                let max_x = selection_drag
+                                    .start_position
+                                    .x
+                                    .max(selection_drag.current_position.x)
+                                    .0;
+                                let max_y = selection_drag
+                                    .start_position
+                                    .y
+                                    .max(selection_drag.current_position.y)
+                                    .0;
+
+                                // Create a selection rectangle
+                                let selection_rect = taffy::prelude::Rect {
+                                    left: min_x,
+                                    top: min_y,
+                                    right: max_x,
+                                    bottom: max_y,
+                                };
+
+                                // Select all nodes in this rectangle
+                                canvas.select_nodes_in_rect(selection_rect);
+                            }
+                        }
+
+                        // Clear drag state
+                        state.drag_start_position = None;
+                        state.scroll_start_position = None;
+                    });
+
+                    cx.notify();
+                }),
+            );
+
+        // Draw a simple background for now
+        // We'll fully implement the canvas rendering in a future update
+        canvas_div.child(
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(theme.foreground_muted)
+                .child("Luna Canvas View"),
+        )
     }
 }
 
 struct Luna {
     focus_handle: FocusHandle,
+    canvas_view: Entity<CanvasView>,
 }
 
 impl Luna {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
 
-        Luna { focus_handle }
+        let canvas_view = cx.new(|cx| CanvasView::new());
+
+        Luna {
+            focus_handle,
+            canvas_view,
+        }
+    }
+
+    // TODO: Full integration of the Canvas from canvas.rs
+    // would require additional work to resolve borrowing issues
+    fn initialize_canvas(&mut self, _cx: &mut Context<Self>) {
+        // Initial implementation left empty for now
+        // Full integration will be implemented in a future update
     }
 
     pub fn toggle_ui(&mut self, _: &ToggleUI, _window: &mut Window, cx: &mut Context<Self>) {
@@ -1005,10 +1181,11 @@ impl Luna {
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
 
-        // Create the canvas component
-        let canvas = Canvas::new();
+        // TODO: Canvas integration will be implemented in a future update
+        // For now, we skip initialization to avoid borrowing conflicts
+
+        let state = GlobalState::get(cx);
 
         div()
             .id("Luna")
@@ -1064,7 +1241,7 @@ impl Render for Luna {
                 cx.stop_propagation();
             }))
             .when(!state.hide_sidebar, |this| this.child(Sidebar {}))
-            .child(canvas)
+            .child(self.canvas_view.clone())
     }
 }
 
