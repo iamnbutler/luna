@@ -1,11 +1,16 @@
 #[allow(unused, dead_code)]
 use gpui::prelude::*;
 use gpui::{
-    hsla, px, relative, solid_background, App, ContentMask, ElementId, Entity, Focusable, Hitbox,
-    Hsla, Pixels, Style, TextStyle, TextStyleRefinement, Window,
+    hsla, px, relative, solid_background, App, ContentMask, DispatchPhase, ElementId,
+    ElementInputHandler, Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Style, TextStyle, TextStyleRefinement, Window,
 };
 
-use crate::{canvas::Canvas, node::RootNodeLayout, Theme};
+use crate::{
+    canvas::{register_canvas_action, Canvas},
+    node::RootNodeLayout,
+    Theme,
+};
 
 #[derive(Clone)]
 pub struct CanvasStyle {
@@ -64,7 +69,83 @@ impl CanvasElement {
         }
     }
 
+    pub fn register_actions(&self, window: &mut Window, cx: &mut App) {
+        let canvas = &self.canvas;
+        canvas.update(cx, |canvas, cx| {
+            for action in canvas.actions.borrow().values() {
+                (action)(window, cx)
+            }
+        });
+
+        register_canvas_action(canvas, window, Canvas::clear_selection);
+    }
+
     // handle_mouse_down, etc
+    fn handle_left_mouse_down(
+        canvas: &mut Canvas,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Canvas>,
+    ) {
+        if window.default_prevented() {
+            return;
+        }
+
+        println!("Left mouse down");
+
+        let mut click_count = event.click_count;
+        let mut modifiers = event.modifiers;
+
+        // do stuff
+
+        cx.stop_propagation();
+    }
+
+    fn handle_left_mouse_up(
+        canvas: &mut Canvas,
+        event: &MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Canvas>,
+    ) {
+        // check if selection is pending
+        // if so, clear it and fire any selection events
+
+        println!("Left mouse up");
+
+        cx.stop_propagation();
+    }
+
+    fn handle_mouse_drag(
+        &self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Canvas>,
+    ) {
+        println!("mouse drag");
+
+        // if canvas.selection_pending()  {
+        // handle selection
+        // } else if canvas.dragging() {
+        // handle dragging node
+        // } else {
+        // return
+        // }
+    }
+
+    fn handle_mouse_move(
+        &self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Canvas>,
+    ) {
+
+        // if canvas.position_has_hitbox()  {
+        // handle hover event
+        // } else {
+        // return
+        // }
+    }
+
     // handle_mouse_drag, etc
     // handle_key_down, etc
 
@@ -99,6 +180,48 @@ impl CanvasElement {
         });
     }
 
+    /// Register mouse listeners like click, hover and drag events.
+    ///
+    /// Despite not being visually "painted", mouse listeners are registered
+    /// using `window.on_{}_event`, which is only available in the paint phase.
+    ///
+    /// Thus the `paint` prefix.
+    fn paint_mouse_listeners(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            move |event: &MouseDownEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    match event.button {
+                        MouseButton::Left => canvas.update(cx, |canvas, cx| {
+                            Self::handle_left_mouse_down(canvas, event, window, cx);
+                        }),
+                        MouseButton::Right => canvas.update(cx, |canvas, cx| {
+                            // todo
+                        }),
+                        _ => {}
+                    }
+                }
+            }
+        });
+
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            move |event: &MouseUpEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    match event.button {
+                        MouseButton::Left => canvas.update(cx, |canvas, cx| {
+                            Self::handle_left_mouse_up(canvas, event, window, cx)
+                        }),
+                        MouseButton::Right => canvas.update(cx, |canvas, cx| {
+                            // todo
+                        }),
+                        _ => {}
+                    }
+                }
+            }
+        });
+    }
+
     // paint_scrollbars
     // paint_dimension_guides
     // paint_root_nodes
@@ -122,7 +245,7 @@ impl Element for CanvasElement {
         cx: &mut gpui::App,
     ) -> (gpui::LayoutId, ()) {
         // prepare the overall dimensions of the canvas before
-        // we prepaint in
+        // we prepaint it
         self.canvas.update(cx, |canvas, cx| {
             let layout_id = {
                 let mut style = Style::default();
@@ -191,6 +314,9 @@ impl Element for CanvasElement {
         cx: &mut gpui::App,
     ) {
         let focus_handle = self.canvas.focus_handle(cx);
+        let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
+
+        window.set_key_context(key_context);
 
         // register_actions
         // register_key_listeners
@@ -203,6 +329,7 @@ impl Element for CanvasElement {
 
         window.with_text_style(Some(text_style), |window| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                self.paint_mouse_listeners(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
 
                 if !layout.root_nodes.is_empty() {

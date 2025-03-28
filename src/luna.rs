@@ -845,7 +845,7 @@ impl Render for CanvasView {
                                         canvas.read(cx).top_node_at_point(canvas_point)
                                     {
                                         canvas.update(cx, |canvas_mut, cx| {
-                                            canvas_mut.clear_selection();
+                                            // canvas_mut.clear_selection();
                                             canvas_mut.select_node(node_id);
                                             canvas_mut.mark_dirty();
                                         });
@@ -858,7 +858,7 @@ impl Render for CanvasView {
                                             });
                                         });
                                         canvas.update(cx, |canvas_mut, cx| {
-                                            canvas_mut.clear_selection();
+                                            // canvas_mut.clear_selection();
                                             canvas_mut.mark_dirty();
                                         });
                                     }

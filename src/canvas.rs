@@ -2,12 +2,49 @@
 
 use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
 use gpui::{
-    canvas as gpui_canvas, div, hsla, prelude::*, size, App, Bounds, Context, Element, Entity,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Point, Render, Size,
+    actions, canvas as gpui_canvas, div, hsla, prelude::*, size, Action, App, Bounds, Context,
+    ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle, Focusable,
+    InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Point, Render, Size,
     Styled, Window,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    any::TypeId,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap, HashSet},
+    rc::Rc,
+};
 use taffy::{prelude::*, Rect};
+
+actions!(canvas, [ClearSelection]);
+
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Debug, Default)]
+pub struct CanvasActionId(usize);
+
+impl CanvasActionId {
+    pub fn increment(&mut self) -> Self {
+        let new_id = self.0;
+
+        *self = Self(new_id + 1);
+
+        Self(new_id)
+    }
+}
+
+pub fn register_canvas_action<T: Action>(
+    canvas: &Entity<Canvas>,
+    window: &mut Window,
+    listener: impl Fn(&mut Canvas, &T, &mut Window, &mut Context<Canvas>) + 'static,
+) {
+    let canvas = canvas.clone();
+    window.on_action(TypeId::of::<T>(), move |action, phase, window, cx| {
+        let action = action.downcast_ref().unwrap();
+        if phase == DispatchPhase::Bubble {
+            canvas.update(cx, |canvas, cx| {
+                listener(canvas, action, window, cx);
+            })
+        }
+    })
+}
 
 /// A Canvas manages a collection of nodes that can be rendered and manipulated
 pub struct Canvas {
@@ -42,6 +79,8 @@ pub struct Canvas {
     dirty: bool,
 
     focus_handle: FocusHandle,
+    pub actions:
+        Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
 }
 
 impl Canvas {
@@ -73,6 +112,7 @@ impl Canvas {
             node_to_taffy: HashMap::new(),
             dirty: true,
             focus_handle: cx.focus_handle(),
+            actions: Rc::default(),
         }
     }
 
@@ -152,7 +192,12 @@ impl Canvas {
     }
 
     /// Clear all selections
-    pub fn clear_selection(&mut self) {
+    pub fn clear_selection(
+        &mut self,
+        _: &ClearSelection,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.selected_nodes.clear();
         self.dirty = true;
     }
@@ -392,6 +437,12 @@ impl Canvas {
     /// Get content bounds
     pub fn content_bounds(&self) -> Bounds<f32> {
         self.content_bounds
+    }
+
+    pub fn key_context(&self) -> KeyContext {
+        let mut key_context = KeyContext::new_with_defaults();
+        key_context.set("canvas", "Canvas");
+        key_context
     }
 }
 
