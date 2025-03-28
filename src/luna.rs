@@ -13,6 +13,7 @@ use gpui::{
 use node::RectangleNode;
 
 mod canvas;
+mod canvas_element;
 mod node;
 mod util;
 

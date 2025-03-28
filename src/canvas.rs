@@ -533,6 +533,12 @@ impl gpui::IntoElement for Canvas {
     }
 }
 
+impl Focusable for Canvas {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
 impl Render for Canvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let mut element = div()
@@ -556,12 +562,6 @@ impl Render for Canvas {
         )
         .size_full()
         .flex_1()
-    }
-}
-
-impl Focusable for Canvas {
-    fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.focus_handle.clone()
     }
 }
 

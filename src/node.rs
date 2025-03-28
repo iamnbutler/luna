@@ -1,6 +1,6 @@
 #![allow(unused, dead_code)]
 
-use gpui::{px, solid_background, Hsla, Point, Size};
+use gpui::{hsla, px, solid_background, Hsla, Point, Size};
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -40,6 +40,25 @@ pub enum NodeType {
     Image,
     /// A vector path
     Path,
+}
+
+/// Layout information passed to the canvas
+/// to render a root node–One with no parent
+/// that is painted directly on the canvas
+///
+/// A root node's position uses canvas coordinates,
+/// meaning it is relative to the center of the canvas (0,0).
+#[derive(Debug, Clone)]
+pub struct RootNodeLayout {
+    id: NodeId,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    background_color: Hsla,
+    border_color: Option<Hsla>,
+    border_width: f32,
+    border_radius: f32,
 }
 
 /// Common properties shared by all canvas nodes
