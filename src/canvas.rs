@@ -1,7 +1,10 @@
 #![allow(unused, dead_code)]
 
 use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
-use gpui::{size, App, Bounds, Context, Point, Size, Window};
+use gpui::{
+    canvas as gpui_canvas, div, hsla, size, App, Bounds, Context, IntoElement, Point, Render, Size,
+    Window,
+};
 use std::collections::{HashMap, HashSet};
 use taffy::{prelude::*, Rect};
 
@@ -385,6 +388,18 @@ impl Canvas {
     /// Get content bounds
     pub fn content_bounds(&self) -> Bounds<f32> {
         self.content_bounds
+    }
+}
+
+impl gpui::Element for Canvas {
+    todo!("implement canvas rendering")
+}
+
+impl gpui::IntoElement for Canvas {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
     }
 }
 

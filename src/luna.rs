@@ -4,12 +4,13 @@ use std::{fs, path::PathBuf};
 
 use canvas::Canvas;
 use gpui::{
-    actions, canvas, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource,
-    BoxShadow, ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke,
-    Menu, MenuItem, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Point, SharedString, Size, TitlebarOptions, UpdateGlobal, WeakEntity, Window,
+    actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
+    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
+    MenuItem, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, Size, TitlebarOptions, UpdateGlobal, WeakEntity, Window,
     WindowBackgroundAppearance, WindowOptions,
 };
+use node::RectangleNode;
 
 mod canvas;
 mod node;
@@ -594,42 +595,6 @@ impl Default for ElementStyles {
     }
 }
 
-#[derive(IntoElement)]
-pub struct Shape {
-    id: ElementId,
-    style: ElementStyles,
-}
-
-impl Shape {
-    pub fn new(id: ElementId) -> Self {
-        Shape {
-            id,
-            style: ElementStyles::default(),
-        }
-    }
-
-    pub fn with_style(mut self, style: ElementStyles) -> Self {
-        self.style = style;
-        self
-    }
-}
-
-impl RenderOnce for Shape {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        div()
-            .id(self.id)
-            .absolute()
-            .left(self.style.position.x)
-            .top(self.style.position.y)
-            .w(self.style.size.width)
-            .h(self.style.size.height)
-            .bg(self.style.background_color)
-            .border(self.style.border_width)
-            .border_color(self.style.border_color)
-            .rounded(self.style.corner_radius)
-    }
-}
-
 /// Represents a single element on the canvas
 pub struct LunaElement {
     id: ElementId,
@@ -695,7 +660,7 @@ impl RenderOnce for RectangleDrag {
         let height = round_to_pixel((self.start_position.y - self.current_position.y).abs());
 
         // Use canvas to draw the preview rectangle
-        canvas(
+        gpui::canvas(
             |_bounds, _window, _cx| (),
             move |_bounds, _, window, cx| {
                 let state = GlobalState::get(cx);
@@ -738,7 +703,7 @@ impl RenderOnce for SelectionDrag {
         let width = round_to_pixel((self.start_position.x - self.current_position.x).abs());
         let height = round_to_pixel((self.start_position.y - self.current_position.y).abs());
 
-        canvas(
+        gpui::canvas(
             |_bounds, _window, _cx| (),
             move |_bounds, _, window, cx| {
                 let theme = Theme::get_global(cx);
@@ -846,11 +811,10 @@ impl CanvasView {
 impl Render for CanvasView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-
         let canvas = self.canvas.clone();
+        let state = GlobalState::get(cx);
 
-        // Container for all canvas elements
-        let canvas_div = div()
+        div()
             .id("canvas-view")
             .size_full()
             .flex_1()
@@ -1081,25 +1045,22 @@ impl Render for CanvasView {
                     }
 
                     GlobalState::update_global(cx, |state, cx| {
+                        state.active_rectangle_drag = None;
+                        state.active_selection_drag = None;
                         state.drag_start_position = None;
                         state.scroll_start_position = None;
                     });
 
                     cx.notify();
                 }),
-            );
-
-        // Draw a simple background for now
-        // We'll fully implement the canvas rendering in a future update
-        canvas_div.child(
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_color(theme.foreground_muted)
-                .child("Luna Canvas View"),
-        )
+            )
+            .child(self.canvas.clone())
+            .when_some(state.active_rectangle_drag.clone(), |this, rect_drag| {
+                this.child(rect_drag.clone())
+            })
+            .when_some(state.active_selection_drag.clone(), |this, sel_drag| {
+                this.child(sel_drag.clone())
+            })
     }
 }
 
