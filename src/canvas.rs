@@ -2,8 +2,9 @@
 
 use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
 use gpui::{
-    canvas as gpui_canvas, div, hsla, size, App, Bounds, Context, IntoElement, Point, Render, Size,
-    Window,
+    canvas as gpui_canvas, div, hsla, prelude::*, size, App, Bounds, Context, Element, Entity,
+    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, Point, Render, Size,
+    Styled, Window,
 };
 use std::collections::{HashMap, HashSet};
 use taffy::{prelude::*, Rect};
@@ -39,6 +40,8 @@ pub struct Canvas {
 
     /// Whether the canvas needs to be re-rendered
     dirty: bool,
+
+    focus_handle: FocusHandle,
 }
 
 impl Canvas {
@@ -69,6 +72,7 @@ impl Canvas {
             taffy,
             node_to_taffy: HashMap::new(),
             dirty: true,
+            focus_handle: cx.focus_handle(),
         }
     }
 
@@ -392,7 +396,133 @@ impl Canvas {
 }
 
 impl gpui::Element for Canvas {
-    todo!("implement canvas rendering")
+    type RequestLayoutState = gpui::LayoutId;
+    type PrepaintState = Option<gpui::Hitbox>;
+
+    fn id(&self) -> Option<gpui::ElementId> {
+        Some(gpui::ElementId::Name("canvas".into()))
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        window: &mut gpui::Window,
+        cx: &mut gpui::App,
+    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+        // Create a style for the canvas container
+        let mut style = gpui::Style::default();
+
+        // Canvas should take full available space
+        style.size.width = gpui::DefiniteLength::Fraction(1.0).into();
+        style.size.height = gpui::DefiniteLength::Fraction(1.0).into();
+
+        // Canvas is relative positioned
+        style.position = taffy::style::Position::Relative;
+
+        // Request the layout from the window
+        let layout_id = window.request_layout(style, [], cx);
+
+        (layout_id, layout_id)
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        _layout_id: &mut Self::RequestLayoutState,
+        window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) -> Self::PrepaintState {
+        // Update canvas viewport based on the layout bounds
+        self.set_viewport(gpui::Bounds {
+            origin: gpui::Point::new(bounds.origin.x.0, bounds.origin.y.0),
+            size: gpui::Size::new(bounds.size.width.0, bounds.size.height.0),
+        });
+
+        // Update layout for all nodes
+        self.update_layout();
+
+        // Create a hitbox for the entire canvas to capture events
+        let hitbox = window.insert_hitbox(bounds, false);
+        Some(hitbox)
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&gpui::GlobalElementId>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        _layout_id: &mut Self::RequestLayoutState,
+        _hitbox: &mut Self::PrepaintState,
+        window: &mut gpui::Window,
+        _cx: &mut gpui::App,
+    ) {
+        // Get visible nodes and render them
+        let visible_nodes = self.visible_nodes();
+
+        // Render each visible node
+        for node_id in visible_nodes {
+            if let Some(node) = self.nodes.get(&node_id) {
+                if let Some(bounds) = node.common().bounds() {
+                    // Apply zoom and scroll transformations
+                    let adjusted_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            (bounds.origin.x - self.scroll_position.x) * self.zoom,
+                            (bounds.origin.y - self.scroll_position.y) * self.zoom,
+                        ),
+                        size: gpui::Size::new(
+                            bounds.size.width * self.zoom,
+                            bounds.size.height * self.zoom,
+                        ),
+                    };
+
+                    // Convert to pixel bounds for rendering
+                    let pixel_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            gpui::Pixels(adjusted_bounds.origin.x),
+                            gpui::Pixels(adjusted_bounds.origin.y),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(adjusted_bounds.size.width),
+                            gpui::Pixels(adjusted_bounds.size.height),
+                        ),
+                    };
+
+                    // Draw fill and border for each node
+                    if let Some(fill) = node.common().fill {
+                        window.paint_quad(gpui::fill(pixel_bounds, fill));
+                    }
+
+                    if let Some(border_color) = node.common().border_color {
+                        if node.common().border_width > 0.0 {
+                            window.paint_quad(gpui::outline(pixel_bounds, border_color));
+                        }
+                    }
+
+                    // Draw selection indicator if node is selected
+                    if self.is_node_selected(node_id) {
+                        // Create a slightly larger bounds for selection indicator
+                        let selection_bounds = gpui::Bounds {
+                            origin: gpui::Point::new(
+                                pixel_bounds.origin.x - gpui::Pixels(2.0),
+                                pixel_bounds.origin.y - gpui::Pixels(2.0),
+                            ),
+                            size: gpui::Size::new(
+                                pixel_bounds.size.width + gpui::Pixels(4.0),
+                                pixel_bounds.size.height + gpui::Pixels(4.0),
+                            ),
+                        };
+                        window.paint_quad(gpui::outline(
+                            selection_bounds,
+                            gpui::hsla(210.0 / 360.0, 0.92, 0.65, 1.0),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Mark canvas as no longer dirty after rendering
+        self.dirty = false;
+    }
 }
 
 impl gpui::IntoElement for Canvas {
@@ -400,6 +530,38 @@ impl gpui::IntoElement for Canvas {
 
     fn into_element(self) -> Self::Element {
         self
+    }
+}
+
+impl Render for Canvas {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let mut element = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .id("canvas")
+            .track_focus(&self.focus_handle(cx))
+            .size_full()
+            .flex_1()
+            .into_any();
+
+        gpui_canvas(
+            move |bounds, window, cx| {
+                element.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
+                element
+            },
+            |_, mut element, window, cx| {
+                element.paint(window, cx);
+            },
+        )
+        .size_full()
+        .flex_1()
+    }
+}
+
+impl Focusable for Canvas {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
     }
 }
 
