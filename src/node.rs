@@ -52,15 +52,15 @@ pub enum NodeType {
 /// meaning it is relative to the center of the canvas (0,0).
 #[derive(Debug, Clone)]
 pub struct RootNodeLayout {
-    id: NodeId,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    background_color: Hsla,
-    border_color: Option<Hsla>,
-    border_width: f32,
-    border_radius: f32,
+    pub id: NodeId,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub background_color: Hsla,
+    pub border_color: Option<Hsla>,
+    pub border_width: f32,
+    pub border_radius: f32,
 }
 
 /// Common properties shared by all canvas nodes

@@ -4,7 +4,7 @@ use gpui::{
     ElementInputHandler, Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, Pixels, Style, TextStyle, TextStyleRefinement, Window,
 };
-use gpui::{point, Bounds, Size};
+use gpui::{point, Bounds, Size, Point};
 
 use crate::{
     canvas::{register_canvas_action, Canvas},
@@ -186,13 +186,37 @@ impl CanvasElement {
         // }
     }
 
+    fn layout_root_nodes(&self, window: &mut Window, cx: &mut App) -> Vec<RootNodeLayout> {
+        let mut root_layouts = Vec::new();
+
+        self.canvas.update(cx, |canvas, _cx| {
+            for node_id in canvas.get_root_nodes() {
+                if let Some(node) = canvas.nodes.get(&node_id) {
+                    if let Some(bounds) = node.common().bounds() {
+                        root_layouts.push(RootNodeLayout {
+                            id: node_id,
+                            x: bounds.origin.x,
+                            y: bounds.origin.y,
+                            width: bounds.size.width,
+                            height: bounds.size.height,
+                            background_color: node.common().fill.unwrap_or(Hsla::white()),
+                            border_color: node.common().border_color,
+                            border_width: node.common().border_width,
+                            border_radius: node.common().corner_radius,
+                        });
+                    }
+                }
+            }
+        });
+
+        root_layouts
+    }
+
     // handle_mouse_drag, etc
     // handle_key_down, etc
 
     // layout_scrollbars
     // layout_dimension_guides
-    // layout_root_nodes - the top level nodes on the canvas
-    //   - these will determine how big the canvas needs to be in each cardinal direction
     // layout_overlays
     //   - these are any elements that should be rendered on top of the canvas
     //   - these use fixed positions that don't move when the canvas pans
@@ -257,6 +281,32 @@ impl CanvasElement {
     ) {
         window.paint_layer(layout.hitbox.bounds, |window| {
             window.paint_quad(gpui::fill(layout.hitbox.bounds, self.style.background));
+        });
+    }
+
+    pub fn paint_root_nodes(
+        &self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            for node in &layout.root_nodes {
+                let bounds = Bounds {
+                    origin: Point::new(Pixels(node.x), Pixels(node.y)),
+                    size: Size::new(Pixels(node.width), Pixels(node.height)),
+                };
+
+                // Paint background
+                window.paint_quad(gpui::fill(bounds, node.background_color));
+
+                // Paint border if it exists
+                if let Some(border_color) = node.border_color {
+                    if node.border_width > 0.0 {
+                        window.paint_quad(gpui::outline(bounds, border_color));
+                    }
+                }
+            }
         });
     }
 
@@ -385,8 +435,7 @@ impl Element for CanvasElement {
                 let style = self.style.clone();
                 let hitbox = window.insert_hitbox(bounds, false);
 
-                // let nodes = self.layout_nodes(..);
-                let root_nodes = Vec::new();
+                let root_nodes = self.layout_root_nodes(window, cx);
 
                 if !cx.has_active_drag() {
                     // anything that shouldn't be painted when
@@ -431,7 +480,7 @@ impl Element for CanvasElement {
                 self.paint_canvas_background(layout, window, cx);
 
                 if !layout.root_nodes.is_empty() {
-                    // self.paint_nodes(..);
+                    self.paint_root_nodes(layout, window, cx);
                 }
 
                 canvas.update(cx, |canvas, cx| {

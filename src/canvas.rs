@@ -106,7 +106,7 @@ impl Canvas {
 
         let content_bounds = viewport.clone();
 
-        Self {
+        let mut canvas = Self {
             nodes: HashMap::new(),
             selected_nodes: HashSet::new(),
             viewport,
@@ -121,7 +121,10 @@ impl Canvas {
             actions: Rc::default(),
             active_tool: ToolKind::default(),
             active_drag: None,
-        }
+        };
+
+        canvas.create_test_rectangle();
+        canvas
     }
 
     /// Generate a unique ID for a new node
@@ -394,6 +397,31 @@ impl Canvas {
         }
 
         visible
+    }
+
+    /// Get all root nodes (nodes with no parent)
+    pub fn get_root_nodes(&self) -> Vec<NodeId> {
+        self.nodes
+            .iter()
+            .filter(|(_, node)| node.common().parent.is_none())
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Create a test rectangle for development purposes
+    fn create_test_rectangle(&mut self) -> NodeId {
+        let id = self.generate_id();
+        let mut rect = RectangleNode::new(id);
+        
+        // Set position and size
+        rect.common_mut().set_position(100.0, 100.0);
+        rect.common_mut().set_size(200.0, 100.0);
+        
+        // Set distinctive appearance
+        rect.common_mut().set_fill(Some(hsla(210.0 / 360.0, 0.8, 0.6, 1.0)));
+        rect.common_mut().set_border(Some(hsla(210.0 / 360.0, 0.9, 0.3, 1.0)), 2.0);
+        
+        self.add_node(rect)
     }
 
     /// Create a new node with the given type at a position
