@@ -540,35 +540,34 @@ impl Render for Sidebar {
             .flex()
             .flex_col()
             .h_full()
-            .w(px(260.))
+            .w(px(35.))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .bg(theme.background_color)
+            // .bg(theme.background_color)
             .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
             .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .w_full()
-                    .child(ToolStrip::new())
-                    .child(LayerList::new(self.canvas.clone())),
+                div().flex().flex_1().w_full().child(ToolStrip::new()), // .child(LayerList::new(self.canvas.clone())),
             );
 
         div()
             .id("titlebar")
+            .absolute()
+            .top_0()
+            .left_0()
             .h_full()
-            .w(px(261.))
-            .border_r_1()
-            .border_color(gpui::white().alpha(0.08))
+            .w(px(36.))
+            .cursor_default()
+            // .border_r_1()
+            // .border_color(gpui::white().alpha(0.08))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .bg(theme.background_color)
-            .shadow(smallvec::smallvec![BoxShadow {
-                color: hsla(0.0, 0.0, 0.0, 0.24),
-                offset: point(px(1.), px(0.)),
-                blur_radius: px(0.),
-                spread_radius: px(0.),
-            }])
+            // .bg(theme.background_color)
+            // .shadow(smallvec::smallvec![BoxShadow {
+            //     color: hsla(0.0, 0.0, 0.0, 0.24),
+            //     offset: point(px(1.), px(0.)),
+            //     blur_radius: px(0.),
+            //     spread_radius: px(0.),
+            // }])
             .child(inner)
     }
 }
@@ -1001,7 +1000,9 @@ impl Render for Luna {
             .id("Luna")
             .key_context("luna")
             .track_focus(&self.focus_handle(cx))
-            .relative()
+            .absolute()
+            .top_0()
+            .left_0()
             .size_full()
             .flex()
             .font_family("Berkeley Mono")
@@ -1047,11 +1048,9 @@ impl Render for Luna {
                 if e.keystroke == rectangle_tool {
                     this.activate_rectangle_tool(&Default::default(), window, cx);
                 }
-
-                cx.stop_propagation();
             }))
-            .when(!state.hide_sidebar, |this| this.child(self.sidebar.clone()))
             .child(CanvasElement::new(&self.canvas, cx))
+            .child(self.sidebar.clone())
     }
 }
 
