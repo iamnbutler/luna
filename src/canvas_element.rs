@@ -113,7 +113,7 @@ impl CanvasElement {
                 }
             }
             ToolKind::Rectangle => {
-                let new_node_id = canvas.next_id();
+                let new_node_id = canvas.generate_id();
                 let active_drag = ActiveDrag {
                     start_position: position,
                     current_position: position,
@@ -369,14 +369,17 @@ impl CanvasElement {
 
             let new_node_id = NodeId::new(new_node_id);
 
-            let mut new_node = RootNodeLayout::new(new_node_id);
-            new_node.x = position.x.0;
-            new_node.y = position.y.0;
-            new_node.width = width.0;
-            new_node.height = height.0;
-            new_node.background_color = state.current_background_color;
-            new_node.border_color = Some(state.current_border_color);
-            new_node.border_width = 1.0;
+            let mut new_node = RootNodeLayout {
+                id: new_node_id,
+                x: position.x.0,
+                y: position.y.0,
+                width: width.0,
+                height: height.0,
+                background_color: state.current_background_color,
+                border_color: Some(state.current_border_color),
+                border_width: 1.0,
+                border_radius: 0.0,
+            };
 
             window.paint_quad(gpui::fill(rect_bounds, new_node.background_color));
             if let Some(border_color) = new_node.border_color {

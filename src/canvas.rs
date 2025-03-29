@@ -473,6 +473,11 @@ impl Canvas {
         self.zoom = zoom.max(0.1).min(10.0); // Limit zoom range
         self.dirty = true;
     }
+    
+    /// Get current zoom level
+    pub fn zoom(&self) -> f32 {
+        self.zoom
+    }
 
     /// Check if the canvas is dirty and needs redrawing
     pub fn is_dirty(&self) -> bool {
