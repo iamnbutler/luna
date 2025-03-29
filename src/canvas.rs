@@ -52,8 +52,8 @@ pub fn register_canvas_action<T: Action>(
 
 /// A Canvas manages a collection of nodes that can be rendered and manipulated
 pub struct Canvas {
-    /// Mapping of NodeId to actual nodes
-    pub nodes: HashMap<NodeId, AnyNode>,
+    /// Vector of nodes in insertion order
+    pub nodes: Vec<(NodeId, AnyNode)>,
 
     /// Currently selected nodes
     pub selected_nodes: HashSet<NodeId>,
@@ -110,7 +110,7 @@ impl Canvas {
         let content_bounds = viewport.clone();
 
         let mut canvas = Self {
-            nodes: HashMap::new(),
+            nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
             scroll_position: Point::new(0.0, 0.0),
@@ -170,9 +170,9 @@ impl Canvas {
         // Map our node ID to taffy node ID
         self.node_to_taffy.insert(node_id, taffy_node);
 
-        // Create an AnyNode and add to nodes map
+        // Create an AnyNode and add to nodes vec
         let any_node = AnyNode::new(node);
-        self.nodes.insert(node_id, any_node);
+        self.nodes.push((node_id, any_node));
 
         // Mark canvas as dirty
         self.dirty = true;
@@ -190,8 +190,12 @@ impl Canvas {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
 
-        // Remove from nodes map
-        let node = self.nodes.remove(&node_id);
+        // Find and remove the node from our vector
+        let position = self.nodes.iter().position(|(id, _)| *id == node_id);
+        let node = position.map(|idx| {
+            let (_, node) = self.nodes.remove(idx);
+            node
+        });
 
         // Mark canvas as dirty
         self.dirty = true;
@@ -201,7 +205,7 @@ impl Canvas {
 
     /// Select a node
     pub fn select_node(&mut self, node_id: NodeId) {
-        if self.nodes.contains_key(&node_id) {
+        if self.nodes.iter().any(|(id, _)| *id == node_id) {
             self.selected_nodes.insert(node_id);
             self.dirty = true;
         }
@@ -228,7 +232,7 @@ impl Canvas {
     pub fn toggle_node_selection(&mut self, node_id: NodeId) {
         if self.selected_nodes.contains(&node_id) {
             self.selected_nodes.remove(&node_id);
-        } else if self.nodes.contains_key(&node_id) {
+        } else if self.nodes.iter().any(|(id, _)| *id == node_id) {
             self.selected_nodes.insert(node_id);
         }
         self.dirty = true;
@@ -349,7 +353,7 @@ impl Canvas {
         let mut max_y = f32::MIN;
 
         // Find the bounds that contain all nodes
-        for node in self.nodes.values() {
+        for (_, node) in &self.nodes {
             if let Some(bounds) = node.common().bounds() {
                 min_x = min_x.min(bounds.origin.x);
                 min_y = min_y.min(bounds.origin.y);
@@ -424,7 +428,8 @@ impl Canvas {
     /// Move selected nodes by a delta
     pub fn move_selected_nodes(&mut self, delta: Point<f32>) {
         for node_id in &self.selected_nodes {
-            if let Some(node) = self.nodes.get_mut(node_id) {
+            if let Some(position) = self.nodes.iter_mut().position(|(id, _)| *id == *node_id) {
+                let (_, node) = &mut self.nodes[position];
                 let common = node.common_mut();
                 if let Some(bounds) = common.bounds() {
                     let new_x = bounds.origin.x + delta.x;
@@ -549,7 +554,7 @@ impl gpui::Element for Canvas {
 
         // Render each visible node
         for node_id in visible_nodes {
-            if let Some(node) = self.nodes.get(&node_id) {
+            if let Some((_, node)) = self.nodes.iter().find(|(id, _)| *id == node_id) {
                 if let Some(bounds) = node.common().bounds() {
                     // Apply zoom and scroll transformations
                     let adjusted_bounds = gpui::Bounds {

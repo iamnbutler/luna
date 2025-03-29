@@ -262,7 +262,7 @@ impl CanvasElement {
 
             println!("Found {} root nodes", canvas.get_root_nodes().len());
             for node_id in canvas.get_root_nodes() {
-                if let Some(node) = canvas.nodes.get(&node_id) {
+                if let Some((_, node)) = canvas.nodes.iter().find(|(id, _)| *id == node_id) {
                     if let Some(bounds) = node.common().bounds() {
                         println!(
                             "Root node at ({}, {}) with size {}x{}",
