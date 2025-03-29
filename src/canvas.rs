@@ -1,10 +1,6 @@
 #![allow(unused, dead_code)]
 
 use crate::{
-    coordinates::{
-        CanvasPoint, CanvasRect, CanvasSize, PointSource, UnresolvedCanvasPoint, WindowPoint,
-        WindowRect, WindowSize,
-    },
     interactivity::ActiveDrag,
     node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode},
     ToolKind,
@@ -13,7 +9,7 @@ use gpui::{
     actions, canvas as gpui_canvas, div, hsla, prelude::*, size, Action, App, Bounds, Context,
     ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle, Focusable,
     InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Point, Render, Size,
-    Styled, Window, px,
+    Styled, Window,
 };
 use std::{
     any::TypeId,
@@ -142,57 +138,18 @@ impl Canvas {
         id
     }
 
-    /// Resolve an UnresolvedCanvasPoint to a fully resolved CanvasPoint
-    /// This is the only way to get a valid CanvasPoint
-    pub fn resolve_canvas_point(&self, unresolved: UnresolvedCanvasPoint) -> CanvasPoint {
-        match unresolved.source {
-            PointSource::Window => {
-                // For window points, apply zoom and scroll transformations
-                let canvas_x = (unresolved.x / self.zoom) + self.scroll_position.x;
-                let canvas_y = (unresolved.y / self.zoom) + self.scroll_position.y;
-                CanvasPoint::new(canvas_x, canvas_y)
-            }
-            PointSource::PartiallyResolved => {
-                // For partially resolved points, assume they are already in canvas space
-                CanvasPoint::new(unresolved.x, unresolved.y)
-            }
-        }
+    /// Convert a window-relative point to canvas-relative point
+    pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
+        let canvas_x = (window_point.x / self.zoom) + self.scroll_position.x;
+        let canvas_y = (window_point.y / self.zoom) + self.scroll_position.y;
+        Point::new(canvas_x, canvas_y)
     }
-    
-    /// Convert a fully resolved CanvasPoint to a WindowPoint
-    pub fn canvas_to_window_point(&self, canvas_point: CanvasPoint) -> WindowPoint {
+
+    /// Convert a canvas-relative point to window-relative point
+    pub fn canvas_to_window_point(&self, canvas_point: Point<f32>) -> Point<f32> {
         let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
         let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
-        WindowPoint::new(px(window_x), px(window_y))
-    }
-    
-    /// Convert window coordinates to canvas coordinates (legacy method)
-    /// This will be deprecated eventually, use resolve_canvas_point instead
-    pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
-        let unresolved = UnresolvedCanvasPoint {
-            x: window_point.x,
-            y: window_point.y,
-            source: PointSource::Window,
-        };
-        let canvas_point = self.resolve_canvas_point(unresolved);
-        Point::new(canvas_point.x, canvas_point.y)
-    }
-    
-    /// Convert a CanvasRect to a WindowRect
-    pub fn canvas_rect_to_window_rect(&self, canvas_rect: CanvasRect) -> WindowRect {
-        let top_left = self.canvas_to_window_point(canvas_rect.origin);
-        
-        // Apply zoom to get window dimensions
-        let width = px(canvas_rect.size.width * self.zoom);
-        let height = px(canvas_rect.size.height * self.zoom);
-        
-        WindowRect::new(top_left, WindowSize::new(width, height))
-    }
-    
-    /// Resolve an UnresolvedCanvasPoint to a WindowPoint
-    pub fn unresolved_to_window_point(&self, unresolved: UnresolvedCanvasPoint) -> WindowPoint {
-        let canvas_point = self.resolve_canvas_point(unresolved);
-        self.canvas_to_window_point(canvas_point)
+        Point::new(window_x, window_y)
     }
 
     pub fn active_tool(&self) -> &ToolKind {
@@ -283,11 +240,10 @@ impl Canvas {
         self.selected_nodes.contains(&node_id)
     }
 
-    /// Get nodes at a specific window point (for hit testing)
-    pub fn nodes_at_window_point(&self, window_point: WindowPoint) -> Vec<NodeId> {
+    /// Get nodes at a specific point (for hit testing)
+    pub fn nodes_at_point(&self, point: Point<f32>) -> Vec<NodeId> {
         // Convert window point to canvas coordinates
-        let unresolved = window_point.to_unresolved_canvas();
-        let canvas_point = self.resolve_canvas_point(unresolved);
+        let canvas_point = self.window_to_canvas_point(point);
 
         // Get all shape nodes that contain this point
         let mut hit_nodes = Vec::new();
@@ -306,69 +262,22 @@ impl Canvas {
 
         hit_nodes
     }
-    
-    /// Get nodes at a specific canvas point (for hit testing)
-    pub fn nodes_at_canvas_point(&self, canvas_point: CanvasPoint) -> Vec<NodeId> {
-        // Get all shape nodes that contain this point
-        let mut hit_nodes = Vec::new();
 
-        for (id, node) in &self.nodes {
-            // Test if point is inside rectangle node
-            if let Some(rect_node) = node.downcast_ref::<RectangleNode>() {
-                if ShapeNode::contains_point(rect_node, &canvas_point) {
-                    hit_nodes.push(*id);
-                }
-            }
-        }
-
-        // Sort nodes by z-order (higher IDs drawn on top)
-        hit_nodes.sort_by(|a, b| b.0.cmp(&a.0));
-
-        hit_nodes
-    }
-
-    /// Get the topmost node at a specific window point
-    pub fn top_node_at_window_point(&self, window_point: WindowPoint) -> Option<NodeId> {
-        self.nodes_at_window_point(window_point).first().copied()
-    }
-    
-    /// Get the topmost node at a specific canvas point
-    pub fn top_node_at_canvas_point(&self, canvas_point: CanvasPoint) -> Option<NodeId> {
-        self.nodes_at_canvas_point(canvas_point).first().copied()
-    }
-    
-    /// Legacy method for backward compatibility
-    /// Will be removed once all code is updated
+    /// Get the topmost node at a specific point
     pub fn top_node_at_point(&self, point: Point<f32>) -> Option<NodeId> {
-        let window_point = WindowPoint::new(px(point.x), px(point.y));
-        self.top_node_at_window_point(window_point)
+        self.nodes_at_point(point).first().copied()
     }
 
-    /// Perform rectangular selection with a window rectangle
-    pub fn select_nodes_in_window_rect(&mut self, window_rect: WindowRect) {
-        // Convert window rectangle corners to canvas coordinates
-        let top_left = WindowPoint::new(window_rect.origin.x, window_rect.origin.y);
-        let bottom_right = WindowPoint::new(
-            window_rect.origin.x + window_rect.size.width,
-            window_rect.origin.y + window_rect.size.height
-        );
-        
-        let unresolved_tl = top_left.to_unresolved_canvas();
-        let unresolved_br = bottom_right.to_unresolved_canvas();
-        
-        let canvas_tl = self.resolve_canvas_point(unresolved_tl);
-        let canvas_br = self.resolve_canvas_point(unresolved_br);
+    /// Perform rectangular selection
+    pub fn select_nodes_in_rect(&mut self, rect: Rect<f32>) {
+        // Convert rectangle to canvas coordinates
+        let start = self.window_to_canvas_point(Point::new(rect.left, rect.top));
+        let end = self.window_to_canvas_point(Point::new(rect.right, rect.bottom));
 
-        // Create selection canvas rectangle
-        let selection_rect = CanvasRect {
-            origin: CanvasPoint::new(
-                canvas_tl.x.min(canvas_br.x),
-                canvas_tl.y.min(canvas_br.y)
-            ),
-            size: CanvasSize::new(
-                (canvas_tl.x - canvas_br.x).abs(),
-                (canvas_tl.y - canvas_br.y).abs()
-            ),
+        // Create selection bounds
+        let selection_rect = Bounds {
+            origin: Point::new(start.x.min(end.x), start.y.min(end.y)),
+            size: Size::new((start.x - end.x).abs(), (start.y - end.y).abs()),
         };
 
         // Find all nodes that intersect with the selection rect
@@ -376,8 +285,7 @@ impl Canvas {
 
         for (id, node) in &self.nodes {
             if let Some(bounds) = node.common().bounds() {
-                let node_rect = CanvasRect::from_gpui_bounds(bounds);
-                if selection_rect.intersects(&node_rect) {
+                if bounds_intersect(&selection_rect, &bounds) {
                     selected_nodes.insert(*id);
                 }
             }
@@ -386,19 +294,6 @@ impl Canvas {
         // Update selection
         self.selected_nodes = selected_nodes;
         self.dirty = true;
-    }
-    
-    /// Legacy method for backward compatibility
-    /// Will be removed once all code is updated
-    pub fn select_nodes_in_rect(&mut self, rect: Rect<f32>) {
-        let window_rect = WindowRect {
-            origin: WindowPoint::new(px(rect.left), px(rect.top)),
-            size: WindowSize::new(
-                px(rect.right - rect.left),
-                px(rect.bottom - rect.top)
-            ),
-        };
-        self.select_nodes_in_window_rect(window_rect);
     }
 
     /// Update the layout for the entire canvas
@@ -476,30 +371,21 @@ impl Canvas {
     /// Get nodes that are visible in the current viewport
     pub fn visible_nodes(&self) -> Vec<NodeId> {
         // Convert viewport to canvas coordinates
-        let viewport_tl = WindowPoint::new(
-            px(self.viewport.origin.x),
-            px(self.viewport.origin.y)
-        );
-        let viewport_br = WindowPoint::new(
-            px(self.viewport.origin.x + self.viewport.size.width),
-            px(self.viewport.origin.y + self.viewport.size.height)
-        );
-        
-        // Resolve to canvas coordinates
-        let unresolved_tl = viewport_tl.to_unresolved_canvas();
-        let unresolved_br = viewport_br.to_unresolved_canvas();
-        let canvas_tl = self.resolve_canvas_point(unresolved_tl);
-        let canvas_br = self.resolve_canvas_point(unresolved_br);
+        let viewport_min = self.window_to_canvas_point(self.viewport.origin);
+        let viewport_max = self.window_to_canvas_point(Point::new(
+            self.viewport.origin.x + self.viewport.size.width,
+            self.viewport.origin.y + self.viewport.size.height,
+        ));
 
-        // Create viewport bounds in canvas coordinates
-        let viewport_rect = CanvasRect {
-            origin: CanvasPoint::new(
-                canvas_tl.x.min(canvas_br.x),
-                canvas_tl.y.min(canvas_br.y)
+        // Create viewport bounds
+        let viewport_bounds = Bounds {
+            origin: Point::new(
+                viewport_min.x.min(viewport_max.x),
+                viewport_min.y.min(viewport_max.y),
             ),
-            size: CanvasSize::new(
-                (canvas_br.x - canvas_tl.x).abs(),
-                (canvas_br.y - canvas_tl.y).abs()
+            size: Size::new(
+                (viewport_max.x - viewport_min.x).abs(),
+                (viewport_max.y - viewport_min.y).abs(),
             ),
         };
 
@@ -508,8 +394,7 @@ impl Canvas {
 
         for (id, node) in &self.nodes {
             if let Some(bounds) = node.common().bounds() {
-                let node_rect = CanvasRect::from_gpui_bounds(bounds);
-                if viewport_rect.intersects(&node_rect) {
+                if bounds_intersect(&viewport_bounds, &bounds) {
                     visible.push(*id);
                 }
             }
@@ -532,25 +417,21 @@ impl Canvas {
         let id = self.generate_id();
         let mut rect = RectangleNode::new(id);
         
-        // Set position at canvas origin (center of canvas) and large size
-        // This explicitly uses canvas coordinates
-        let origin = CanvasPoint::new(0.0, 0.0);
-        let size = CanvasSize::new(400.0, 300.0);
-        
-        rect.common_mut().set_position(origin.x, origin.y);
-        rect.common_mut().set_size(size.width, size.height);
+        // Set position at origin and large size
+        rect.common_mut().set_position(0.0, 0.0);
+        rect.common_mut().set_size(400.0, 300.0);
         
         // Set extremely bright colors
         rect.common_mut().set_fill(Some(hsla(0.0, 1.0, 0.5, 1.0))); // Bright red
         rect.common_mut().set_border(Some(hsla(0.33, 1.0, 0.5, 1.0)), 5.0); // Thick green border
         
-        println!("Created test rectangle at canvas origin (0,0) with size 400x300");
+        println!("Created test rectangle at origin (0,0) with size 400x300");
         
         self.add_node(rect)
     }
 
-    /// Create a new node with the given type at a canvas position
-    pub fn create_node(&mut self, _node_type: NodeType, position: CanvasPoint) -> NodeId {
+    /// Create a new node with the given type at a position
+    pub fn create_node(&mut self, _node_type: NodeType, position: Point<f32>) -> NodeId {
         let id = self.generate_id();
 
         // For simplicity, as requested, we'll just create rectangles for all types
@@ -558,42 +439,21 @@ impl Canvas {
         rect.common_mut().set_position(position.x, position.y);
         self.add_node(rect)
     }
-    
-    /// Create a new node with the given type at a window position
-    pub fn create_node_at_window_point(&mut self, node_type: NodeType, window_point: WindowPoint) -> NodeId {
-        let unresolved = window_point.to_unresolved_canvas();
-        let canvas_point = self.resolve_canvas_point(unresolved);
-        self.create_node(node_type, canvas_point)
-    }
 
-    /// Move selected nodes by a canvas delta
-    pub fn move_selected_nodes(&mut self, delta: CanvasPoint) {
+    /// Move selected nodes by a delta
+    pub fn move_selected_nodes(&mut self, delta: Point<f32>) {
         for node_id in &self.selected_nodes {
             if let Some(node) = self.nodes.get_mut(node_id) {
                 let common = node.common_mut();
                 if let Some(bounds) = common.bounds() {
-                    // Convert gpui::Bounds to our CanvasRect
-                    let canvas_rect = CanvasRect::from_gpui_bounds(bounds);
-                    
-                    // Apply delta
-                    let new_origin = CanvasPoint::new(
-                        canvas_rect.origin.x + delta.x,
-                        canvas_rect.origin.y + delta.y
-                    );
-                    
-                    // Update position
-                    common.set_position(new_origin.x, new_origin.y);
+                    let new_x = bounds.origin.x + delta.x;
+                    let new_y = bounds.origin.y + delta.y;
+                    common.set_position(new_x, new_y);
                 }
             }
         }
 
         self.dirty = true;
-    }
-    
-    /// Legacy method to move selected nodes by a point delta
-    /// Will be removed once all code is updated
-    pub fn move_selected_nodes_legacy(&mut self, delta: Point<f32>) {
-        self.move_selected_nodes(CanvasPoint::new(delta.x, delta.y));
     }
 
     /// Set viewport bounds (when window resizes)
@@ -709,15 +569,30 @@ impl gpui::Element for Canvas {
         // Render each visible node
         for node_id in visible_nodes {
             if let Some(node) = self.nodes.get(&node_id) {
-                if let Some(node_bounds) = node.common().bounds() {
-                    // Convert the node bounds to our coordinate system
-                    let canvas_rect = CanvasRect::from_gpui_bounds(node_bounds);
-                    
-                    // Convert canvas coordinates to window coordinates
-                    let window_rect = self.canvas_rect_to_window_rect(canvas_rect);
-                    
-                    // Convert to gpui bounds for rendering
-                    let pixel_bounds = window_rect.to_gpui_bounds();
+                if let Some(bounds) = node.common().bounds() {
+                    // Apply zoom and scroll transformations
+                    let adjusted_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            (bounds.origin.x - self.scroll_position.x) * self.zoom,
+                            (bounds.origin.y - self.scroll_position.y) * self.zoom,
+                        ),
+                        size: gpui::Size::new(
+                            bounds.size.width * self.zoom,
+                            bounds.size.height * self.zoom,
+                        ),
+                    };
+
+                    // Convert to pixel bounds for rendering
+                    let pixel_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            gpui::Pixels(adjusted_bounds.origin.x),
+                            gpui::Pixels(adjusted_bounds.origin.y),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(adjusted_bounds.size.width),
+                            gpui::Pixels(adjusted_bounds.size.height),
+                        ),
+                    };
 
                     // Draw fill and border for each node
                     if let Some(fill) = node.common().fill {
@@ -797,36 +672,50 @@ impl Render for Canvas {
     }
 }
 
+/// Helper function to check if two bounds rectangles intersect
+fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
+    // Check if one rectangle is to the left of the other
+    if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
+        return false;
+    }
+
+    // Check if one rectangle is above the other
+    if a.origin.y + a.size.height < b.origin.y || b.origin.y + b.size.height < a.origin.y {
+        return false;
+    }
+
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coordinates::{CanvasPoint, CanvasRect, CanvasSize};
 
     #[test]
-    fn test_canvas_rect_intersection() {
-        // Overlapping rectangles
-        let a = CanvasRect {
-            origin: CanvasPoint::new(0.0, 0.0),
-            size: CanvasSize::new(100.0, 100.0),
+    fn test_bounds_intersection() {
+        // Overlapping bounds
+        let a = Bounds {
+            origin: Point::new(0.0, 0.0),
+            size: Size::new(100.0, 100.0),
         };
-        let b = CanvasRect {
-            origin: CanvasPoint::new(50.0, 50.0),
-            size: CanvasSize::new(100.0, 100.0),
+        let b = Bounds {
+            origin: Point::new(50.0, 50.0),
+            size: Size::new(100.0, 100.0),
         };
-        assert!(a.intersects(&b));
+        assert!(bounds_intersect(&a, &b));
 
         // Non-overlapping on x-axis
-        let c = CanvasRect {
-            origin: CanvasPoint::new(200.0, 0.0),
-            size: CanvasSize::new(100.0, 100.0),
+        let c = Bounds {
+            origin: Point::new(200.0, 0.0),
+            size: Size::new(100.0, 100.0),
         };
-        assert!(!a.intersects(&c));
+        assert!(!bounds_intersect(&a, &c));
 
         // Non-overlapping on y-axis
-        let d = CanvasRect {
-            origin: CanvasPoint::new(0.0, 200.0),
-            size: CanvasSize::new(100.0, 100.0),
+        let d = Bounds {
+            origin: Point::new(0.0, 200.0),
+            size: Size::new(100.0, 100.0),
         };
-        assert!(!a.intersects(&d));
+        assert!(!bounds_intersect(&a, &d));
     }
 }
