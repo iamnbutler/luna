@@ -359,41 +359,33 @@ impl CanvasElement {
         let width = (start_pos.x - current_pos.x).abs();
         let height = (start_pos.y - current_pos.y).abs();
 
-        window.paint_layer(layout.hitbox.bounds, |window| {
-            // When painting in a layer, coordinates are relative to the layer's origin
-            // Convert from window coordinates to layer coordinates
-            // by subtracting the layer origin from the window coordinates
-            let layer_x = min_x.0 - layout.hitbox.bounds.origin.x.0;
-            let layer_y = min_y.0 - layout.hitbox.bounds.origin.y.0;
+        // Round once after all coordinate conversions for pixel-perfect rendering
+        let position = rounded_point(min_x, min_y);
 
-            // Round once after all coordinate conversions for pixel-perfect rendering
-            let position = rounded_point(Pixels(layer_x), Pixels(layer_y));
+        let rect_bounds = Bounds {
+            origin: position,
+            size: Size::new(width, height),
+        };
 
-            let rect_bounds = Bounds {
-                origin: position,
-                size: Size::new(width, height),
-            };
+        let new_node_id = NodeId::new(new_node_id);
 
-            let new_node_id = NodeId::new(new_node_id);
+        let new_node = RootNodeLayout {
+            id: new_node_id,
+            x: position.x.0,
+            y: position.y.0,
+            width: width.0,
+            height: height.0,
+            background_color: state.current_background_color,
+            border_color: Some(state.current_border_color),
+            border_width: 1.0,
+            border_radius: 0.0,
+        };
 
-            let new_node = RootNodeLayout {
-                id: new_node_id,
-                x: position.x.0,
-                y: position.y.0,
-                width: width.0,
-                height: height.0,
-                background_color: state.current_background_color,
-                border_color: Some(state.current_border_color),
-                border_width: 1.0,
-                border_radius: 0.0,
-            };
-
-            window.paint_quad(gpui::fill(rect_bounds, new_node.background_color));
-            if let Some(border_color) = new_node.border_color {
-                window.paint_quad(gpui::outline(rect_bounds, border_color));
-            }
-            window.request_animation_frame();
-        });
+        window.paint_quad(gpui::fill(rect_bounds, new_node.background_color));
+        if let Some(border_color) = new_node.border_color {
+            window.paint_quad(gpui::outline(rect_bounds, border_color));
+        }
+        window.request_animation_frame();
     }
 
     // render_scrollbars
@@ -428,11 +420,9 @@ impl CanvasElement {
                     layout.hitbox.bounds.origin.y.0 + layout.hitbox.bounds.size.height.0 / 2.0;
 
                 for node in &layout.root_nodes {
-                    // Since (0,0) is at the center of the canvas according to the comment,
-                    // We need to offset by the canvas center to position correctly
                     let adjusted_bounds = Bounds {
                         origin: Point::new(
-                            Pixels(canvas_center_x + node.x),
+                            Pixels(canvas_center_x + node.x + 150.),
                             Pixels(canvas_center_y + node.y),
                         ),
                         size: Size::new(
