@@ -96,7 +96,7 @@ impl CanvasElement {
         println!("Left mouse down");
 
         let position = event.position;
-
+        
         let canvas_point = point(position.x.0, position.y.0);
 
         match canvas.active_tool {
@@ -113,7 +113,9 @@ impl CanvasElement {
                 }
             }
             ToolKind::Rectangle => {
+                // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
+                
                 let active_drag = ActiveDrag {
                     start_position: position,
                     current_position: position,
@@ -156,23 +158,22 @@ impl CanvasElement {
                     
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
+                        // Get the global state for colors and sidebar info
+                        let state = GlobalState::get(cx);
+                        
+                        // Convert window coordinates to canvas coordinates using our standard method
+                        let canvas_point = Self::window_to_canvas_coordinates(window, cx, Point::new(min_x, min_y));
+                        let rel_x = canvas_point.x;
+                        let rel_y = canvas_point.y;
+                        
+                        println!("Window coords: ({}, {}), Converted to canvas coords: ({}, {})",
+                            min_x, min_y, rel_x, rel_y);
+                        
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
                         
-                        // Convert screen coordinates to canvas coordinates
-                        let state = GlobalState::get(cx);
-                        let canvas_min_x = min_x;
-                        let canvas_min_y = min_y;
-                        
-                        // If the sidebar is visible, adjust the position
-                        let adjusted_min_x = if !state.hide_sidebar {
-                            canvas_min_x - state.sidebar_width.0
-                        } else {
-                            canvas_min_x
-                        };
-                        
-                        // Set position and size
-                        rect.common_mut().set_position(adjusted_min_x, canvas_min_y);
+                        // Set position and size using canvas coordinates
+                        rect.common_mut().set_position(rel_x, rel_y);
                         rect.common_mut().set_size(width, height);
                         
                         // Set styles from global state
@@ -293,7 +294,7 @@ impl CanvasElement {
         active_drag: &ActiveDrag,
         layout: &CanvasLayout,
         window: &mut Window,
-        cx: &mut App,
+        theme: &Theme,
     ) {
         let min_x = round_to_pixel(
             active_drag
@@ -313,7 +314,7 @@ impl CanvasElement {
             round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            let theme = Theme::get_global(cx);
+            // Use the theme parameter instead of getting it from cx
             // Round the position to ensure pixel-perfect rendering
             let position = rounded_point(min_x, min_y);
 
@@ -336,31 +337,32 @@ impl CanvasElement {
         active_drag: &ActiveDrag,
         layout: &CanvasLayout,
         window: &mut Window,
-        cx: &mut App,
+        state: &GlobalState,
     ) {
-        let state = GlobalState::get(cx);
-
-        let min_x = round_to_pixel(
-            active_drag
-                .start_position
-                .x
-                .min(active_drag.current_position.x),
-        );
-        let min_y = round_to_pixel(
-            active_drag
-                .start_position
-                .y
-                .min(active_drag.current_position.y),
-        );
-        let width =
-            round_to_pixel((active_drag.start_position.x - active_drag.current_position.x).abs());
-        let height =
-            round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
+        // Get the raw cursor positions directly from the drag event
+        // These are in absolute window coordinates where the mouse is positioned
+        let start_pos = active_drag.start_position;
+        let current_pos = active_drag.current_position;
+        
+        // Calculate rectangle bounds in window coordinates
+        // Don't round yet to avoid accumulating rounding errors
+        let min_x = start_pos.x.min(current_pos.x);
+        let min_y = start_pos.y.min(current_pos.y);
+        let width = (start_pos.x - current_pos.x).abs();
+        let height = (start_pos.y - current_pos.y).abs();
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            let theme = Theme::get_global(cx);
-            // Round the position to ensure pixel-perfect rendering
-            let position = rounded_point(min_x, min_y);
+            // When painting in a layer, coordinates are relative to the layer's origin
+            // Convert from window coordinates to layer coordinates 
+            // by subtracting the layer origin from the window coordinates
+            let layer_x = min_x.0 - layout.hitbox.bounds.origin.x.0;
+            let layer_y = min_y.0 - layout.hitbox.bounds.origin.y.0;
+            
+            // Round once after all coordinate conversions for pixel-perfect rendering
+            let position = rounded_point(
+                Pixels(layer_x),
+                Pixels(layer_y)
+            );
 
             let rect_bounds = Bounds {
                 origin: position,
@@ -513,6 +515,68 @@ impl CanvasElement {
     // paint_context_menu
 
     // data_furthest_node_positions
+    
+    /// Convert window coordinates to canvas-centered coordinates accounting for UI elements
+    /// that offset the canvas (like sidebars)
+    /// 
+    /// This is a static method that can be called from anywhere, including event handlers
+    pub fn window_to_canvas_coordinates(window: &Window, cx: &App, window_point: Point<f32>) -> Point<f32> {
+        // Get the GlobalState to check sidebar visibility
+        let state = GlobalState::get(cx);
+        
+        // Step 1: Adjust for UI element offsets (like the sidebar)
+        let mut adjusted_point = window_point;
+        
+        // Only adjust for sidebar if it's visible
+        if !state.hide_sidebar {
+            // Subtract sidebar width to get coordinates relative to the canvas area
+            adjusted_point.x -= state.sidebar_width.0;
+        }
+        
+        // Step 2: Calculate center of the actual canvas area (not full viewport)
+        let canvas_width = window.viewport_size().width.0 - 
+            (if !state.hide_sidebar { state.sidebar_width.0 } else { 0.0 });
+        let canvas_height = window.viewport_size().height.0;
+        
+        let canvas_center_x = canvas_width / 2.0;
+        let canvas_center_y = canvas_height / 2.0;
+        
+        // Step 3: Convert to canvas-centered coordinates
+        let canvas_x = adjusted_point.x - canvas_center_x;
+        let canvas_y = adjusted_point.y - canvas_center_y;
+        
+        Point::new(canvas_x, canvas_y)
+    }
+    
+    /// Convert canvas-centered coordinates to window coordinates accounting for UI elements
+    /// that offset the canvas (like sidebars)
+    /// 
+    /// This is a static method that can be called from anywhere, including event handlers
+    pub fn canvas_to_window_coordinates(window: &Window, cx: &App, canvas_point: Point<f32>) -> Point<f32> {
+        // Get the GlobalState to check sidebar visibility
+        let state = GlobalState::get(cx);
+        
+        // Step 1: Calculate center of the actual canvas area (not full viewport)
+        let canvas_width = window.viewport_size().width.0 - 
+            (if !state.hide_sidebar { state.sidebar_width.0 } else { 0.0 });
+        let canvas_height = window.viewport_size().height.0;
+        
+        let canvas_center_x = canvas_width / 2.0;
+        let canvas_center_y = canvas_height / 2.0;
+        
+        // Step 2: Convert from canvas-centered to window coordinates
+        let window_x = canvas_point.x + canvas_center_x;
+        let window_y = canvas_point.y + canvas_center_y;
+        
+        let mut adjusted_point = Point::new(window_x, window_y);
+        
+        // Step 3: Add sidebar width if visible
+        if !state.hide_sidebar {
+            adjusted_point.x += state.sidebar_width.0;
+        }
+        
+        adjusted_point
+    }
 }
 
 impl Element for CanvasElement {
@@ -625,28 +689,39 @@ impl Element for CanvasElement {
                     self.paint_root_nodes(layout, window, cx);
                 }
 
-                canvas.update(cx, |canvas, cx| {
-                    if let Some(active_drag) = canvas.active_drag.clone() {
-                        self.paint_selection(&active_drag, layout, window, cx);
-                    }
+                // Get all canvas data we'll need for painting first (this needs a mutable borrow)
+                let (active_drag, active_element_draw, active_tool) = canvas.update(cx, |canvas, _| {
+                    (
+                        canvas.active_drag.clone(),
+                        canvas.active_element_draw.clone(),
+                        canvas.active_tool.clone()
+                    )
                 });
+                
+                // Then get theme and global state (this only needs immutable borrow)
+                let theme = Theme::get_global(cx);
+                let state = GlobalState::get(cx);
+                
+                // Paint selection rectangle if dragging with selection tool
+                if let Some(active_drag) = active_drag {
+                    self.paint_selection(&active_drag, layout, window, theme);
+                }
 
-                canvas.update(cx, |canvas, cx| {
-                    if let Some(element_draw) = canvas.active_element_draw.take() {
-                        match canvas.active_tool {
-                            ToolKind::Rectangle => {
-                                self.paint_draw_rectangle(
-                                    element_draw.0 .0,
-                                    &element_draw.2,
-                                    layout,
-                                    window,
-                                    cx,
-                                );
-                            }
-                            _ => {}
+                // Paint rectangle preview if drawing with rectangle tool
+                if let Some(element_draw) = active_element_draw {
+                    match active_tool {
+                        ToolKind::Rectangle => {
+                            self.paint_draw_rectangle(
+                                element_draw.0.0,
+                                &element_draw.2,
+                                layout,
+                                window,
+                                state,
+                            );
                         }
+                        _ => {}
                     }
-                })
+                }
 
                 // paint_scrollbars
                 // paint_context_menu
