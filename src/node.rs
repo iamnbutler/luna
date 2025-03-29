@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 
-use gpui::{px, solid_background, Hsla, Point, Size, Bounds};
+use gpui::{Bounds, Hsla, Point, Size};
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -36,9 +36,14 @@ pub struct NodeLayout {
 
 impl NodeLayout {
     pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
-    
+
     pub fn bounds(&self) -> Bounds<f32> {
         Bounds {
             origin: Point::new(self.x, self.y),
@@ -51,43 +56,43 @@ impl NodeLayout {
 pub trait NodeCommon: std::fmt::Debug {
     /// Get the node's ID
     fn id(&self) -> NodeId;
-    
+
     /// Get the node type
     fn node_type(&self) -> NodeType;
-    
+
     /// Get the layout for this node
     fn layout(&self) -> &NodeLayout;
-    
+
     /// Get mutable access to the layout
     fn layout_mut(&mut self) -> &mut NodeLayout;
-    
+
     /// Get the fill color
     fn fill(&self) -> Option<Hsla>;
-    
+
     /// Set the fill color
     fn set_fill(&mut self, color: Option<Hsla>);
-    
+
     /// Get the border color
     fn border_color(&self) -> Option<Hsla>;
-    
+
     /// Get the border width
     fn border_width(&self) -> f32;
-    
+
     /// Set the border properties
     fn set_border(&mut self, color: Option<Hsla>, width: f32);
-    
+
     /// Get the corner radius
     fn corner_radius(&self) -> f32;
-    
+
     /// Set the corner radius
     fn set_corner_radius(&mut self, radius: f32);
-    
+
     /// Check if a point is inside this node
     fn contains_point(&self, point: &Point<f32>) -> bool {
         let bounds = self.layout().bounds();
         bounds.contains(point)
     }
-    
+
     /// Get the bounds of this node
     fn bounds(&self) -> Bounds<f32> {
         self.layout().bounds()
@@ -129,44 +134,44 @@ impl NodeCommon for RectangleNode {
     fn id(&self) -> NodeId {
         self.id
     }
-    
+
     fn node_type(&self) -> NodeType {
         NodeType::Rectangle
     }
-    
+
     fn layout(&self) -> &NodeLayout {
         &self.layout
     }
-    
+
     fn layout_mut(&mut self) -> &mut NodeLayout {
         &mut self.layout
     }
-    
+
     fn fill(&self) -> Option<Hsla> {
         self.fill
     }
-    
+
     fn set_fill(&mut self, color: Option<Hsla>) {
         self.fill = color;
     }
-    
+
     fn border_color(&self) -> Option<Hsla> {
         self.border_color
     }
-    
+
     fn border_width(&self) -> f32 {
         self.border_width
     }
-    
+
     fn set_border(&mut self, color: Option<Hsla>, width: f32) {
         self.border_color = color;
         self.border_width = width;
     }
-    
+
     fn corner_radius(&self) -> f32 {
         self.corner_radius
     }
-    
+
     fn set_corner_radius(&mut self, radius: f32) {
         self.corner_radius = radius;
     }

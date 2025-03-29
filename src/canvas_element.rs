@@ -172,10 +172,10 @@ impl CanvasElement {
 
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
-                        
+
                         // Set position and size
                         *rect.layout_mut() = NodeLayout::new(rel_x, rel_y, width, height);
-                        
+
                         // Set colors
                         rect.set_fill(Some(state.current_background_color));
                         rect.set_border(Some(state.current_border_color), 1.0);
@@ -441,8 +441,8 @@ impl Element for CanvasElement {
             line_height: Some(self.style.text.line_height),
             ..Default::default()
         };
-        let focus_handle = self.canvas.focus_handle(cx);
-        window.set_focus_handle(&focus_handle, cx);
+        // let focus_handle = self.focus_handle(cx);
+        // window.set_focus_handle(&focus_handle, cx);
 
         window.with_text_style(Some(text_style), |window| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
@@ -476,7 +476,6 @@ impl Element for CanvasElement {
         cx: &mut gpui::App,
     ) {
         let canvas = self.canvas.clone();
-        let focus_handle = self.canvas.focus_handle(cx);
         let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
         window.set_key_context(key_context);
