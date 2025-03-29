@@ -42,6 +42,8 @@ pub enum NodeType {
     Path,
 }
 
+// TODO: Nodes should have methods to hand their
+// (root) node layout to CanvasElement to be painted.
 /// Layout information passed to the canvas
 /// to render a root node–One with no parent
 /// that is painted directly on the canvas
