@@ -1,4 +1,4 @@
-#![allow(unused, dead_code)]
+#![allow(unused_variables)]
 
 use std::{fs, path::PathBuf};
 
@@ -7,19 +7,15 @@ use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, Size, TitlebarOptions, UpdateGlobal, WeakEntity, Window,
-    WindowBackgroundAppearance, WindowOptions,
+    MenuItem, Modifiers, Pixels, Point, SharedString, Size, TitlebarOptions, UpdateGlobal,
+    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
 };
-use node::RectangleNode;
 
 mod canvas;
 mod canvas_element;
 mod interactivity;
 mod node;
 mod util;
-
-use crate::node::CanvasNode;
 
 use anyhow::Result;
 use strum::Display;
@@ -577,121 +573,6 @@ impl Render for Sidebar {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct DeprecatedElementStyles {
-    border_width: Pixels,
-    border_color: Hsla,
-    background_color: Hsla,
-    corner_radius: Pixels,
-    size: Size<Pixels>,
-    position: Point<Pixels>,
-}
-
-impl Default for DeprecatedElementStyles {
-    fn default() -> Self {
-        DeprecatedElementStyles {
-            border_width: px(1.0),
-            border_color: gpui::black(),
-            background_color: gpui::white(),
-            corner_radius: px(0.0),
-            size: Size::new(px(100.), px(100.)),
-            position: Point::new(px(0.), px(0.)),
-        }
-    }
-}
-
-/// Represents a single element on the canvas
-pub struct DeprecatedLunaElement {
-    id: ElementId,
-    kind: ElementKind,
-    name: SharedString,
-    styles: DeprecatedElementStyles,
-    selected: bool,
-}
-
-impl DeprecatedLunaElement {
-    pub fn new(id: ElementId, kind: ElementKind) -> Self {
-        Self {
-            id,
-            kind,
-            name: SharedString::new("Untitled"),
-            styles: DeprecatedElementStyles::default(),
-            selected: false,
-        }
-    }
-
-    pub fn name(&self) -> SharedString {
-        self.name.clone()
-    }
-
-    pub fn set_name(&mut self, name: impl Into<SharedString>) {
-        self.name = name.into();
-    }
-
-    pub fn styles(&self) -> &DeprecatedElementStyles {
-        &self.styles
-    }
-
-    pub fn styles_mut(&mut self) -> &mut DeprecatedElementStyles {
-        &mut self.styles
-    }
-
-    pub fn set_styles(&mut self, styles: DeprecatedElementStyles) {
-        self.styles = styles;
-    }
-
-    pub fn selected(&self) -> bool {
-        self.selected
-    }
-
-    pub fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
-}
-
-/// Represents a rectangle drag operation in progress
-#[derive(Clone, Debug, IntoElement)]
-struct DeprecatedRectangleDrag {
-    start_position: Point<Pixels>,
-    current_position: Point<Pixels>,
-}
-
-impl RenderOnce for DeprecatedRectangleDrag {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        // Calculate rectangle bounds with rounded values
-        let min_x = round_to_pixel(self.start_position.x.min(self.current_position.x));
-        let min_y = round_to_pixel(self.start_position.y.min(self.current_position.y));
-        let width = round_to_pixel((self.start_position.x - self.current_position.x).abs());
-        let height = round_to_pixel((self.start_position.y - self.current_position.y).abs());
-
-        // Use canvas to draw the preview rectangle
-        gpui::canvas(
-            |_bounds, _window, _cx| (),
-            move |_bounds, _, window, cx| {
-                let state = GlobalState::get(cx);
-                // Canvas coordinates need to be converted back to window coordinates for painting
-                let mut position = point(min_x, min_y);
-                // Add sidebar width back for proper rendering in window coordinates
-                if !state.hide_sidebar {
-                    position.x += state.sidebar_width;
-                }
-                // Round the final position to ensure pixel-perfect rendering
-                position = rounded_point(position.x, position.y);
-                // Create bounds for the rectangle with rounded values
-                let rect_bounds = gpui::Bounds {
-                    origin: position,
-                    size: gpui::Size::new(width, height),
-                };
-
-                // Draw the rectangle with current fill and border colors
-                window.paint_quad(gpui::fill(rect_bounds, state.current_background_color));
-                window.paint_quad(gpui::outline(rect_bounds, state.current_border_color));
-                window.request_animation_frame();
-            },
-        )
-    }
-}
-
 // TODO: Most of this will get moved to Canvas
 // TODO: The rest will move to Entity<AppState> on Luna
 /// A temporary place to throw a grab bag of various states until
@@ -705,9 +586,6 @@ struct GlobalState {
     current_background_color: Hsla,
     hide_sidebar: bool,
     sidebar_width: Pixels,
-
-    // Canvas drag operation states
-    active_rectangle_drag: Option<DeprecatedRectangleDrag>,
 
     // For panning the canvas with Hand tool
     drag_start_position: Option<Point<Pixels>>,
@@ -736,7 +614,6 @@ impl GlobalState {
             current_background_color: gpui::black(),
             hide_sidebar: false,
             sidebar_width: px(260.0),
-            active_rectangle_drag: None,
             drag_start_position: None,
             scroll_start_position: None,
             last_mouse_position: None,

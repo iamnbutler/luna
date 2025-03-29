@@ -1,4 +1,4 @@
-use gpui::{prelude::*, px, Pixels, Point};
+use gpui::{px, Pixels, Point};
 
 // Helper function to round pixel values to whole numbers
 pub fn round_to_pixel(value: Pixels) -> Pixels {

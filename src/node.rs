@@ -1,6 +1,6 @@
-#![allow(unused, dead_code)]
+#![allow(unused_variables)]
 
-use gpui::{hsla, px, solid_background, Hsla, Point, Size};
+use gpui::{px, solid_background, Hsla, Point, Size};
 use std::{
     any::Any,
     fmt::{Debug, Display},
@@ -24,6 +24,7 @@ impl Display for NodeId {
 }
 
 /// Types of nodes that can be rendered on the canvas
+#[allow(unused)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
     /// A container for grouping other nodes
@@ -183,23 +184,6 @@ impl NodeCommon {
         self.style.border.right = LengthPercentage::Length(width);
         self.style.border.top = LengthPercentage::Length(width);
         self.style.border.bottom = LengthPercentage::Length(width);
-    }
-
-    /// Set corner radius for rounded elements
-    pub fn set_corner_radius(&mut self, radius: f32) {
-        self.corner_radius = radius;
-    }
-
-    /// Add a child to this node
-    pub fn add_child(&mut self, child_id: NodeId) {
-        if !self.children.contains(&child_id) {
-            self.children.push(child_id);
-        }
-    }
-
-    /// Remove a child from this node
-    pub fn remove_child(&mut self, child_id: NodeId) {
-        self.children.retain(|id| *id != child_id);
     }
 }
 
@@ -645,7 +629,7 @@ mod tests {
         let rect_mut = any_node.downcast_mut::<RectangleNode>();
         assert!(rect_mut.is_some());
         if let Some(rect) = rect_mut {
-            rect.common_mut().set_corner_radius(5.0);
+            rect.common_mut().corner_radius = 5.0;
         }
 
         assert_eq!(any_node.common().corner_radius, 5.0);

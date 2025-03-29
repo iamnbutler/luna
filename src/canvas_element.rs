@@ -1,8 +1,8 @@
-#[allow(unused, dead_code)]
+#![allow(unused_variables)]
 use gpui::{
-    hsla, prelude::*, px, relative, solid_background, App, ContentMask, DispatchPhase, ElementId,
-    ElementInputHandler, Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Style, TextStyle, TextStyleRefinement, Window,
+    hsla, prelude::*, px, relative, App, ContentMask, DispatchPhase, ElementId, Entity, Focusable,
+    Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
+    TextStyle, TextStyleRefinement, Window,
 };
 use gpui::{point, Bounds, Point, Size};
 
@@ -96,7 +96,7 @@ impl CanvasElement {
         println!("Left mouse down");
 
         let position = event.position;
-        
+
         let canvas_point = point(position.x.0, position.y.0);
 
         match canvas.active_tool {
@@ -115,7 +115,7 @@ impl CanvasElement {
             ToolKind::Rectangle => {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
-                
+
                 let active_drag = ActiveDrag {
                     start_position: position,
                     current_position: position,
@@ -142,7 +142,7 @@ impl CanvasElement {
 
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
-        
+
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
             match (node_type, &canvas.active_tool) {
@@ -150,36 +150,44 @@ impl CanvasElement {
                     // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
-                    
+
                     let min_x = start_pos.x.0.min(end_pos.x.0);
                     let min_y = start_pos.y.0.min(end_pos.y.0);
                     let width = (start_pos.x.0 - end_pos.x.0).abs();
                     let height = (start_pos.y.0 - end_pos.y.0).abs();
-                    
+
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
                         // Get the global state for colors and sidebar info
                         let state = GlobalState::get(cx);
-                        
+
                         // Convert window coordinates to canvas coordinates using our standard method
-                        let canvas_point = Self::window_to_canvas_coordinates(window, cx, Point::new(min_x, min_y));
+                        let canvas_point = Self::window_to_canvas_coordinates(
+                            window,
+                            cx,
+                            Point::new(min_x, min_y),
+                        );
                         let rel_x = canvas_point.x;
                         let rel_y = canvas_point.y;
-                        
-                        println!("Window coords: ({}, {}), Converted to canvas coords: ({}, {})",
-                            min_x, min_y, rel_x, rel_y);
-                        
+
+                        println!(
+                            "Window coords: ({}, {}), Converted to canvas coords: ({}, {})",
+                            min_x, min_y, rel_x, rel_y
+                        );
+
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
-                        
+
                         // Set position and size using canvas coordinates
                         rect.common_mut().set_position(rel_x, rel_y);
                         rect.common_mut().set_size(width, height);
-                        
+
                         // Set styles from global state
-                        rect.common_mut().set_fill(Some(state.current_background_color));
-                        rect.common_mut().set_border(Some(state.current_border_color), 1.0);
-                        
+                        rect.common_mut()
+                            .set_fill(Some(state.current_background_color));
+                        rect.common_mut()
+                            .set_border(Some(state.current_border_color), 1.0);
+
                         // Add the node to the canvas
                         canvas.add_node(rect);
                         canvas.mark_dirty(cx);
@@ -343,7 +351,7 @@ impl CanvasElement {
         // These are in absolute window coordinates where the mouse is positioned
         let start_pos = active_drag.start_position;
         let current_pos = active_drag.current_position;
-        
+
         // Calculate rectangle bounds in window coordinates
         // Don't round yet to avoid accumulating rounding errors
         let min_x = start_pos.x.min(current_pos.x);
@@ -353,16 +361,13 @@ impl CanvasElement {
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // When painting in a layer, coordinates are relative to the layer's origin
-            // Convert from window coordinates to layer coordinates 
+            // Convert from window coordinates to layer coordinates
             // by subtracting the layer origin from the window coordinates
             let layer_x = min_x.0 - layout.hitbox.bounds.origin.x.0;
             let layer_y = min_y.0 - layout.hitbox.bounds.origin.y.0;
-            
+
             // Round once after all coordinate conversions for pixel-perfect rendering
-            let position = rounded_point(
-                Pixels(layer_x),
-                Pixels(layer_y)
-            );
+            let position = rounded_point(Pixels(layer_x), Pixels(layer_y));
 
             let rect_bounds = Bounds {
                 origin: position,
@@ -371,7 +376,7 @@ impl CanvasElement {
 
             let new_node_id = NodeId::new(new_node_id);
 
-            let mut new_node = RootNodeLayout {
+            let new_node = RootNodeLayout {
                 id: new_node_id,
                 x: position.x.0,
                 y: position.y.0,
@@ -515,66 +520,81 @@ impl CanvasElement {
     // paint_context_menu
 
     // data_furthest_node_positions
-    
+
     /// Convert window coordinates to canvas-centered coordinates accounting for UI elements
     /// that offset the canvas (like sidebars)
-    /// 
+    ///
     /// This is a static method that can be called from anywhere, including event handlers
-    pub fn window_to_canvas_coordinates(window: &Window, cx: &App, window_point: Point<f32>) -> Point<f32> {
+    pub fn window_to_canvas_coordinates(
+        window: &Window,
+        cx: &App,
+        window_point: Point<f32>,
+    ) -> Point<f32> {
         // Get the GlobalState to check sidebar visibility
         let state = GlobalState::get(cx);
-        
+
         // Step 1: Adjust for UI element offsets (like the sidebar)
         let mut adjusted_point = window_point;
-        
+
         // Only adjust for sidebar if it's visible
         if !state.hide_sidebar {
             // Subtract sidebar width to get coordinates relative to the canvas area
             adjusted_point.x -= state.sidebar_width.0;
         }
-        
+
         // Step 2: Calculate center of the actual canvas area (not full viewport)
-        let canvas_width = window.viewport_size().width.0 - 
-            (if !state.hide_sidebar { state.sidebar_width.0 } else { 0.0 });
+        let canvas_width = window.viewport_size().width.0
+            - (if !state.hide_sidebar {
+                state.sidebar_width.0
+            } else {
+                0.0
+            });
         let canvas_height = window.viewport_size().height.0;
-        
+
         let canvas_center_x = canvas_width / 2.0;
         let canvas_center_y = canvas_height / 2.0;
-        
+
         // Step 3: Convert to canvas-centered coordinates
         let canvas_x = adjusted_point.x - canvas_center_x;
         let canvas_y = adjusted_point.y - canvas_center_y;
-        
+
         Point::new(canvas_x, canvas_y)
     }
-    
+
     /// Convert canvas-centered coordinates to window coordinates accounting for UI elements
     /// that offset the canvas (like sidebars)
-    /// 
-    /// This is a static method that can be called from anywhere, including event handlers
-    pub fn canvas_to_window_coordinates(window: &Window, cx: &App, canvas_point: Point<f32>) -> Point<f32> {
+    #[allow(unused)]
+    pub fn canvas_to_window_coordinates(
+        window: &Window,
+        cx: &App,
+        canvas_point: Point<f32>,
+    ) -> Point<f32> {
         // Get the GlobalState to check sidebar visibility
         let state = GlobalState::get(cx);
-        
+
         // Step 1: Calculate center of the actual canvas area (not full viewport)
-        let canvas_width = window.viewport_size().width.0 - 
-            (if !state.hide_sidebar { state.sidebar_width.0 } else { 0.0 });
+        let canvas_width = window.viewport_size().width.0
+            - (if !state.hide_sidebar {
+                state.sidebar_width.0
+            } else {
+                0.0
+            });
         let canvas_height = window.viewport_size().height.0;
-        
+
         let canvas_center_x = canvas_width / 2.0;
         let canvas_center_y = canvas_height / 2.0;
-        
+
         // Step 2: Convert from canvas-centered to window coordinates
         let window_x = canvas_point.x + canvas_center_x;
         let window_y = canvas_point.y + canvas_center_y;
-        
+
         let mut adjusted_point = Point::new(window_x, window_y);
-        
+
         // Step 3: Add sidebar width if visible
         if !state.hide_sidebar {
             adjusted_point.x += state.sidebar_width.0;
         }
-        
+
         adjusted_point
     }
 }
@@ -690,18 +710,19 @@ impl Element for CanvasElement {
                 }
 
                 // Get all canvas data we'll need for painting first (this needs a mutable borrow)
-                let (active_drag, active_element_draw, active_tool) = canvas.update(cx, |canvas, _| {
-                    (
-                        canvas.active_drag.clone(),
-                        canvas.active_element_draw.clone(),
-                        canvas.active_tool.clone()
-                    )
-                });
-                
+                let (active_drag, active_element_draw, active_tool) =
+                    canvas.update(cx, |canvas, _| {
+                        (
+                            canvas.active_drag.clone(),
+                            canvas.active_element_draw.clone(),
+                            canvas.active_tool.clone(),
+                        )
+                    });
+
                 // Then get theme and global state (this only needs immutable borrow)
                 let theme = Theme::get_global(cx);
                 let state = GlobalState::get(cx);
-                
+
                 // Paint selection rectangle if dragging with selection tool
                 if let Some(active_drag) = active_drag {
                     self.paint_selection(&active_drag, layout, window, theme);
@@ -712,7 +733,7 @@ impl Element for CanvasElement {
                     match active_tool {
                         ToolKind::Rectangle => {
                             self.paint_draw_rectangle(
-                                element_draw.0.0,
+                                element_draw.0 .0,
                                 &element_draw.2,
                                 layout,
                                 window,

@@ -1,4 +1,4 @@
-#![allow(unused, dead_code)]
+#![allow(unused)]
 
 use crate::{
     interactivity::ActiveDrag,
@@ -87,7 +87,7 @@ pub struct Canvas {
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
     pub active_tool: ToolKind,
     pub active_drag: Option<ActiveDrag>,
-    
+
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
     pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
 }
@@ -416,17 +416,18 @@ impl Canvas {
     fn create_test_rectangle(&mut self) -> NodeId {
         let id = self.generate_id();
         let mut rect = RectangleNode::new(id);
-        
+
         // Set position at origin and large size
         rect.common_mut().set_position(0.0, 0.0);
         rect.common_mut().set_size(400.0, 300.0);
-        
+
         // Set extremely bright colors
         rect.common_mut().set_fill(Some(hsla(0.0, 1.0, 0.5, 1.0))); // Bright red
-        rect.common_mut().set_border(Some(hsla(0.33, 1.0, 0.5, 1.0)), 5.0); // Thick green border
-        
+        rect.common_mut()
+            .set_border(Some(hsla(0.33, 1.0, 0.5, 1.0)), 5.0); // Thick green border
+
         println!("Created test rectangle at origin (0,0) with size 400x300");
-        
+
         self.add_node(rect)
     }
 
@@ -473,7 +474,7 @@ impl Canvas {
         self.zoom = zoom.max(0.1).min(10.0); // Limit zoom range
         self.dirty = true;
     }
-    
+
     /// Get current zoom level
     pub fn zoom(&self) -> f32 {
         self.zoom
