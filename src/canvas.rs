@@ -87,6 +87,9 @@ pub struct Canvas {
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
     pub active_tool: ToolKind,
     pub active_drag: Option<ActiveDrag>,
+    
+    /// Tracks an active drawing operation (e.g., rectangle being drawn)
+    pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
 }
 
 impl Canvas {
@@ -121,6 +124,7 @@ impl Canvas {
             actions: Rc::default(),
             active_tool: ToolKind::default(),
             active_drag: None,
+            active_element_draw: None,
         };
 
         canvas.create_test_rectangle();

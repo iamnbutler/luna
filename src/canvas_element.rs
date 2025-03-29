@@ -159,12 +159,23 @@ impl CanvasElement {
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
                         
+                        // Convert screen coordinates to canvas coordinates
+                        let state = GlobalState::get(cx);
+                        let canvas_min_x = min_x;
+                        let canvas_min_y = min_y;
+                        
+                        // If the sidebar is visible, adjust the position
+                        let adjusted_min_x = if !state.hide_sidebar {
+                            canvas_min_x - state.sidebar_width.0
+                        } else {
+                            canvas_min_x
+                        };
+                        
                         // Set position and size
-                        rect.common_mut().set_position(min_x, min_y);
+                        rect.common_mut().set_position(adjusted_min_x, canvas_min_y);
                         rect.common_mut().set_size(width, height);
                         
                         // Set styles from global state
-                        let state = GlobalState::get(cx);
                         rect.common_mut().set_fill(Some(state.current_background_color));
                         rect.common_mut().set_border(Some(state.current_border_color), 1.0);
                         
