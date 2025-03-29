@@ -1,6 +1,9 @@
-#![allow(unused_variables)]
-use gpui::{Pixels, Point};
+#![allow(unused)]
 
+use gpui::Pixels;
+use gpui::Point;
+
+/// Represents a drag operation in progress with start and current points
 #[derive(Clone, Debug)]
 pub struct ActiveDrag {
     pub start_position: Point<Pixels>,

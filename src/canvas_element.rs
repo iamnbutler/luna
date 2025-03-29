@@ -9,7 +9,7 @@ use gpui::{point, Bounds, Point, Size};
 use crate::{
     canvas::{register_canvas_action, Canvas},
     interactivity::ActiveDrag,
-    node::{CanvasNode, NodeId, NodeType, RectangleNode, RootNodeLayout},
+    node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
     GlobalState, Theme, ToolKind,
 };
@@ -47,7 +47,6 @@ impl Default for CanvasStyle {
 
 pub struct CanvasLayout {
     hitbox: Hitbox,
-    root_nodes: Vec<RootNodeLayout>,
 }
 
 /// CanvasElement uses  prefixes for identifying the role of methods within the canvas.
@@ -161,12 +160,8 @@ impl CanvasElement {
                         // Get the global state for colors and sidebar info
                         let state = GlobalState::get(cx);
 
-                        // Convert window coordinates to canvas coordinates using our standard method
-                        let canvas_point = Self::window_to_canvas_coordinates(
-                            window,
-                            cx,
-                            Point::new(min_x, min_y),
-                        );
+                        // Convert window coordinates to canvas coordinates
+                        let canvas_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
                         let rel_x = canvas_point.x;
                         let rel_y = canvas_point.y;
 
@@ -177,16 +172,13 @@ impl CanvasElement {
 
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
-
-                        // Set position and size using canvas coordinates
-                        rect.common_mut().set_position(rel_x, rel_y);
-                        rect.common_mut().set_size(width, height);
-
-                        // Set styles from global state
-                        rect.common_mut()
-                            .set_fill(Some(state.current_background_color));
-                        rect.common_mut()
-                            .set_border(Some(state.current_border_color), 1.0);
+                        
+                        // Set position and size
+                        *rect.layout_mut() = NodeLayout::new(rel_x, rel_y, width, height);
+                        
+                        // Set colors
+                        rect.set_fill(Some(state.current_background_color));
+                        rect.set_border(Some(state.current_border_color), 1.0);
 
                         // Add the node to the canvas
                         canvas.add_node(rect);
@@ -246,56 +238,12 @@ impl CanvasElement {
         window: &mut Window,
         cx: &mut Context<Canvas>,
     ) {
-
         // if canvas.position_has_hitbox()  {
         // handle hover event
         // } else {
         // return
         // }
     }
-
-    fn layout_root_nodes(&self, window: &mut Window, cx: &mut App) -> Vec<RootNodeLayout> {
-        let mut root_layouts = Vec::new();
-
-        self.canvas.update(cx, |canvas, _cx| {
-            (&mut *canvas).update_layout();
-
-            println!("Found {} root nodes", canvas.get_root_nodes().len());
-            for node_id in canvas.get_root_nodes() {
-                if let Some((_, node)) = canvas.nodes.iter().find(|(id, _)| *id == node_id) {
-                    if let Some(bounds) = node.common().bounds() {
-                        println!(
-                            "Root node at ({}, {}) with size {}x{}",
-                            bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height
-                        );
-                        root_layouts.push(RootNodeLayout {
-                            id: node_id,
-                            x: bounds.origin.x,
-                            y: bounds.origin.y,
-                            width: bounds.size.width,
-                            height: bounds.size.height,
-                            background_color: node.common().fill.unwrap_or(Hsla::white()),
-                            border_color: node.common().border_color,
-                            border_width: node.common().border_width,
-                            border_radius: node.common().corner_radius,
-                        });
-                    }
-                }
-            }
-        });
-
-        root_layouts
-    }
-
-    // handle_mouse_drag, etc
-    // handle_key_down, etc
-
-    // layout_scrollbars
-    // layout_dimension_guides
-    // layout_overlays
-    //   - these are any elements that should be rendered on top of the canvas
-    //   - these use fixed positions that don't move when the canvas pans
-    // layout_context_menu
 
     fn paint_selection(
         &self,
@@ -367,35 +315,11 @@ impl CanvasElement {
             size: Size::new(width, height),
         };
 
-        let new_node_id = NodeId::new(new_node_id);
-
-        let new_node = RootNodeLayout {
-            id: new_node_id,
-            x: position.x.0,
-            y: position.y.0,
-            width: width.0,
-            height: height.0,
-            background_color: state.current_background_color,
-            border_color: Some(state.current_border_color),
-            border_width: 1.0,
-            border_radius: 0.0,
-        };
-
-        window.paint_quad(gpui::fill(rect_bounds, new_node.background_color));
-        if let Some(border_color) = new_node.border_color {
-            window.paint_quad(gpui::outline(rect_bounds, border_color));
-        }
+        window.paint_quad(gpui::fill(rect_bounds, state.current_background_color));
+        window.paint_quad(gpui::outline(rect_bounds, state.current_border_color));
         window.request_animation_frame();
     }
 
-    // render_scrollbars
-    // render_dimension_guides
-    // render_root_nodes
-    // render_context_menu
-
-    // paint_canvas_background might also include any features like:
-    // - canvas grids
-    // - background images or textures
     /// Paint the background layer of the canvas.
     ///
     /// Everything on this layer has the same draw order.
@@ -407,41 +331,6 @@ impl CanvasElement {
     ) {
         window.paint_layer(layout.hitbox.bounds, |window| {
             window.paint_quad(gpui::fill(layout.hitbox.bounds, self.style.background));
-        });
-    }
-
-    pub fn paint_root_nodes(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
-        self.canvas.update(cx, |canvas, _cx| {
-            window.paint_layer(layout.hitbox.bounds, |window| {
-                // Calculate the center of the canvas in window coordinates
-                let canvas_center_x =
-                    layout.hitbox.bounds.origin.x.0 + layout.hitbox.bounds.size.width.0 / 2.0;
-                let canvas_center_y =
-                    layout.hitbox.bounds.origin.y.0 + layout.hitbox.bounds.size.height.0 / 2.0;
-
-                for node in &layout.root_nodes {
-                    let adjusted_bounds = Bounds {
-                        origin: Point::new(
-                            Pixels(canvas_center_x + node.x + 150.),
-                            Pixels(canvas_center_y + node.y),
-                        ),
-                        size: Size::new(
-                            Pixels(node.width * canvas.zoom()),
-                            Pixels(node.height * canvas.zoom()),
-                        ),
-                    };
-
-                    // Paint background
-                    window.paint_quad(gpui::fill(adjusted_bounds, node.background_color));
-
-                    // Paint border if it exists
-                    if let Some(border_color) = node.border_color {
-                        if node.border_width > 0.0 {
-                            window.paint_quad(gpui::outline(adjusted_bounds, border_color));
-                        }
-                    }
-                }
-            });
         });
     }
 
@@ -503,90 +392,6 @@ impl CanvasElement {
             }
         });
     }
-
-    // paint_scrollbars
-    // paint_dimension_guides
-    // paint_root_nodes
-    // paint_context_menu
-
-    // data_furthest_node_positions
-
-    /// Convert window coordinates to canvas-centered coordinates accounting for UI elements
-    /// that offset the canvas (like sidebars)
-    ///
-    /// This is a static method that can be called from anywhere, including event handlers
-    pub fn window_to_canvas_coordinates(
-        window: &Window,
-        cx: &App,
-        window_point: Point<f32>,
-    ) -> Point<f32> {
-        // Get the GlobalState to check sidebar visibility
-        let state = GlobalState::get(cx);
-
-        // Step 1: Adjust for UI element offsets (like the sidebar)
-        let mut adjusted_point = window_point;
-
-        // Only adjust for sidebar if it's visible
-        if !state.hide_sidebar {
-            // Subtract sidebar width to get coordinates relative to the canvas area
-            adjusted_point.x -= state.sidebar_width.0;
-        }
-
-        // Step 2: Calculate center of the actual canvas area (not full viewport)
-        let canvas_width = window.viewport_size().width.0
-            - (if !state.hide_sidebar {
-                state.sidebar_width.0
-            } else {
-                0.0
-            });
-        let canvas_height = window.viewport_size().height.0;
-
-        let canvas_center_x = canvas_width / 2.0;
-        let canvas_center_y = canvas_height / 2.0;
-
-        // Step 3: Convert to canvas-centered coordinates
-        let canvas_x = adjusted_point.x - canvas_center_x;
-        let canvas_y = adjusted_point.y - canvas_center_y;
-
-        Point::new(canvas_x, canvas_y)
-    }
-
-    /// Convert canvas-centered coordinates to window coordinates accounting for UI elements
-    /// that offset the canvas (like sidebars)
-    #[allow(unused)]
-    pub fn canvas_to_window_coordinates(
-        window: &Window,
-        cx: &App,
-        canvas_point: Point<f32>,
-    ) -> Point<f32> {
-        // Get the GlobalState to check sidebar visibility
-        let state = GlobalState::get(cx);
-
-        // Step 1: Calculate center of the actual canvas area (not full viewport)
-        let canvas_width = window.viewport_size().width.0
-            - (if !state.hide_sidebar {
-                state.sidebar_width.0
-            } else {
-                0.0
-            });
-        let canvas_height = window.viewport_size().height.0;
-
-        let canvas_center_x = canvas_width / 2.0;
-        let canvas_center_y = canvas_height / 2.0;
-
-        // Step 2: Convert from canvas-centered to window coordinates
-        let window_x = canvas_point.x + canvas_center_x;
-        let window_y = canvas_point.y + canvas_center_y;
-
-        let mut adjusted_point = Point::new(window_x, window_y);
-
-        // Step 3: Add sidebar width if visible
-        if !state.hide_sidebar {
-            adjusted_point.x += state.sidebar_width.0;
-        }
-
-        adjusted_point
-    }
 }
 
 impl Element for CanvasElement {
@@ -646,8 +451,6 @@ impl Element for CanvasElement {
                 let style = self.style.clone();
                 let hitbox = window.insert_hitbox(bounds, false);
 
-                let root_nodes = self.layout_root_nodes(window, cx);
-
                 // Check for active drags in the canvas itself instead of using cx.has_active_drag()
                 let has_active_drag = self
                     .canvas
@@ -656,12 +459,9 @@ impl Element for CanvasElement {
                 if !has_active_drag {
                     // anything that shouldn't be painted when
                     // dragging goes in here
-
-                    // let context_menu = self.layout_context_menu(..
-                    // );
                 }
 
-                CanvasLayout { hitbox, root_nodes }
+                CanvasLayout { hitbox }
             })
         })
     }
@@ -694,10 +494,6 @@ impl Element for CanvasElement {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 self.paint_mouse_listeners(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
-
-                if !layout.root_nodes.is_empty() {
-                    self.paint_root_nodes(layout, window, cx);
-                }
 
                 // Get all canvas data we'll need for painting first (this needs a mutable borrow)
                 let (active_drag, active_element_draw, active_tool) =
@@ -733,9 +529,6 @@ impl Element for CanvasElement {
                         _ => {}
                     }
                 }
-
-                // paint_scrollbars
-                // paint_context_menu
             });
         })
     }

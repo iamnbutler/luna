@@ -2,7 +2,7 @@
 
 use crate::{
     interactivity::ActiveDrag,
-    node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode},
+    node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     ToolKind,
 };
 use gpui::{
@@ -17,7 +17,6 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
-use taffy::{prelude::*, Rect};
 
 actions!(canvas, [ClearSelection]);
 
@@ -27,9 +26,7 @@ pub struct CanvasActionId(usize);
 impl CanvasActionId {
     pub fn increment(&mut self) -> Self {
         let new_id = self.0;
-
         *self = Self(new_id + 1);
-
         Self(new_id)
     }
 }
@@ -53,7 +50,7 @@ pub fn register_canvas_action<T: Action>(
 /// A Canvas manages a collection of nodes that can be rendered and manipulated
 pub struct Canvas {
     /// Vector of nodes in insertion order
-    pub nodes: Vec<(NodeId, AnyNode)>,
+    pub nodes: Vec<RectangleNode>,
 
     /// Currently selected nodes
     pub selected_nodes: HashSet<NodeId>,
@@ -73,12 +70,6 @@ pub struct Canvas {
     /// Next ID to assign to a new node
     next_id: usize,
 
-    /// Layout engine instance
-    taffy: TaffyTree,
-
-    /// Mapping from our NodeId to taffy NodeId
-    node_to_taffy: HashMap<NodeId, taffy::NodeId>,
-
     /// Whether the canvas needs to be re-rendered
     dirty: bool,
 
@@ -95,9 +86,6 @@ pub struct Canvas {
 impl Canvas {
     /// Create a new canvas
     pub fn new(window: &Window, cx: &mut Context<Self>) -> Self {
-        // Create the taffy layout engine
-        let taffy = TaffyTree::new();
-
         let initial_viewport_px = window.viewport_size();
         let initial_viewport = size(initial_viewport_px.width.0, initial_viewport_px.height.0);
 
@@ -109,7 +97,7 @@ impl Canvas {
 
         let content_bounds = viewport.clone();
 
-        let mut canvas = Self {
+        Self {
             nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
@@ -117,17 +105,13 @@ impl Canvas {
             zoom: 1.0,
             content_bounds,
             next_id: 1,
-            taffy,
-            node_to_taffy: HashMap::new(),
             dirty: true,
             focus_handle: cx.focus_handle(),
             actions: Rc::default(),
             active_tool: ToolKind::default(),
             active_drag: None,
             active_element_draw: None,
-        };
-
-        canvas
+        }
     }
 
     /// Generate a unique ID for a new node
@@ -160,42 +144,21 @@ impl Canvas {
     }
 
     /// Add a node to the canvas
-    pub fn add_node<T: CanvasNode + 'static>(&mut self, node: T) -> NodeId {
+    pub fn add_node(&mut self, node: RectangleNode) -> NodeId {
         let node_id = node.id();
-
-        // Create a taffy node for layout
-        let taffy_style = node.common().style.clone();
-        let taffy_node = self.taffy.new_leaf(taffy_style).unwrap();
-
-        // Map our node ID to taffy node ID
-        self.node_to_taffy.insert(node_id, taffy_node);
-
-        // Create an AnyNode and add to nodes vec
-        let any_node = AnyNode::new(node);
-        self.nodes.push((node_id, any_node));
-
-        // Mark canvas as dirty
+        self.nodes.push(node);
         self.dirty = true;
-
         node_id
     }
 
     /// Remove a node from the canvas
-    pub fn remove_node(&mut self, node_id: NodeId) -> Option<AnyNode> {
-        // Remove from taffy
-        if let Some(taffy_node) = self.node_to_taffy.remove(&node_id) {
-            let _ = self.taffy.remove(taffy_node);
-        }
-
+    pub fn remove_node(&mut self, node_id: NodeId) -> Option<RectangleNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
 
         // Find and remove the node from our vector
-        let position = self.nodes.iter().position(|(id, _)| *id == node_id);
-        let node = position.map(|idx| {
-            let (_, node) = self.nodes.remove(idx);
-            node
-        });
+        let position = self.nodes.iter().position(|node| node.id() == node_id);
+        let node = position.map(|idx| self.nodes.remove(idx));
 
         // Mark canvas as dirty
         self.dirty = true;
@@ -205,7 +168,7 @@ impl Canvas {
 
     /// Select a node
     pub fn select_node(&mut self, node_id: NodeId) {
-        if self.nodes.iter().any(|(id, _)| *id == node_id) {
+        if self.nodes.iter().any(|node| node.id() == node_id) {
             self.selected_nodes.insert(node_id);
             self.dirty = true;
         }
@@ -221,8 +184,8 @@ impl Canvas {
     pub fn clear_selection(
         &mut self,
         _: &ClearSelection,
-        window: &mut Window,
-        cx: &mut Context<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) {
         self.selected_nodes.clear();
         self.dirty = true;
@@ -232,7 +195,7 @@ impl Canvas {
     pub fn toggle_node_selection(&mut self, node_id: NodeId) {
         if self.selected_nodes.contains(&node_id) {
             self.selected_nodes.remove(&node_id);
-        } else if self.nodes.iter().any(|(id, _)| *id == node_id) {
+        } else if self.nodes.iter().any(|node| node.id() == node_id) {
             self.selected_nodes.insert(node_id);
         }
         self.dirty = true;
@@ -248,15 +211,12 @@ impl Canvas {
         // Convert window point to canvas coordinates
         let canvas_point = self.window_to_canvas_point(point);
 
-        // Get all shape nodes that contain this point
+        // Get all nodes that contain this point
         let mut hit_nodes = Vec::new();
 
-        for (id, node) in &self.nodes {
-            // Test if point is inside rectangle node
-            if let Some(rect_node) = node.downcast_ref::<RectangleNode>() {
-                if ShapeNode::contains_point(rect_node, &canvas_point) {
-                    hit_nodes.push(*id);
-                }
+        for node in &self.nodes {
+            if node.contains_point(&canvas_point) {
+                hit_nodes.push(node.id());
             }
         }
 
@@ -272,25 +232,27 @@ impl Canvas {
     }
 
     /// Perform rectangular selection
-    pub fn select_nodes_in_rect(&mut self, rect: Rect<f32>) {
+    pub fn select_nodes_in_rect(&mut self, rect: Bounds<f32>) {
         // Convert rectangle to canvas coordinates
-        let start = self.window_to_canvas_point(Point::new(rect.left, rect.top));
-        let end = self.window_to_canvas_point(Point::new(rect.right, rect.bottom));
+        let start = self.window_to_canvas_point(rect.origin);
+        let end = self.window_to_canvas_point(Point::new(
+            rect.origin.x + rect.size.width,
+            rect.origin.y + rect.size.height,
+        ));
 
         // Create selection bounds
         let selection_rect = Bounds {
             origin: Point::new(start.x.min(end.x), start.y.min(end.y)),
-            size: Size::new((start.x - end.x).abs(), (start.y - end.y).abs()),
+            size: Size::new((end.x - start.x).abs(), (end.y - start.y).abs()),
         };
 
         // Find all nodes that intersect with the selection rect
         let mut selected_nodes = HashSet::new();
 
-        for (id, node) in &self.nodes {
-            if let Some(bounds) = node.common().bounds() {
-                if bounds_intersect(&selection_rect, &bounds) {
-                    selected_nodes.insert(*id);
-                }
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            if bounds_intersect(&selection_rect, &bounds) {
+                selected_nodes.insert(node.id());
             }
         }
 
@@ -303,40 +265,6 @@ impl Canvas {
     pub fn update_layout(&mut self) {
         if !self.dirty {
             return;
-        }
-
-        // Compute layout using taffy for each node
-        for (node_id, node) in &mut self.nodes {
-            if let Some(taffy_node) = self.node_to_taffy.get(node_id) {
-                // Compute layout using taffy
-                let available_space = taffy::prelude::Size {
-                    width: taffy::prelude::AvailableSpace::MaxContent,
-                    height: taffy::prelude::AvailableSpace::MaxContent,
-                };
-                let _ = self.taffy.compute_layout(*taffy_node, available_space);
-
-                // Get the computed layout
-                if let Ok(layout) = self.taffy.layout(*taffy_node) {
-                    // Update our node layout
-                    let node_common = node.common_mut();
-                    node_common.layout = Some(Layout {
-                        order: layout.order,
-                        size: taffy::prelude::Size {
-                            width: layout.size.width,
-                            height: layout.size.height,
-                        },
-                        location: taffy::Point {
-                            x: layout.location.x,
-                            y: layout.location.y,
-                        },
-                        border: layout.border,
-                        padding: layout.padding,
-                        scrollbar_size: layout.scrollbar_size,
-                        // TODO: Calculate content size
-                        ..Default::default()
-                    });
-                }
-            }
         }
 
         // Compute content bounds
@@ -353,13 +281,12 @@ impl Canvas {
         let mut max_y = f32::MIN;
 
         // Find the bounds that contain all nodes
-        for (_, node) in &self.nodes {
-            if let Some(bounds) = node.common().bounds() {
-                min_x = min_x.min(bounds.origin.x);
-                min_y = min_y.min(bounds.origin.y);
-                max_x = max_x.max(bounds.origin.x + bounds.size.width);
-                max_y = max_y.max(bounds.origin.y + bounds.size.height);
-            }
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            min_x = min_x.min(bounds.origin.x);
+            min_y = min_y.min(bounds.origin.y);
+            max_x = max_x.max(bounds.origin.x + bounds.size.width);
+            max_y = max_y.max(bounds.origin.y + bounds.size.height);
         }
 
         // Update content bounds if we have nodes
@@ -372,7 +299,7 @@ impl Canvas {
     }
 
     /// Get nodes that are visible in the current viewport
-    pub fn visible_nodes(&self) -> Vec<NodeId> {
+    pub fn visible_nodes(&self) -> Vec<&RectangleNode> {
         // Convert viewport to canvas coordinates
         let viewport_min = self.window_to_canvas_point(self.viewport.origin);
         let viewport_max = self.window_to_canvas_point(Point::new(
@@ -395,47 +322,39 @@ impl Canvas {
         // Find all nodes intersecting with the viewport
         let mut visible = Vec::new();
 
-        for (id, node) in &self.nodes {
-            if let Some(bounds) = node.common().bounds() {
-                if bounds_intersect(&viewport_bounds, &bounds) {
-                    visible.push(*id);
-                }
+        for node in &self.nodes {
+            let bounds = node.bounds();
+            if bounds_intersect(&viewport_bounds, &bounds) {
+                visible.push(node);
             }
         }
 
         visible
     }
 
-    /// Get all root nodes (nodes with no parent)
+    /// Get all root nodes (all nodes since we removed hierarchy)
     pub fn get_root_nodes(&self) -> Vec<NodeId> {
-        self.nodes
-            .iter()
-            .filter(|(_, node)| node.common().parent.is_none())
-            .map(|(id, _)| *id)
-            .collect()
+        self.nodes.iter().map(|node| node.id()).collect()
     }
 
     /// Create a new node with the given type at a position
     pub fn create_node(&mut self, _node_type: NodeType, position: Point<f32>) -> NodeId {
         let id = self.generate_id();
 
-        // For simplicity, as requested, we'll just create rectangles for all types
+        // Create a rectangle node at the specified position
         let mut rect = RectangleNode::new(id);
-        rect.common_mut().set_position(position.x, position.y);
+        *rect.layout_mut() = NodeLayout::new(position.x, position.y, 100.0, 100.0);
+        
         self.add_node(rect)
     }
 
     /// Move selected nodes by a delta
     pub fn move_selected_nodes(&mut self, delta: Point<f32>) {
-        for node_id in &self.selected_nodes {
-            if let Some(position) = self.nodes.iter_mut().position(|(id, _)| *id == *node_id) {
-                let (_, node) = &mut self.nodes[position];
-                let common = node.common_mut();
-                if let Some(bounds) = common.bounds() {
-                    let new_x = bounds.origin.x + delta.x;
-                    let new_y = bounds.origin.y + delta.y;
-                    common.set_position(new_x, new_y);
-                }
+        for node in &mut self.nodes {
+            if self.selected_nodes.contains(&node.id()) {
+                let layout = node.layout_mut();
+                layout.x += delta.x;
+                layout.y += delta.y;
             }
         }
 
@@ -509,9 +428,6 @@ impl gpui::Element for Canvas {
         style.size.width = gpui::DefiniteLength::Fraction(1.0).into();
         style.size.height = gpui::DefiniteLength::Fraction(1.0).into();
 
-        // Canvas is relative positioned
-        style.position = taffy::style::Position::Relative;
-
         // Request the layout from the window
         let layout_id = window.request_layout(style, [], cx);
 
@@ -553,63 +469,61 @@ impl gpui::Element for Canvas {
         let visible_nodes = self.visible_nodes();
 
         // Render each visible node
-        for node_id in visible_nodes {
-            if let Some((_, node)) = self.nodes.iter().find(|(id, _)| *id == node_id) {
-                if let Some(bounds) = node.common().bounds() {
-                    // Apply zoom and scroll transformations
-                    let adjusted_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(
-                            (bounds.origin.x - self.scroll_position.x) * self.zoom,
-                            (bounds.origin.y - self.scroll_position.y) * self.zoom,
-                        ),
-                        size: gpui::Size::new(
-                            bounds.size.width * self.zoom,
-                            bounds.size.height * self.zoom,
-                        ),
-                    };
+        for node in visible_nodes {
+            let bounds = node.bounds();
+            
+            // Apply zoom and scroll transformations
+            let adjusted_bounds = gpui::Bounds {
+                origin: gpui::Point::new(
+                    (bounds.origin.x - self.scroll_position.x) * self.zoom,
+                    (bounds.origin.y - self.scroll_position.y) * self.zoom,
+                ),
+                size: gpui::Size::new(
+                    bounds.size.width * self.zoom,
+                    bounds.size.height * self.zoom,
+                ),
+            };
 
-                    // Convert to pixel bounds for rendering
-                    let pixel_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(
-                            gpui::Pixels(adjusted_bounds.origin.x),
-                            gpui::Pixels(adjusted_bounds.origin.y),
-                        ),
-                        size: gpui::Size::new(
-                            gpui::Pixels(adjusted_bounds.size.width),
-                            gpui::Pixels(adjusted_bounds.size.height),
-                        ),
-                    };
+            // Convert to pixel bounds for rendering
+            let pixel_bounds = gpui::Bounds {
+                origin: gpui::Point::new(
+                    gpui::Pixels(adjusted_bounds.origin.x),
+                    gpui::Pixels(adjusted_bounds.origin.y),
+                ),
+                size: gpui::Size::new(
+                    gpui::Pixels(adjusted_bounds.size.width),
+                    gpui::Pixels(adjusted_bounds.size.height),
+                ),
+            };
 
-                    // Draw fill and border for each node
-                    if let Some(fill) = node.common().fill {
-                        window.paint_quad(gpui::fill(pixel_bounds, fill));
-                    }
+            // Draw fill and border for each node
+            if let Some(fill) = node.fill() {
+                window.paint_quad(gpui::fill(pixel_bounds, fill));
+            }
 
-                    if let Some(border_color) = node.common().border_color {
-                        if node.common().border_width > 0.0 {
-                            window.paint_quad(gpui::outline(pixel_bounds, border_color));
-                        }
-                    }
-
-                    // Draw selection indicator if node is selected
-                    if self.is_node_selected(node_id) {
-                        // Create a slightly larger bounds for selection indicator
-                        let selection_bounds = gpui::Bounds {
-                            origin: gpui::Point::new(
-                                pixel_bounds.origin.x - gpui::Pixels(2.0),
-                                pixel_bounds.origin.y - gpui::Pixels(2.0),
-                            ),
-                            size: gpui::Size::new(
-                                pixel_bounds.size.width + gpui::Pixels(4.0),
-                                pixel_bounds.size.height + gpui::Pixels(4.0),
-                            ),
-                        };
-                        window.paint_quad(gpui::outline(
-                            selection_bounds,
-                            gpui::hsla(210.0 / 360.0, 0.92, 0.65, 1.0),
-                        ));
-                    }
+            if let Some(border_color) = node.border_color() {
+                if node.border_width() > 0.0 {
+                    window.paint_quad(gpui::outline(pixel_bounds, border_color));
                 }
+            }
+
+            // Draw selection indicator if node is selected
+            if self.is_node_selected(node.id()) {
+                // Create a slightly larger bounds for selection indicator
+                let selection_bounds = gpui::Bounds {
+                    origin: gpui::Point::new(
+                        pixel_bounds.origin.x - gpui::Pixels(2.0),
+                        pixel_bounds.origin.y - gpui::Pixels(2.0),
+                    ),
+                    size: gpui::Size::new(
+                        pixel_bounds.size.width + gpui::Pixels(4.0),
+                        pixel_bounds.size.height + gpui::Pixels(4.0),
+                    ),
+                };
+                window.paint_quad(gpui::outline(
+                    selection_bounds,
+                    gpui::hsla(210.0 / 360.0, 0.92, 0.65, 1.0),
+                ));
             }
         }
 
