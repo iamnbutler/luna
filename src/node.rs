@@ -5,6 +5,7 @@ use std::{
     any::Any,
     fmt::{Debug, Display},
 };
+
 use taffy::prelude::*;
 
 /// A unique identifier for a canvas node
@@ -327,10 +328,24 @@ impl AnyNode {
     }
 }
 
+use crate::coordinates::{CanvasPoint, CanvasRect};
+
 /// Extension trait for shape-like elements that have bounded areas
 pub trait ShapeNode: CanvasNode {
-    /// Check if a point is inside this node
-    fn contains_point(&self, point: &Point<f32>) -> bool {
+    /// Check if a canvas point is inside this node
+    fn contains_point(&self, point: &CanvasPoint) -> bool {
+        if let Some(bounds) = self.common().bounds() {
+            // Convert gpui::Bounds to our CanvasRect
+            let canvas_rect = CanvasRect::from_gpui_bounds(bounds);
+            canvas_rect.contains(point)
+        } else {
+            false
+        }
+    }
+    
+    /// Legacy method for backward compatibility
+    /// Will be removed once all code is updated
+    fn contains_point_legacy(&self, point: &Point<f32>) -> bool {
         if let Some(bounds) = self.common().bounds() {
             bounds.contains(point)
         } else {
@@ -591,6 +606,7 @@ impl NodeFactory {
 mod tests {
     use super::*;
     use gpui::Point;
+    use crate::coordinates::{CanvasPoint, CanvasRect};
 
     #[test]
     fn test_node_common_creation() {
@@ -620,7 +636,7 @@ mod tests {
         let rect = RectangleNode::new(id);
 
         // Test ShapeNode trait methods
-        let point_inside = Point::new(50.0, 50.0);
+        let point_inside = CanvasPoint::new(50.0, 50.0);
 
         // Without layout information, contains_point should return false
         assert!(!<RectangleNode as ShapeNode>::contains_point(

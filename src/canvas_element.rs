@@ -8,6 +8,10 @@ use gpui::{point, Bounds, Point, Size};
 
 use crate::{
     canvas::{register_canvas_action, Canvas},
+    coordinates::{
+        CanvasPoint, CanvasRect, CanvasSize, PointSource, UnresolvedCanvasPoint, WindowPoint,
+        WindowRect, WindowSize,
+    },
     interactivity::ActiveDrag,
     node::{CanvasNode, NodeId, NodeType, RectangleNode, RootNodeLayout},
     util::{round_to_pixel, rounded_point},
@@ -95,19 +99,24 @@ impl CanvasElement {
 
         println!("Left mouse down");
 
-        let position = event.position;
+        // Convert window coordinates to our coordinate system
+        let window_point = WindowPoint::new(event.position.x, event.position.y);
         
-        let canvas_point = point(position.x.0, position.y.0);
+        // Create an unresolved canvas point that accounts for sidebar and UI offsets
+        let unresolved_point = Self::window_to_unresolved_canvas(window, cx, window_point);
+        
+        // Let the canvas resolve the point (applying zoom and scroll)
+        let canvas_point = canvas.resolve_canvas_point(unresolved_point);
 
         match canvas.active_tool {
             ToolKind::Selection => {
-                if let Some(node_id) = canvas.top_node_at_point(canvas_point) {
+                if let Some(node_id) = canvas.top_node_at_canvas_point(canvas_point) {
                     canvas.select_node(node_id);
                     canvas.mark_dirty(cx);
                 } else {
                     canvas.active_drag = Some(ActiveDrag {
-                        start_position: position,
-                        current_position: position,
+                        start_position: event.position,
+                        current_position: event.position,
                     });
                     canvas.mark_dirty(cx);
                 }
@@ -117,8 +126,8 @@ impl CanvasElement {
                 let new_node_id = canvas.generate_id();
                 
                 let active_drag = ActiveDrag {
-                    start_position: position,
-                    current_position: position,
+                    start_position: event.position,
+                    current_position: event.position,
                 };
                 canvas.active_element_draw = Some((new_node_id, NodeType::Rectangle, active_drag));
                 canvas.mark_dirty(cx);
@@ -140,8 +149,8 @@ impl CanvasElement {
 
         println!("Left mouse up");
 
-        let position = event.position;
-        let canvas_point = point(position.x.0, position.y.0);
+        // Convert window coordinates to our coordinate system
+        let window_point = WindowPoint::new(event.position.x, event.position.y);
         
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
@@ -161,19 +170,19 @@ impl CanvasElement {
                         // Get the global state for colors and sidebar info
                         let state = GlobalState::get(cx);
                         
-                        // Convert window coordinates to canvas coordinates using our standard method
-                        let canvas_point = Self::window_to_canvas_coordinates(window, cx, Point::new(min_x, min_y));
-                        let rel_x = canvas_point.x;
-                        let rel_y = canvas_point.y;
+                        // Convert window coordinates to canvas coordinates using our new system
+                        let window_point_min = WindowPoint::new(px(min_x), px(min_y));
+                        let unresolved_point = Self::window_to_unresolved_canvas(window, cx, window_point_min);
+                        let canvas_point = canvas.resolve_canvas_point(unresolved_point);
                         
                         println!("Window coords: ({}, {}), Converted to canvas coords: ({}, {})",
-                            min_x, min_y, rel_x, rel_y);
+                            min_x, min_y, canvas_point.x, canvas_point.y);
                         
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
                         
                         // Set position and size using canvas coordinates
-                        rect.common_mut().set_position(rel_x, rel_y);
+                        rect.common_mut().set_position(canvas_point.x, canvas_point.y);
                         rect.common_mut().set_size(width, height);
                         
                         // Set styles from global state
@@ -296,22 +305,35 @@ impl CanvasElement {
         window: &mut Window,
         theme: &Theme,
     ) {
+        // Convert raw pixel positions to our coordinate system
+        let start_window = WindowPoint::new(
+            round_to_pixel(active_drag.start_position.x),
+            round_to_pixel(active_drag.start_position.y)
+        );
+        let current_window = WindowPoint::new(
+            round_to_pixel(active_drag.current_position.x),
+            round_to_pixel(active_drag.current_position.y)
+        );
+        
+        // Calculate rectangle dimensions
         let min_x = round_to_pixel(
-            active_drag
-                .start_position
-                .x
-                .min(active_drag.current_position.x),
+            active_drag.start_position.x.min(active_drag.current_position.x)
         );
         let min_y = round_to_pixel(
-            active_drag
-                .start_position
-                .y
-                .min(active_drag.current_position.y),
+            active_drag.start_position.y.min(active_drag.current_position.y)
         );
-        let width =
-            round_to_pixel((active_drag.start_position.x - active_drag.current_position.x).abs());
-        let height =
-            round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
+        let width = round_to_pixel(
+            (active_drag.start_position.x - active_drag.current_position.x).abs()
+        );
+        let height = round_to_pixel(
+            (active_drag.start_position.y - active_drag.current_position.y).abs()
+        );
+        
+        // Create window rectangle
+        let window_rect = WindowRect {
+            origin: WindowPoint::new(min_x, min_y),
+            size: WindowSize::new(width, height),
+        };
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Use the theme parameter instead of getting it from cx
@@ -339,17 +361,26 @@ impl CanvasElement {
         window: &mut Window,
         state: &GlobalState,
     ) {
-        // Get the raw cursor positions directly from the drag event
-        // These are in absolute window coordinates where the mouse is positioned
+        // Get the raw cursor positions from the drag event
+        // These are in absolute window coordinates
         let start_pos = active_drag.start_position;
         let current_pos = active_drag.current_position;
         
+        // Convert to our WindowPoint type
+        let start_window = WindowPoint::new(start_pos.x, start_pos.y);
+        let current_window = WindowPoint::new(current_pos.x, current_pos.y);
+        
         // Calculate rectangle bounds in window coordinates
-        // Don't round yet to avoid accumulating rounding errors
         let min_x = start_pos.x.min(current_pos.x);
         let min_y = start_pos.y.min(current_pos.y);
         let width = (start_pos.x - current_pos.x).abs();
         let height = (start_pos.y - current_pos.y).abs();
+        
+        // Create a WindowRect to represent the drawing rectangle
+        let window_rect = WindowRect {
+            origin: WindowPoint::new(min_x, min_y),
+            size: WindowSize::new(width, height)
+        };
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // When painting in a layer, coordinates are relative to the layer's origin
@@ -371,7 +402,7 @@ impl CanvasElement {
 
             let new_node_id = NodeId::new(new_node_id);
 
-            let mut new_node = RootNodeLayout {
+            let new_node = RootNodeLayout {
                 id: new_node_id,
                 x: position.x.0,
                 y: position.y.0,
@@ -516,21 +547,22 @@ impl CanvasElement {
 
     // data_furthest_node_positions
     
-    /// Convert window coordinates to canvas-centered coordinates accounting for UI elements
+    /// Convert window coordinates to unresolved canvas coordinates accounting for UI elements
     /// that offset the canvas (like sidebars)
     /// 
     /// This is a static method that can be called from anywhere, including event handlers
-    pub fn window_to_canvas_coordinates(window: &Window, cx: &App, window_point: Point<f32>) -> Point<f32> {
+    pub fn window_to_unresolved_canvas(window: &Window, cx: &App, window_point: WindowPoint) -> UnresolvedCanvasPoint {
         // Get the GlobalState to check sidebar visibility
         let state = GlobalState::get(cx);
         
         // Step 1: Adjust for UI element offsets (like the sidebar)
-        let mut adjusted_point = window_point;
+        let mut adjusted_x = window_point.x.0;
+        let adjusted_y = window_point.y.0;
         
         // Only adjust for sidebar if it's visible
         if !state.hide_sidebar {
             // Subtract sidebar width to get coordinates relative to the canvas area
-            adjusted_point.x -= state.sidebar_width.0;
+            adjusted_x -= state.sidebar_width.0;
         }
         
         // Step 2: Calculate center of the actual canvas area (not full viewport)
@@ -542,17 +574,21 @@ impl CanvasElement {
         let canvas_center_y = canvas_height / 2.0;
         
         // Step 3: Convert to canvas-centered coordinates
-        let canvas_x = adjusted_point.x - canvas_center_x;
-        let canvas_y = adjusted_point.y - canvas_center_y;
+        let canvas_x = adjusted_x - canvas_center_x;
+        let canvas_y = adjusted_y - canvas_center_y;
         
-        Point::new(canvas_x, canvas_y)
+        UnresolvedCanvasPoint {
+            x: canvas_x,
+            y: canvas_y,
+            source: PointSource::Window,
+        }
     }
     
-    /// Convert canvas-centered coordinates to window coordinates accounting for UI elements
+    /// Convert canvas point to window coordinates accounting for UI elements
     /// that offset the canvas (like sidebars)
     /// 
     /// This is a static method that can be called from anywhere, including event handlers
-    pub fn canvas_to_window_coordinates(window: &Window, cx: &App, canvas_point: Point<f32>) -> Point<f32> {
+    pub fn canvas_to_window_coordinates(window: &Window, cx: &App, canvas_point: CanvasPoint) -> WindowPoint {
         // Get the GlobalState to check sidebar visibility
         let state = GlobalState::get(cx);
         
@@ -568,14 +604,31 @@ impl CanvasElement {
         let window_x = canvas_point.x + canvas_center_x;
         let window_y = canvas_point.y + canvas_center_y;
         
-        let mut adjusted_point = Point::new(window_x, window_y);
+        let mut adjusted_x = window_x;
+        let adjusted_y = window_y;
         
         // Step 3: Add sidebar width if visible
         if !state.hide_sidebar {
-            adjusted_point.x += state.sidebar_width.0;
+            adjusted_x += state.sidebar_width.0;
         }
         
-        adjusted_point
+        WindowPoint::new(px(adjusted_x), px(adjusted_y))
+    }
+    
+    /// Legacy method for backward compatibility
+    /// Will be removed once all code is updated
+    pub fn window_to_canvas_coordinates(window: &Window, cx: &App, window_point: Point<f32>) -> Point<f32> {
+        let wp = WindowPoint::new(px(window_point.x), px(window_point.y));
+        let unresolved = Self::window_to_unresolved_canvas(window, cx, wp);
+        Point::new(unresolved.x, unresolved.y)
+    }
+    
+    /// Legacy method for backward compatibility
+    /// Will be removed once all code is updated
+    pub fn canvas_to_window_coordinates_legacy(window: &Window, cx: &App, canvas_point: Point<f32>) -> Point<f32> {
+        let cp = CanvasPoint::new(canvas_point.x, canvas_point.y);
+        let window_point = Self::canvas_to_window_coordinates(window, cx, cp);
+        Point::new(window_point.x.0, window_point.y.0)
     }
 }
 

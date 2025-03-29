@@ -15,6 +15,7 @@ use node::RectangleNode;
 
 mod canvas;
 mod canvas_element;
+mod coordinates;
 mod interactivity;
 mod node;
 mod util;
