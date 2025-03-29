@@ -147,7 +147,6 @@ impl Icon {
 #[derive(Default, Debug, Display, Clone, PartialEq)]
 pub enum ToolKind {
     /// Standard selection tool for clicking, dragging, and manipulating elements
-    #[default]
     Selection,
     /// Tool for creating and editing connectors between elements
     ///
@@ -171,6 +170,7 @@ pub enum ToolKind {
     /// Tool for quickly inserting saved elements such as icons, images and components
     ElementLibrary,
     /// Tool for drawing rectangles and squares of various dimensions
+    #[default]
     Rectangle,
     /// Tool for adding, editing, and formatting text content
     TextCursor,
