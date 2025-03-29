@@ -413,13 +413,15 @@ impl Canvas {
         let id = self.generate_id();
         let mut rect = RectangleNode::new(id);
         
-        // Set position and size
-        rect.common_mut().set_position(100.0, 100.0);
-        rect.common_mut().set_size(200.0, 100.0);
+        // Set position at origin and large size
+        rect.common_mut().set_position(0.0, 0.0);
+        rect.common_mut().set_size(400.0, 300.0);
         
-        // Set distinctive appearance
-        rect.common_mut().set_fill(Some(hsla(210.0 / 360.0, 0.8, 0.6, 1.0)));
-        rect.common_mut().set_border(Some(hsla(210.0 / 360.0, 0.9, 0.3, 1.0)), 2.0);
+        // Set extremely bright colors
+        rect.common_mut().set_fill(Some(hsla(0.0, 1.0, 0.5, 1.0))); // Bright red
+        rect.common_mut().set_border(Some(hsla(0.33, 1.0, 0.5, 1.0)), 5.0); // Thick green border
+        
+        println!("Created test rectangle at origin (0,0) with size 400x300");
         
         self.add_node(rect)
     }

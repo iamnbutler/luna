@@ -190,9 +190,13 @@ impl CanvasElement {
         let mut root_layouts = Vec::new();
 
         self.canvas.update(cx, |canvas, _cx| {
+            println!("Found {} root nodes", canvas.get_root_nodes().len());
             for node_id in canvas.get_root_nodes() {
                 if let Some(node) = canvas.nodes.get(&node_id) {
                     if let Some(bounds) = node.common().bounds() {
+                        println!("Root node at ({}, {}) with size {}x{}", 
+                            bounds.origin.x, bounds.origin.y, 
+                            bounds.size.width, bounds.size.height);
                         root_layouts.push(RootNodeLayout {
                             id: node_id,
                             x: bounds.origin.x,
@@ -290,23 +294,37 @@ impl CanvasElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        window.paint_layer(layout.hitbox.bounds, |window| {
-            for node in &layout.root_nodes {
-                let bounds = Bounds {
-                    origin: Point::new(Pixels(node.x), Pixels(node.y)),
-                    size: Size::new(Pixels(node.width), Pixels(node.height)),
-                };
-
-                // Paint background
-                window.paint_quad(gpui::fill(bounds, node.background_color));
-
-                // Paint border if it exists
-                if let Some(border_color) = node.border_color {
-                    if node.border_width > 0.0 {
-                        window.paint_quad(gpui::outline(bounds, border_color));
+        self.canvas.update(cx, |canvas, _cx| {
+            window.paint_layer(layout.hitbox.bounds, |window| {
+                // Calculate the center of the canvas in window coordinates
+                let canvas_center_x = layout.hitbox.bounds.origin.x.0 + layout.hitbox.bounds.size.width.0 / 2.0;
+                let canvas_center_y = layout.hitbox.bounds.origin.y.0 + layout.hitbox.bounds.size.height.0 / 2.0;
+                
+                for node in &layout.root_nodes {
+                    // Since (0,0) is at the center of the canvas according to the comment,
+                    // We need to offset by the canvas center to position correctly
+                    let adjusted_bounds = Bounds {
+                        origin: Point::new(
+                            Pixels(canvas_center_x + node.x),
+                            Pixels(canvas_center_y + node.y)
+                        ),
+                        size: Size::new(
+                            Pixels(node.width * canvas.zoom),
+                            Pixels(node.height * canvas.zoom)
+                        ),
+                    };
+                    
+                    // Paint background
+                    window.paint_quad(gpui::fill(adjusted_bounds, node.background_color));
+                    
+                    // Paint border if it exists
+                    if let Some(border_color) = node.border_color {
+                        if node.border_width > 0.0 {
+                            window.paint_quad(gpui::outline(adjusted_bounds, border_color));
+                        }
                     }
                 }
-            }
+            });
         });
     }
 
