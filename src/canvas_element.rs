@@ -1,15 +1,17 @@
 #[allow(unused, dead_code)]
-use gpui::prelude::*;
 use gpui::{
-    hsla, px, relative, solid_background, App, ContentMask, DispatchPhase, ElementId,
+    hsla, prelude::*, px, relative, solid_background, App, ContentMask, DispatchPhase, ElementId,
     ElementInputHandler, Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, Pixels, Style, TextStyle, TextStyleRefinement, Window,
 };
+use gpui::{point, Bounds, Size};
 
 use crate::{
     canvas::{register_canvas_action, Canvas},
+    interactivity::ActiveDrag,
     node::RootNodeLayout,
-    Theme,
+    util::{round_to_pixel, rounded_point},
+    Theme, ToolKind,
 };
 
 #[derive(Clone)]
@@ -93,10 +95,25 @@ impl CanvasElement {
 
         println!("Left mouse down");
 
-        let mut click_count = event.click_count;
-        let mut modifiers = event.modifiers;
+        let position = event.position;
 
-        // do stuff
+        let canvas_point = point(position.x.0, position.y.0);
+
+        match canvas.active_tool {
+            ToolKind::Selection => {
+                if let Some(node_id) = canvas.top_node_at_point(canvas_point) {
+                    canvas.select_node(node_id);
+                    canvas.mark_dirty(cx);
+                } else {
+                    canvas.active_drag = Some(ActiveDrag {
+                        start_position: position,
+                        current_position: position,
+                    });
+                    canvas.mark_dirty(cx);
+                }
+            }
+            _ => {}
+        }
 
         cx.stop_propagation();
     }
@@ -112,28 +129,51 @@ impl CanvasElement {
 
         println!("Left mouse up");
 
+        let position = event.position;
+
+        let canvas_point = point(position.x.0, position.y.0);
+
+        // End of drag, clean up selection
+        if let Some(active_drag) = canvas.active_drag.take() {
+            match canvas.active_tool {
+                // handle per-tool post selection actions
+                ToolKind::Rectangle => {
+                    // canvas.create_rectangle_node(..);
+                }
+                _ => {}
+            }
+
+            canvas.active_drag = None;
+        }
+
         cx.stop_propagation();
     }
 
     fn handle_mouse_drag(
-        &self,
+        canvas: &mut Canvas,
         event: &MouseMoveEvent,
         window: &mut Window,
         cx: &mut Context<Canvas>,
     ) {
         println!("mouse drag");
 
-        // if canvas.selection_pending()  {
-        // handle selection
-        // } else if canvas.dragging() {
-        // handle dragging node
-        // } else {
-        // return
-        // }
+        let position = event.position;
+
+        let canvas_point = point(position.x.0, position.y.0);
+
+        // if we are selecting, check if we have entered the bounds of
+        // any root node. If so, select it.
+
+        if let Some(active_drag) = canvas.active_drag.take() {
+            canvas.active_drag = Some(ActiveDrag {
+                start_position: active_drag.start_position,
+                current_position: position,
+            });
+        }
     }
 
     fn handle_mouse_move(
-        &self,
+        canvas: &mut Canvas,
         event: &MouseMoveEvent,
         window: &mut Window,
         cx: &mut Context<Canvas>,
@@ -157,6 +197,46 @@ impl CanvasElement {
     //   - these are any elements that should be rendered on top of the canvas
     //   - these use fixed positions that don't move when the canvas pans
     // layout_context_menu
+
+    fn paint_selection_bounds(
+        &self,
+        active_drag: &ActiveDrag,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let min_x = round_to_pixel(
+            active_drag
+                .start_position
+                .x
+                .min(active_drag.current_position.x),
+        );
+        let min_y = round_to_pixel(
+            active_drag
+                .start_position
+                .y
+                .min(active_drag.current_position.y),
+        );
+        let width =
+            round_to_pixel((active_drag.start_position.x - active_drag.current_position.x).abs());
+        let height =
+            round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
+
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            let theme = Theme::get_global(cx);
+            // Round the position to ensure pixel-perfect rendering
+            let position = rounded_point(min_x, min_y);
+
+            let rect_bounds = Bounds {
+                origin: position,
+                size: Size::new(width, height),
+            };
+
+            window.paint_quad(gpui::fill(rect_bounds, theme.selected.opacity(0.08)));
+            window.paint_quad(gpui::outline(rect_bounds, theme.selected));
+            window.request_animation_frame();
+        });
+    }
 
     // render_scrollbars
     // render_dimension_guides
@@ -217,6 +297,23 @@ impl CanvasElement {
                         }),
                         _ => {}
                     }
+                }
+            }
+        });
+
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    canvas.update(cx, |canvas, cx| {
+                        if event.pressed_button == Some(MouseButton::Left)
+                            || event.pressed_button == Some(MouseButton::Middle)
+                        {
+                            Self::handle_mouse_drag(canvas, event, window, cx)
+                        }
+
+                        Self::handle_mouse_move(canvas, event, window, cx)
+                    });
                 }
             }
         });
@@ -313,6 +410,7 @@ impl Element for CanvasElement {
         window: &mut gpui::Window,
         cx: &mut gpui::App,
     ) {
+        let canvas = self.canvas.clone();
         let focus_handle = self.canvas.focus_handle(cx);
         let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
@@ -335,6 +433,12 @@ impl Element for CanvasElement {
                 if !layout.root_nodes.is_empty() {
                     // self.paint_nodes(..);
                 }
+
+                canvas.update(cx, |canvas, cx| {
+                    if let Some(active_drag) = canvas.active_drag.clone() {
+                        self.paint_selection_bounds(&active_drag, layout, window, cx);
+                    }
+                });
 
                 // paint_scrollbars
                 // paint_context_menu

@@ -1,6 +1,10 @@
 #![allow(unused, dead_code)]
 
-use crate::node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode};
+use crate::{
+    interactivity::ActiveDrag,
+    node::{AnyNode, CanvasNode, NodeId, NodeType, RectangleNode, ShapeNode},
+    ToolKind,
+};
 use gpui::{
     actions, canvas as gpui_canvas, div, hsla, prelude::*, size, Action, App, Bounds, Context,
     ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle, Focusable,
@@ -81,6 +85,8 @@ pub struct Canvas {
     focus_handle: FocusHandle,
     pub actions:
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
+    pub active_tool: ToolKind,
+    pub active_drag: Option<ActiveDrag>,
 }
 
 impl Canvas {
@@ -113,6 +119,8 @@ impl Canvas {
             dirty: true,
             focus_handle: cx.focus_handle(),
             actions: Rc::default(),
+            active_tool: ToolKind::default(),
+            active_drag: None,
         }
     }
 
@@ -135,6 +143,14 @@ impl Canvas {
         let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
         let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
         Point::new(window_x, window_y)
+    }
+
+    pub fn active_tool(&self) -> &ToolKind {
+        &self.active_tool
+    }
+
+    pub fn set_active_tool(&mut self, tool: ToolKind) {
+        self.active_tool = tool;
     }
 
     /// Add a node to the canvas
@@ -430,8 +446,9 @@ impl Canvas {
     }
 
     /// Mark the canvas as dirty (needing redraw)
-    pub fn mark_dirty(&mut self) {
+    pub fn mark_dirty(&mut self, cx: &mut Context<Self>) {
         self.dirty = true;
+        cx.notify();
     }
 
     /// Get content bounds
