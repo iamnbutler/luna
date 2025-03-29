@@ -127,7 +127,6 @@ impl Canvas {
             active_element_draw: None,
         };
 
-        canvas.create_test_rectangle();
         canvas
     }
 
@@ -410,25 +409,6 @@ impl Canvas {
             .filter(|(_, node)| node.common().parent.is_none())
             .map(|(id, _)| *id)
             .collect()
-    }
-
-    /// Create a test rectangle for development purposes
-    fn create_test_rectangle(&mut self) -> NodeId {
-        let id = self.generate_id();
-        let mut rect = RectangleNode::new(id);
-
-        // Set position at origin and large size
-        rect.common_mut().set_position(0.0, 0.0);
-        rect.common_mut().set_size(400.0, 300.0);
-
-        // Set extremely bright colors
-        rect.common_mut().set_fill(Some(hsla(0.0, 1.0, 0.5, 1.0))); // Bright red
-        rect.common_mut()
-            .set_border(Some(hsla(0.33, 1.0, 0.5, 1.0)), 5.0); // Thick green border
-
-        println!("Created test rectangle at origin (0,0) with size 400x300");
-
-        self.add_node(rect)
     }
 
     /// Create a new node with the given type at a position
