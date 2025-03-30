@@ -1,4 +1,4 @@
-use crate::{canvas::Canvas, theme::Theme, tools::ToolStrip};
+use crate::{canvas::LunaCanvas, theme::Theme, tools::ToolStrip};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -9,11 +9,11 @@ use gpui::{
 use super::TITLEBAR_HEIGHT;
 
 pub struct Sidebar {
-    canvas: Entity<Canvas>,
+    canvas: Entity<LunaCanvas>,
 }
 
 impl Sidebar {
-    pub fn new(weak_canvas: WeakEntity<Canvas>) -> Self {
+    pub fn new(weak_canvas: WeakEntity<LunaCanvas>) -> Self {
         let canvas = weak_canvas.upgrade().expect("Canvas should be alive");
         Self { canvas }
     }

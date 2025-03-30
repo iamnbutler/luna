@@ -1,6 +1,6 @@
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
-use crate::{canvas::Canvas, theme::Theme};
+use crate::{canvas::LunaCanvas, theme::Theme};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -10,7 +10,9 @@ use gpui::{
 use std::{fs, path::PathBuf};
 use strum::Display;
 
+pub mod inspector;
 pub mod layer_list;
+mod property;
 pub mod sidebar;
 
 const TITLEBAR_HEIGHT: f32 = 31.;

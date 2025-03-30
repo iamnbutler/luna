@@ -1,7 +1,7 @@
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
 use crate::GlobalState;
-use crate::{canvas::Canvas, theme::Theme};
+use crate::{canvas::LunaCanvas, theme::Theme};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,

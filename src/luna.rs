@@ -1,7 +1,7 @@
 #![allow(unused, dead_code)]
 use anyhow::Result;
 use assets::Assets;
-use canvas::Canvas;
+use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
@@ -15,7 +15,7 @@ use std::{fs, path::PathBuf};
 use strum::Display;
 use theme::Theme;
 use tools::ToolKind;
-use ui::{sidebar::Sidebar, Icon};
+use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
 use util::keystroke_builder;
 
 mod assets;
@@ -99,9 +99,10 @@ pub struct AppState {
 
 struct Luna {
     app_state: Entity<AppState>,
-    canvas: Entity<Canvas>,
+    canvas: Entity<LunaCanvas>,
     focus_handle: FocusHandle,
     scene_graph: Entity<SceneGraph>,
+    inspector: Entity<Inspector>,
 }
 
 impl Luna {
@@ -114,13 +115,15 @@ impl Luna {
         let focus_handle = cx.focus_handle();
         let scene_graph = cx.new(|cx| SceneGraph::new());
         let theme = Theme::new();
-        let canvas = cx.new(|cx| Canvas::new(&app_state, &scene_graph, &theme, window, cx));
+        let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
+        let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
 
         Luna {
             focus_handle,
             canvas,
             app_state,
             scene_graph,
+            inspector,
         }
     }
 
@@ -185,6 +188,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
+            .child(self.inspector.clone())
     }
 }
 

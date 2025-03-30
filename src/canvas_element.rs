@@ -10,7 +10,7 @@ use crate::scene_graph::SceneGraph;
 use crate::theme::Theme;
 use crate::AppState;
 use crate::{
-    canvas::{register_canvas_action, Canvas},
+    canvas::{register_canvas_action, LunaCanvas},
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
@@ -59,12 +59,16 @@ pub struct CanvasLayout {
 /// - paint_: paint elements within the canvas
 /// - data_:  returns some derived data for other methods to use within the canvas
 pub struct CanvasElement {
-    canvas: Entity<Canvas>,
+    canvas: Entity<LunaCanvas>,
     style: CanvasStyle,
 }
 
 impl CanvasElement {
-    pub fn new(canvas: &Entity<Canvas>, scene_graph: &Entity<SceneGraph>, cx: &mut App) -> Self {
+    pub fn new(
+        canvas: &Entity<LunaCanvas>,
+        scene_graph: &Entity<SceneGraph>,
+        cx: &mut App,
+    ) -> Self {
         let style = CanvasStyle::new(cx);
 
         Self {
@@ -81,15 +85,15 @@ impl CanvasElement {
             }
         });
 
-        register_canvas_action(canvas, window, Canvas::clear_selection);
+        register_canvas_action(canvas, window, LunaCanvas::clear_selection);
     }
 
     // handle_mouse_down, etc
     fn handle_left_mouse_down(
-        canvas: &mut Canvas,
+        canvas: &mut LunaCanvas,
         event: &MouseDownEvent,
         window: &mut Window,
-        cx: &mut Context<Canvas>,
+        cx: &mut Context<LunaCanvas>,
     ) {
         if window.default_prevented() {
             return;
@@ -132,10 +136,10 @@ impl CanvasElement {
     }
 
     fn handle_left_mouse_up(
-        canvas: &mut Canvas,
+        canvas: &mut LunaCanvas,
         event: &MouseUpEvent,
         window: &mut Window,
-        cx: &mut Context<Canvas>,
+        cx: &mut Context<LunaCanvas>,
     ) {
         // check if selection is pending
         // if so, clear it and fire any selection events
@@ -203,10 +207,10 @@ impl CanvasElement {
     }
 
     fn handle_mouse_drag(
-        canvas: &mut Canvas,
+        canvas: &mut LunaCanvas,
         event: &MouseMoveEvent,
         window: &mut Window,
-        cx: &mut Context<Canvas>,
+        cx: &mut Context<LunaCanvas>,
     ) {
         println!("mouse drag");
 
@@ -240,10 +244,10 @@ impl CanvasElement {
     }
 
     fn handle_mouse_move(
-        canvas: &mut Canvas,
+        canvas: &mut LunaCanvas,
         event: &MouseMoveEvent,
         window: &mut Window,
-        cx: &mut Context<Canvas>,
+        cx: &mut Context<LunaCanvas>,
     ) {
         // if canvas.position_has_hitbox()  {
         // handle hover event

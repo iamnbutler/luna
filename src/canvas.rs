@@ -34,9 +34,9 @@ impl CanvasActionId {
 }
 
 pub fn register_canvas_action<T: Action>(
-    canvas: &Entity<Canvas>,
+    canvas: &Entity<LunaCanvas>,
     window: &mut Window,
-    listener: impl Fn(&mut Canvas, &T, &mut Window, &mut Context<Canvas>) + 'static,
+    listener: impl Fn(&mut LunaCanvas, &T, &mut Window, &mut Context<LunaCanvas>) + 'static,
 ) {
     let canvas = canvas.clone();
     window.on_action(TypeId::of::<T>(), move |action, phase, window, cx| {
@@ -50,7 +50,7 @@ pub fn register_canvas_action<T: Action>(
 }
 
 /// A Canvas manages a collection of nodes that can be rendered and manipulated
-pub struct Canvas {
+pub struct LunaCanvas {
     app_state: Entity<AppState>,
 
     /// The scene graph for managing spatial relationships between nodes
@@ -94,7 +94,7 @@ pub struct Canvas {
     pub theme: Theme,
 }
 
-impl Canvas {
+impl LunaCanvas {
     /// Create a new canvas
     pub fn new(
         app_state: &Entity<AppState>,

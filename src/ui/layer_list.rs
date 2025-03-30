@@ -5,7 +5,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-use crate::{canvas::Canvas, node::NodeType, theme::Theme};
+use crate::{canvas::LunaCanvas, node::NodeType, theme::Theme};
 
 #[derive(IntoElement)]
 pub struct LayerListItem {
@@ -62,11 +62,11 @@ impl RenderOnce for LayerListItem {
 
 #[derive(IntoElement)]
 struct LayerList {
-    canvas: Entity<Canvas>,
+    canvas: Entity<LunaCanvas>,
 }
 
 impl LayerList {
-    fn new(canvas: Entity<Canvas>) -> Self {
+    fn new(canvas: Entity<LunaCanvas>) -> Self {
         Self { canvas }
     }
 }
