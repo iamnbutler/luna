@@ -11,9 +11,9 @@ use gpui::{
 };
 use node::NodeCommon;
 use scene_graph::SceneGraph;
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, sync::Arc};
 use strum::Display;
-use theme::Theme;
+use theme::{GlobalTheme, Theme};
 use tools::ToolKind;
 use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
 use util::keystroke_builder;
@@ -199,7 +199,7 @@ impl Focusable for Luna {
 }
 
 fn init_globals(cx: &mut App) {
-    cx.set_global(Theme::new());
+    cx.set_global(GlobalTheme(Arc::new(Theme::new())));
     cx.set_global(GlobalState::new());
 }
 
