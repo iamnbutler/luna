@@ -99,7 +99,7 @@ impl RenderOnce for ToolButton {
         let state = GlobalState::get(cx);
 
         let tool_kind = self.tool_kind.clone();
-        let selected = state.active_tool == tool_kind;
+        let selected = false;
 
         let icon_color = match (selected, self.disabled) {
             (true, true) => theme.selected.alpha(0.3),
@@ -120,10 +120,10 @@ impl RenderOnce for ToolButton {
             .when(!self.disabled, |div| {
                 div.hover(|div| div.bg(theme.foreground.opacity(0.05)))
             })
-            .on_click(move |_, _, cx| {
-                let tool_kind = tool_kind.clone();
-                GlobalState::update_global(cx, |state, _| state.active_tool = tool_kind.clone())
-            })
+            // .on_click(move |_, _, cx| {
+            //     let tool_kind = tool_kind.clone();
+            //     GlobalState::update_global(cx, |state, _| state.active_tool = tool_kind.clone())
+            // })
             .child(
                 svg()
                     .path(self.tool_kind.src())
@@ -133,74 +133,74 @@ impl RenderOnce for ToolButton {
     }
 }
 
-#[derive(IntoElement)]
-pub struct CurrentColorTool {}
+// #[derive(IntoElement)]
+// pub struct CurrentColorTool {}
 
-impl CurrentColorTool {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+// impl CurrentColorTool {
+//     pub fn new() -> Self {
+//         Self {}
+//     }
+// }
 
-impl RenderOnce for CurrentColorTool {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
+// impl RenderOnce for CurrentColorTool {
+//     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+//         let theme = Theme::get_global(cx);
+//         let state = GlobalState::get(cx);
 
-        div()
-            .id("current-color-tool")
-            .group("current-color-tool")
-            .relative()
-            .size(px(23.))
-            .mb_2()
-            .child(
-                div()
-                    .id("current-forground-color")
-                    .absolute()
-                    .bottom_0()
-                    .right_0()
-                    .size(px(17.))
-                    .rounded(px(3.))
-                    .p_px()
-                    .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
-                    .shadow(smallvec::smallvec![BoxShadow {
-                        color: hsla(0.0, 0.0, 0.0, 0.24),
-                        offset: point(px(1.), px(0.)),
-                        blur_radius: px(0.),
-                        spread_radius: px(0.),
-                    }])
-                    .child(
-                        div()
-                            .rounded(px(2.))
-                            .size_full()
-                            .bg(state.current_border_color),
-                    ),
-            )
-            .child(
-                div()
-                    .id("current-background-color")
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size(px(17.))
-                    .rounded(px(3.))
-                    .p_px()
-                    .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
-                    .shadow(smallvec::smallvec![BoxShadow {
-                        color: hsla(0.0, 0.0, 0.0, 0.36),
-                        offset: point(px(1.), px(1.)),
-                        blur_radius: px(0.),
-                        spread_radius: px(0.),
-                    }])
-                    .child(
-                        div()
-                            .rounded(px(2.))
-                            .size_full()
-                            .bg(state.current_background_color),
-                    ),
-            )
-    }
-}
+//         div()
+//             .id("current-color-tool")
+//             .group("current-color-tool")
+//             .relative()
+//             .size(px(23.))
+//             .mb_2()
+//             .child(
+//                 div()
+//                     .id("current-forground-color")
+//                     .absolute()
+//                     .bottom_0()
+//                     .right_0()
+//                     .size(px(17.))
+//                     .rounded(px(3.))
+//                     .p_px()
+//                     .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
+//                     .shadow(smallvec::smallvec![BoxShadow {
+//                         color: hsla(0.0, 0.0, 0.0, 0.24),
+//                         offset: point(px(1.), px(0.)),
+//                         blur_radius: px(0.),
+//                         spread_radius: px(0.),
+//                     }])
+//                     .child(
+//                         div()
+//                             .rounded(px(2.))
+//                             .size_full()
+//                             .bg(state.current_border_color),
+//                     ),
+//             )
+//             .child(
+//                 div()
+//                     .id("current-background-color")
+//                     .absolute()
+//                     .top_0()
+//                     .left_0()
+//                     .size(px(17.))
+//                     .rounded(px(3.))
+//                     .p_px()
+//                     .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
+//                     .shadow(smallvec::smallvec![BoxShadow {
+//                         color: hsla(0.0, 0.0, 0.0, 0.36),
+//                         offset: point(px(1.), px(1.)),
+//                         blur_radius: px(0.),
+//                         spread_radius: px(0.),
+//                     }])
+//                     .child(
+//                         div()
+//                             .rounded(px(2.))
+//                             .size_full()
+//                             .bg(state.current_background_color),
+//                     ),
+//             )
+//     }
+// }
 
 #[derive(IntoElement)]
 pub struct ToolStrip {}
@@ -266,12 +266,7 @@ impl RenderOnce for ToolStrip {
                     .child(tool_button(ToolKind::Arrow).disabled(true)),
             )
             .child(
-                div()
-                    .w_full()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .child(CurrentColorTool::new()),
+                div().w_full().flex().flex_col().items_center(), // .child(CurrentColorTool::new()),
             )
     }
 }

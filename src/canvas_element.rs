@@ -143,8 +143,9 @@ impl CanvasElement {
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
         let state = GlobalState::get(cx);
-        let current_background_color = state.current_background_color.clone();
-        let current_border_color = state.current_border_color.clone();
+        let app_state = canvas.app_state().clone().read(cx);
+        let current_background_color = app_state.current_background_color.clone();
+        let current_border_color = app_state.current_border_color.clone();
 
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
@@ -298,6 +299,7 @@ impl CanvasElement {
         layout: &CanvasLayout,
         window: &mut Window,
         state: &GlobalState,
+        cx: &App,
     ) {
         // Get the raw cursor positions directly from the drag event
         // These are in absolute window coordinates where the mouse is positioned
@@ -319,8 +321,10 @@ impl CanvasElement {
             size: Size::new(width, height),
         };
 
-        window.paint_quad(gpui::fill(rect_bounds, state.current_background_color));
-        window.paint_quad(gpui::outline(rect_bounds, state.current_border_color));
+        let app_state = self.canvas.read(cx).app_state().clone().read(cx);
+
+        window.paint_quad(gpui::fill(rect_bounds, app_state.current_background_color));
+        window.paint_quad(gpui::outline(rect_bounds, app_state.current_border_color));
         window.request_animation_frame();
     }
 
@@ -597,6 +601,7 @@ impl Element for CanvasElement {
                                 layout,
                                 window,
                                 state,
+                                cx,
                             );
                         }
                         _ => {}

@@ -50,9 +50,6 @@ actions!(
 /// At the very least this will need to be refactored before adding
 /// muliple windows, as the global state will apply to all windows.
 struct GlobalState {
-    active_tool: ToolKind,
-    current_border_color: Hsla,
-    current_background_color: Hsla,
     hide_sidebar: bool,
     sidebar_width: Pixels,
 
@@ -78,9 +75,6 @@ impl GlobalState {
 impl GlobalState {
     pub fn new() -> Self {
         Self {
-            active_tool: ToolKind::default(),
-            current_border_color: gpui::white(),
-            current_background_color: gpui::black(),
             hide_sidebar: false,
             sidebar_width: px(260.0),
             drag_start_position: None,
@@ -96,16 +90,28 @@ impl GlobalState {
 
 impl Global for GlobalState {}
 
+pub struct AppState {
+    pub active_tool: ToolKind,
+    pub current_border_color: Hsla,
+    pub current_background_color: Hsla,
+}
+
 struct Luna {
     focus_handle: FocusHandle,
     canvas: Entity<Canvas>,
     sidebar: Entity<Sidebar>,
+    app_state: Entity<AppState>,
 }
 
 impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let app_state = cx.new(|cx| AppState {
+            active_tool: ToolKind::default(),
+            current_border_color: gpui::white(),
+            current_background_color: gpui::black(),
+        });
         let focus_handle = cx.focus_handle();
-        let canvas = cx.new(|cx| Canvas::new(window, cx));
+        let canvas = cx.new(|cx| Canvas::new(app_state.clone(), window, cx));
         let weak_canvas = canvas.downgrade();
 
         let sidebar = cx.new(|cx| Sidebar::new(weak_canvas));
@@ -114,20 +120,13 @@ impl Luna {
             focus_handle,
             canvas,
             sidebar,
+            app_state,
         }
     }
 
-    pub fn toggle_ui(&mut self, _: &ToggleUI, _window: &mut Window, cx: &mut Context<Self>) {
-        GlobalState::update_global(cx, |state, _| {
-            let new_hide_state = !state.hide_sidebar;
-            state.hide_sidebar = new_hide_state;
-        });
-
-        cx.notify();
-    }
-
     fn activate_hand_tool(&mut self, _: &HandTool, _window: &mut Window, cx: &mut Context<Self>) {
-        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::Hand);
+        self.app_state
+            .update(cx, |state, _| state.active_tool = ToolKind::Hand);
         cx.notify();
     }
 
@@ -137,7 +136,8 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::Selection);
+        self.app_state
+            .update(cx, |state, _| state.active_tool = ToolKind::Selection);
         cx.notify();
     }
     fn activate_rectangle_tool(
@@ -146,7 +146,8 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        GlobalState::update_global(cx, |state, _| state.active_tool = ToolKind::Rectangle);
+        self.app_state
+            .update(cx, |state, _| state.active_tool = ToolKind::Rectangle);
         cx.notify();
     }
 
@@ -156,7 +157,7 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        GlobalState::update_global(cx, |state, cx| {
+        self.app_state.update(cx, |state, cx| {
             let border_color = state.current_border_color;
             let background_color = state.current_background_color;
 
@@ -172,7 +173,7 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        GlobalState::update_global(cx, |state, _| {
+        self.app_state.update(cx, |state, cx| {
             state.current_border_color = gpui::white();
             state.current_background_color = gpui::black();
         });
@@ -202,44 +203,38 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
-            .map(|div| match state.active_tool {
+            .map(|div| match self.app_state.read(cx).active_tool {
                 ToolKind::Hand => div.cursor_grab(),
                 ToolKind::Frame | ToolKind::Rectangle | ToolKind::Line | ToolKind::TextCursor => {
                     div.cursor_crosshair()
                 }
                 _ => div.cursor_default(),
             })
-            .on_action(cx.listener(Self::toggle_ui))
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::reset_current_colors))
             .on_action(cx.listener(Self::swap_current_colors))
-            .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-                let toggle_ui = keystroke_builder("cmd-.");
-                let selection_tool = keystroke_builder("v");
-                let hand_tool = keystroke_builder("h");
-                let swap_colors = keystroke_builder("x");
-                let rectangle_tool = keystroke_builder("r");
-
-                if e.keystroke == toggle_ui {
-                    this.toggle_ui(&ToggleUI::default(), window, cx);
-                }
-
-                if e.keystroke == hand_tool {
-                    this.activate_hand_tool(&Default::default(), window, cx);
-                }
-                if e.keystroke == selection_tool {
-                    this.activate_selection_tool(&Default::default(), window, cx);
-                }
-                if e.keystroke == swap_colors {
-                    this.swap_current_colors(&Default::default(), window, cx);
-                }
-                if e.keystroke == rectangle_tool {
-                    this.activate_rectangle_tool(&Default::default(), window, cx);
-                }
-            }))
+            // .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
+            //     let toggle_ui = keystroke_builder("cmd-.");
+            //     let selection_tool = keystroke_builder("v");
+            //     let hand_tool = keystroke_builder("h");
+            //     let swap_colors = keystroke_builder("x");
+            //     let rectangle_tool = keystroke_builder("r");
+            //     if e.keystroke == hand_tool {
+            //         this.activate_hand_tool(&Default::default(), window, cx);
+            //     }
+            //     if e.keystroke == selection_tool {
+            //         this.activate_selection_tool(&Default::default(), window, cx);
+            //     }
+            //     if e.keystroke == swap_colors {
+            //         this.swap_current_colors(&Default::default(), window, cx);
+            //     }
+            //     if e.keystroke == rectangle_tool {
+            //         this.activate_rectangle_tool(&Default::default(), window, cx);
+            //     }
+            // }))
             .child(CanvasElement::new(&self.canvas, cx))
-            .child(self.sidebar.clone())
+        // .child(self.sidebar.clone())
     }
 }
 
