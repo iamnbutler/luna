@@ -6,12 +6,13 @@ use gpui::{
 };
 use gpui::{point, Bounds, Point, Size};
 
+use crate::theme::Theme;
 use crate::{
     canvas::{register_canvas_action, Canvas},
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
-    GlobalState, Theme, ToolKind,
+    GlobalState, ToolKind,
 };
 
 #[derive(Clone)]
