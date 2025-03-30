@@ -3,14 +3,14 @@
 use crate::{
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
-    scene_graph::SceneGraph,
+    scene_graph::{SceneGraph, SceneNodeId},
     AppState, ToolKind,
 };
 use gpui::{
-    actions, canvas as gpui_canvas, div, hsla, prelude::*, size, Action, App, Bounds, Context,
-    ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle, Focusable,
-    InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Point, Render, Size,
-    Styled, Window,
+    actions, canvas as gpui_canvas, div, hsla, point, prelude::*, px, size, Action, App, Bounds,
+    Context, ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle,
+    Focusable, InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Pixels,
+    Point, Render, ScaledPixels, Size, Styled, TransformationMatrix, Window,
 };
 use std::{
     any::TypeId,
@@ -52,9 +52,13 @@ pub fn register_canvas_action<T: Action>(
 pub struct Canvas {
     app_state: Entity<AppState>,
 
+    /// The scene graph for managing spatial relationships between nodes
     scene_graph: Entity<SceneGraph>,
 
-    /// Vector of nodes in insertion order
+    /// The canvas root node in scene graph
+    canvas_node: SceneNodeId,
+
+    /// Flat list of nodes (the data model)
     pub nodes: Vec<RectangleNode>,
 
     /// Currently selected nodes
@@ -107,9 +111,13 @@ impl Canvas {
 
         let content_bounds = viewport.clone();
 
+        // Create canvas root node in scene graph
+        let canvas_node = scene_graph.update(cx, |sg, _cx| sg.create_node(None, None));
+
         Self {
             app_state: app_state.clone(),
             scene_graph: scene_graph.clone(),
+            canvas_node,
             nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
@@ -159,10 +167,33 @@ impl Canvas {
         self.active_tool = tool;
     }
 
+    pub fn scene_graph(&self) -> &Entity<SceneGraph> {
+        &self.scene_graph
+    }
+
     /// Add a node to the canvas
-    pub fn add_node(&mut self, node: RectangleNode) -> NodeId {
+    pub fn add_node(&mut self, node: RectangleNode, cx: &mut Context<Self>) -> NodeId {
         let node_id = node.id();
+
+        // Add to flat data structure first
         self.nodes.push(node);
+
+        // Create scene node for this data node in the scene graph
+        self.scene_graph.update(cx, |sg, _cx| {
+            // Create scene node as child of canvas node
+            let scene_node = sg.create_node(Some(self.canvas_node), Some(node_id));
+
+            // Set initial bounds from node layout
+            let node = self.nodes.last().unwrap();
+            let layout = node.layout();
+            let bounds = Bounds {
+                origin: Point::new(layout.x, layout.y),
+                size: Size::new(layout.width, layout.height),
+            };
+
+            sg.set_local_bounds(scene_node, bounds);
+        });
+
         self.dirty = true;
         node_id
     }
@@ -222,61 +253,6 @@ impl Canvas {
         self.selected_nodes.contains(&node_id)
     }
 
-    /// Get nodes at a specific point (for hit testing)
-    pub fn nodes_at_point(&self, point: Point<f32>) -> Vec<NodeId> {
-        // Convert window point to canvas coordinates
-        let canvas_point = self.window_to_canvas_point(point);
-
-        // Get all nodes that contain this point
-        let mut hit_nodes = Vec::new();
-
-        for node in &self.nodes {
-            if node.contains_point(&canvas_point) {
-                hit_nodes.push(node.id());
-            }
-        }
-
-        // Sort nodes by z-order (higher IDs drawn on top)
-        hit_nodes.sort_by(|a, b| b.0.cmp(&a.0));
-
-        hit_nodes
-    }
-
-    /// Get the topmost node at a specific point
-    pub fn top_node_at_point(&self, point: Point<f32>) -> Option<NodeId> {
-        self.nodes_at_point(point).first().copied()
-    }
-
-    /// Perform rectangular selection
-    pub fn select_nodes_in_rect(&mut self, rect: Bounds<f32>) {
-        // Convert rectangle to canvas coordinates
-        let start = self.window_to_canvas_point(rect.origin);
-        let end = self.window_to_canvas_point(Point::new(
-            rect.origin.x + rect.size.width,
-            rect.origin.y + rect.size.height,
-        ));
-
-        // Create selection bounds
-        let selection_rect = Bounds {
-            origin: Point::new(start.x.min(end.x), start.y.min(end.y)),
-            size: Size::new((end.x - start.x).abs(), (end.y - start.y).abs()),
-        };
-
-        // Find all nodes that intersect with the selection rect
-        let mut selected_nodes = HashSet::new();
-
-        for node in &self.nodes {
-            let bounds = node.bounds();
-            if bounds_intersect(&selection_rect, &bounds) {
-                selected_nodes.insert(node.id());
-            }
-        }
-
-        // Update selection
-        self.selected_nodes = selected_nodes;
-        self.dirty = true;
-    }
-
     /// Update the layout for the entire canvas
     pub fn update_layout(&mut self) {
         if !self.dirty {
@@ -315,37 +291,89 @@ impl Canvas {
     }
 
     /// Get nodes that are visible in the current viewport
-    pub fn visible_nodes(&self) -> Vec<&RectangleNode> {
-        // Convert viewport to canvas coordinates
-        let viewport_min = self.window_to_canvas_point(self.viewport.origin);
-        let viewport_max = self.window_to_canvas_point(Point::new(
-            self.viewport.origin.x + self.viewport.size.width,
-            self.viewport.origin.y + self.viewport.size.height,
-        ));
+    pub fn visible_nodes(&self, cx: &mut App) -> Vec<&RectangleNode> {
+        // Create viewport bounds in window coordinates
+        let viewport = Bounds {
+            origin: Point::new(0.0, 0.0),
+            size: self.viewport.size,
+        };
 
-        // Create viewport bounds
-        let viewport_bounds = Bounds {
-            origin: Point::new(
-                viewport_min.x.min(viewport_max.x),
-                viewport_min.y.min(viewport_max.y),
+        // Convert to gpui::Bounds
+        let gpui_viewport = gpui::Bounds {
+            origin: point(
+                gpui::Pixels(viewport.origin.x),
+                gpui::Pixels(viewport.origin.y),
             ),
-            size: Size::new(
-                (viewport_max.x - viewport_min.x).abs(),
-                (viewport_max.y - viewport_min.y).abs(),
+            size: size(
+                gpui::Pixels(viewport.size.width),
+                gpui::Pixels(viewport.size.height),
             ),
         };
 
-        // Find all nodes intersecting with the viewport
-        let mut visible = Vec::new();
+        // Use scene graph to find visible nodes
+        let visible_node_ids = self.scene_graph.update(cx, |sg, _cx| {
+            let mut visible_ids = Vec::new();
 
-        for node in &self.nodes {
-            let bounds = node.bounds();
-            if bounds_intersect(&viewport_bounds, &bounds) {
-                visible.push(node);
+            // Start from canvas node children
+            if let Some(canvas_node) = sg.get_node(self.canvas_node) {
+                for &child_id in canvas_node.children() {
+                    self.collect_visible_nodes(child_id, gpui_viewport, sg, &mut visible_ids);
+                }
+            }
+
+            visible_ids
+        });
+
+        // Return references to visible nodes
+        self.nodes
+            .iter()
+            .filter(|node| visible_node_ids.contains(&node.id()))
+            .collect()
+    }
+
+    /// Helper method to recursively collect visible nodes
+    fn collect_visible_nodes(
+        &self,
+        node_id: SceneNodeId,
+        viewport: gpui::Bounds<gpui::Pixels>,
+        sg: &SceneGraph,
+        result: &mut Vec<NodeId>,
+    ) {
+        // TODO: Implement proper visibility checking
+        // For now, just add the node and its children to the result
+        if let Some(node) = sg.get_node(node_id) {
+            // If node has an associated data node, add it to results
+            if let Some(data_id) = node.data_node_id() {
+                result.push(data_id);
+            }
+
+            // Process all children
+            for &child_id in node.children() {
+                self.collect_visible_nodes(child_id, viewport, sg, result);
             }
         }
+    }
 
-        visible
+    /// Helper function to check if two gpui::Bounds rectangles intersect
+    fn bounds_intersect_gpui(
+        a: &gpui::Bounds<gpui::Pixels>,
+        b: &gpui::Bounds<gpui::Pixels>,
+    ) -> bool {
+        // Check if one rectangle is to the left of the other
+        if a.origin.x.0 + a.size.width.0 < b.origin.x.0
+            || b.origin.x.0 + b.size.width.0 < a.origin.x.0
+        {
+            return false;
+        }
+
+        // Check if one rectangle is above the other
+        if a.origin.y.0 + a.size.height.0 < b.origin.y.0
+            || b.origin.y.0 + b.size.height.0 < a.origin.y.0
+        {
+            return false;
+        }
+
+        true
     }
 
     /// Get all root nodes (all nodes since we removed hierarchy)
@@ -354,14 +382,19 @@ impl Canvas {
     }
 
     /// Create a new node with the given type at a position
-    pub fn create_node(&mut self, _node_type: NodeType, position: Point<f32>) -> NodeId {
+    pub fn create_node(
+        &mut self,
+        _node_type: NodeType,
+        position: Point<f32>,
+        cx: &mut Context<Self>,
+    ) -> NodeId {
         let id = self.generate_id();
 
         // Create a rectangle node at the specified position
         let mut rect = RectangleNode::new(id);
         *rect.layout_mut() = NodeLayout::new(position.x, position.y, 100.0, 100.0);
 
-        self.add_node(rect)
+        self.add_node(rect, cx)
     }
 
     /// Move selected nodes by a delta
@@ -384,14 +417,42 @@ impl Canvas {
     }
 
     /// Set scroll position
-    pub fn set_scroll_position(&mut self, position: Point<f32>) {
+    pub fn set_scroll_position(&mut self, position: Point<f32>, cx: &mut Context<Self>) {
         self.scroll_position = position;
+
+        // Update canvas root transform
+        self.scene_graph.update(cx, |sg, _cx| {
+            // Create a transform that applies zoom and scroll
+            let transform = TransformationMatrix::unit()
+                .scale(size(self.zoom, self.zoom))
+                .translate(point(
+                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                ));
+
+            sg.set_local_transform(self.canvas_node, transform);
+        });
+
         self.dirty = true;
     }
 
     /// Set zoom level
-    pub fn set_zoom(&mut self, zoom: f32) {
+    pub fn set_zoom(&mut self, zoom: f32, cx: &mut Context<Self>) {
         self.zoom = zoom.max(0.1).min(10.0); // Limit zoom range
+
+        // Update canvas root transform
+        self.scene_graph.update(cx, |sg, _cx| {
+            // Create a transform that applies zoom and scroll
+            let transform = TransformationMatrix::unit()
+                .scale(size(self.zoom, self.zoom))
+                .translate(point(
+                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                ));
+
+            sg.set_local_transform(self.canvas_node, transform);
+        });
+
         self.dirty = true;
     }
 

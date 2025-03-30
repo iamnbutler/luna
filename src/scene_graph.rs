@@ -424,6 +424,33 @@ pub struct SceneNode {
     visible: bool,
 }
 
+impl SceneNode {
+    /// Returns a reference to the node's children
+    pub fn children(&self) -> &Vec<SceneNodeId> {
+        &self.children
+    }
+
+    /// Returns a reference to the node's local bounds
+    pub fn local_bounds(&self) -> &Bounds<f32> {
+        &self.local_bounds
+    }
+
+    /// Returns a reference to the node's world bounds
+    pub fn world_bounds(&self) -> &Bounds<f32> {
+        &self.world_bounds
+    }
+
+    /// Returns the node's data node ID, if any
+    pub fn data_node_id(&self) -> Option<NodeId> {
+        self.data_node_id
+    }
+
+    /// Returns whether the node is visible
+    pub fn visible(&self) -> bool {
+        self.visible
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
