@@ -46,6 +46,8 @@ pub struct InspectorProperties {
     pub y: SmallVec<[f32; 1]>,
     pub width: SmallVec<[f32; 1]>,
     pub height: SmallVec<[f32; 1]>,
+    pub border_width: SmallVec<[f32; 1]>,
+    pub corner_radius: SmallVec<[f32; 1]>,
 }
 
 impl Default for InspectorProperties {
@@ -55,6 +57,8 @@ impl Default for InspectorProperties {
             y: SmallVec::new(),
             width: SmallVec::new(),
             height: SmallVec::new(),
+            border_width: SmallVec::new(),
+            corner_radius: SmallVec::new(),
         }
     }
 }
@@ -85,6 +89,8 @@ impl Inspector {
         self.properties.y.clear();
         self.properties.width.clear();
         self.properties.height.clear();
+        self.properties.border_width.clear();
+        self.properties.corner_radius.clear();
 
         match selected_nodes {
             NodeSelection::None => {
@@ -97,17 +103,91 @@ impl Inspector {
                     self.properties.y.push(node.layout().y);
                     self.properties.width.push(node.layout().width);
                     self.properties.height.push(node.layout().height);
+                    self.properties.border_width.push(node.border_width());
+                    self.properties.corner_radius.push(node.corner_radius());
                 }
             }
             NodeSelection::Multiple(nodes) => {
+                // For multiple selections, we'll collect all values and then
+                // check if they're all the same to properly handle the "Mixed" state
                 let canvas_read = canvas.read(cx);
+                
+                // Temporary collections for all values
+                let mut all_x = Vec::new();
+                let mut all_y = Vec::new();
+                let mut all_width = Vec::new();
+                let mut all_height = Vec::new();
+                let mut all_border_width = Vec::new();
+                let mut all_corner_radius = Vec::new();
+                
+                // Collect all values first
                 for node_id in &nodes {
-                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id)
-                    {
-                        self.properties.x.push(node.layout().x);
-                        self.properties.y.push(node.layout().y);
-                        self.properties.width.push(node.layout().width);
-                        self.properties.height.push(node.layout().height);
+                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id) {
+                        all_x.push(node.layout().x);
+                        all_y.push(node.layout().y);
+                        all_width.push(node.layout().width);
+                        all_height.push(node.layout().height);
+                        all_border_width.push(node.border_width());
+                        all_corner_radius.push(node.corner_radius());
+                    }
+                }
+                
+                // Helper function to check if all values in a vector are the same
+                let all_same = |values: &[f32]| -> bool {
+                    if values.is_empty() {
+                        return true;
+                    }
+                    let first = values[0];
+                    values.iter().all(|&v| (v - first).abs() < f32::EPSILON)
+                };
+                
+                // If all values are the same, just use the first one
+                // Otherwise, use all values to indicate they're different (will show as "Mixed")
+                if !all_x.is_empty() {
+                    if all_same(&all_x) {
+                        self.properties.x.push(all_x[0]);
+                    } else {
+                        self.properties.x.extend(all_x);
+                    }
+                }
+                
+                if !all_y.is_empty() {
+                    if all_same(&all_y) {
+                        self.properties.y.push(all_y[0]);
+                    } else {
+                        self.properties.y.extend(all_y);
+                    }
+                }
+                
+                if !all_width.is_empty() {
+                    if all_same(&all_width) {
+                        self.properties.width.push(all_width[0]);
+                    } else {
+                        self.properties.width.extend(all_width);
+                    }
+                }
+                
+                if !all_height.is_empty() {
+                    if all_same(&all_height) {
+                        self.properties.height.push(all_height[0]);
+                    } else {
+                        self.properties.height.extend(all_height);
+                    }
+                }
+                
+                if !all_border_width.is_empty() {
+                    if all_same(&all_border_width) {
+                        self.properties.border_width.push(all_border_width[0]);
+                    } else {
+                        self.properties.border_width.extend(all_border_width);
+                    }
+                }
+                
+                if !all_corner_radius.is_empty() {
+                    if all_same(&all_corner_radius) {
+                        self.properties.corner_radius.push(all_corner_radius[0]);
+                    } else {
+                        self.properties.corner_radius.extend(all_corner_radius);
                     }
                 }
             }
@@ -148,6 +228,18 @@ impl Render for Inspector {
         } else {
             Some(self.properties.height.iter().cloned().collect())
         };
+        
+        let border_width = if self.properties.border_width.is_empty() {
+            None
+        } else {
+            Some(self.properties.border_width.iter().cloned().collect())
+        };
+        
+        let corner_radius = if self.properties.corner_radius.is_empty() {
+            None
+        } else {
+            Some(self.properties.corner_radius.iter().cloned().collect())
+        };
 
         let inner = div()
             .flex()
@@ -168,7 +260,9 @@ impl Render for Inspector {
                     .child(property_input(x, "X"))
                     .child(property_input(y, "Y"))
                     .child(property_input(width, "W"))
-                    .child(property_input(height, "H")),
+                    .child(property_input(height, "H"))
+                    .child(property_input(border_width, "B"))
+                    .child(property_input(corner_radius, "R")),
             );
 
         div()

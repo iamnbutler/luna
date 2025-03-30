@@ -37,6 +37,7 @@ impl RenderOnce for PropertyInput {
         };
 
         let no_value = display_value.is_empty();
+        let mixed = display_value == "Mixed";
 
         div().flex().flex_row().child(
             div()
@@ -49,7 +50,7 @@ impl RenderOnce for PropertyInput {
                 .rounded(px(4.))
                 .bg(theme.foreground.alpha(0.06))
                 .text_color(theme.foreground.alpha(0.9))
-                .when(no_value, |this| {
+                .when(no_value || mixed, |this| {
                     this.text_color(theme.foreground.alpha(0.4))
                 })
                 .text_size(px(11.))
