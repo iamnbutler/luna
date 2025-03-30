@@ -5,10 +5,7 @@ use gpui::{
 
 use crate::{canvas::LunaCanvas, theme::Theme, AppState};
 
-pub fn property_input(
-    value: Option<Vec<f32>>,
-    icon: impl Into<SharedString>,
-) -> PropertyInput {
+pub fn property_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
     PropertyInput::new(value, icon)
 }
 
@@ -30,15 +27,15 @@ impl PropertyInput {
 impl RenderOnce for PropertyInput {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
         let theme = Theme::new();
-        
+
         // Convert Option<Vec<f32>> to display string
         let display_value = match &self.value {
             None => SharedString::from(""),
-            Some(values) if values.is_empty() => SharedString::from("Multiple"),
+            Some(values) if values.is_empty() => SharedString::from("Mixed"),
             Some(values) if values.len() == 1 => SharedString::from(format!("{}", values[0])),
-            Some(_) => SharedString::from("Multiple"),
+            Some(_) => SharedString::from("Mixed"),
         };
-        
+
         let no_value = display_value.is_empty();
 
         div().flex().flex_row().child(
@@ -48,7 +45,7 @@ impl RenderOnce for PropertyInput {
                 .flex_none()
                 .pl(px(6.))
                 .pr(px(4.))
-                .w(px(64.))
+                .w(px(84.))
                 .rounded(px(4.))
                 .bg(theme.foreground.alpha(0.06))
                 .text_color(theme.foreground.alpha(0.9))
