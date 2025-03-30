@@ -117,7 +117,7 @@ impl LunaCanvas {
         // Create canvas root node in scene graph
         let canvas_node = scene_graph.update(cx, |sg, _cx| sg.create_node(None, None));
 
-        Self {
+        let mut canvas = Self {
             app_state: app_state.clone(),
             scene_graph: scene_graph.clone(),
             canvas_node,
@@ -135,7 +135,36 @@ impl LunaCanvas {
             active_drag: None,
             active_element_draw: None,
             theme: theme.clone(),
-        }
+        };
+        
+        // Add default test elements
+        let app_state_read = app_state.read(cx);
+        
+        // Create a red rectangle
+        let node1_id = canvas.generate_id();
+        let mut rect1 = RectangleNode::with_rect(node1_id, 100.0, 100.0, 200.0, 150.0);
+        rect1.set_fill(Some(hsla(0.0, 0.7, 0.7, 1.0))); // Red color
+        rect1.set_border(Some(hsla(0.0, 0.8, 0.3, 1.0)), 2.0); // Darker red border
+        let node1_id = canvas.add_node(rect1, cx);
+        
+        // Create a blue rectangle
+        let node2_id = canvas.generate_id();
+        let mut rect2 = RectangleNode::with_rect(node2_id, 350.0, 150.0, 180.0, 180.0);
+        rect2.set_fill(Some(hsla(210.0, 0.7, 0.7, 1.0))); // Blue color
+        rect2.set_border(Some(hsla(210.0, 0.8, 0.3, 1.0)), 2.0); // Darker blue border
+        let node2_id = canvas.add_node(rect2, cx);
+        
+        // Create a green rectangle
+        let node3_id = canvas.generate_id();
+        let mut rect3 = RectangleNode::with_rect(node3_id, 200.0, 280.0, 220.0, 130.0);
+        rect3.set_fill(Some(hsla(120.0, 0.7, 0.7, 1.0))); // Green color
+        rect3.set_border(Some(hsla(120.0, 0.8, 0.3, 1.0)), 2.0); // Darker green border
+        let node3_id = canvas.add_node(rect3, cx);
+        
+        // Select the second element (blue rectangle)
+        canvas.select_node(node2_id);
+        
+        canvas
     }
 
     /// Generate a unique ID for a new node
