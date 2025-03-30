@@ -93,21 +93,21 @@ impl Inspector {
             },
             NodeSelection::Single(node_id) => {
                 let canvas_read = canvas.read(cx);
-                if let Some(node) = canvas_read.nodes.iter().find(|node| node.id == node_id) {
-                    self.properties.x.push(node.layout.x);
-                    self.properties.y.push(node.layout.y);
-                    self.properties.width.push(node.layout.width);
-                    self.properties.height.push(node.layout.height);
+                if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == node_id) {
+                    self.properties.x.push(node.layout().x);
+                    self.properties.y.push(node.layout().y);
+                    self.properties.width.push(node.layout().width);
+                    self.properties.height.push(node.layout().height);
                 }
             },
             NodeSelection::Multiple(nodes) => {
                 let canvas_read = canvas.read(cx);
                 for node_id in &nodes {
-                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id == *node_id) {
-                        self.properties.x.push(node.layout.x);
-                        self.properties.y.push(node.layout.y);
-                        self.properties.width.push(node.layout.width);
-                        self.properties.height.push(node.layout.height);
+                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id) {
+                        self.properties.x.push(node.layout().x);
+                        self.properties.y.push(node.layout().y);
+                        self.properties.width.push(node.layout().width);
+                        self.properties.height.push(node.layout().height);
                     }
                 }
             }
