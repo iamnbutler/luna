@@ -4,6 +4,7 @@ use crate::{
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     scene_graph::{SceneGraph, SceneNodeId},
+    theme::Theme,
     AppState, ToolKind,
 };
 use gpui::{
@@ -90,6 +91,7 @@ pub struct Canvas {
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
     pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
+    pub theme: Theme,
 }
 
 impl Canvas {
@@ -97,6 +99,7 @@ impl Canvas {
     pub fn new(
         app_state: &Entity<AppState>,
         scene_graph: &Entity<SceneGraph>,
+        theme: &Theme,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -131,6 +134,7 @@ impl Canvas {
             active_tool: ToolKind::default(),
             active_drag: None,
             active_element_draw: None,
+            theme: theme.clone(),
         }
     }
 

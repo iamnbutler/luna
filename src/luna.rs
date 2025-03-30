@@ -113,7 +113,8 @@ impl Luna {
         });
         let focus_handle = cx.focus_handle();
         let scene_graph = cx.new(|cx| SceneGraph::new());
-        let canvas = cx.new(|cx| Canvas::new(&app_state, &scene_graph, window, cx));
+        let theme = Theme::new();
+        let canvas = cx.new(|cx| Canvas::new(&app_state, &scene_graph, &theme, window, cx));
 
         Luna {
             focus_handle,

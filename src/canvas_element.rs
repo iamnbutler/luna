@@ -2,12 +2,13 @@
 use gpui::{
     hsla, prelude::*, px, relative, App, ContentMask, DispatchPhase, ElementId, Entity, Focusable,
     Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
-    TextStyle, TextStyleRefinement, Window,
+    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, Bounds, Point, Size};
 
 use crate::scene_graph::SceneGraph;
 use crate::theme::Theme;
+use crate::AppState;
 use crate::{
     canvas::{register_canvas_action, Canvas},
     interactivity::ActiveDrag,
@@ -295,11 +296,10 @@ impl CanvasElement {
     /// as it is being created by clicking and dragging the tool
     fn paint_draw_rectangle(
         &self,
-        new_node_id: usize,
+        new_node_id: NodeId,
         active_drag: &ActiveDrag,
         layout: &CanvasLayout,
         window: &mut Window,
-        state: &GlobalState,
         cx: &App,
     ) {
         // Get the raw cursor positions directly from the drag event
@@ -322,7 +322,11 @@ impl CanvasElement {
             size: Size::new(width, height),
         };
 
-        let app_state = self.canvas.read(cx).app_state().clone().read(cx);
+        // Read canvas and app_state separately to avoid multiple borrows
+        let canvas_read = self.canvas.read(cx);
+        let app_state_entity = canvas_read.app_state().clone();
+
+        let app_state = app_state_entity.read(cx);
 
         window.paint_quad(gpui::fill(rect_bounds, app_state.current_background_color));
         window.paint_quad(gpui::outline(rect_bounds, app_state.current_border_color));
@@ -403,69 +407,80 @@ impl CanvasElement {
     }
 
     fn paint_nodes(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
-        let theme = Theme::get_global(cx);
+        let canvas = self.canvas.clone();
 
-        // Fetch all visible nodes and transformations from the scene graph
-        let canvas = self.canvas.read(cx);
+        // Collect ALL data we need up front to avoid any borrow issues
+        struct NodeRenderInfo {
+            node_id: NodeId,
+            bounds: gpui::Bounds<Pixels>,
+            fill_color: Option<Hsla>,
+            border_color: Option<Hsla>,
+        }
 
-        // Get visible nodes using the scene graph for efficient culling
-        let visible_nodes = canvas.visible_nodes(cx);
-        let selected_nodes = &canvas.selected_nodes;
-        let scene_graph = canvas.scene_graph().read(cx);
+        // Get all the data we need in one place
+        let (nodes_to_render, theme, selected_node_ids) = canvas.update(cx, |canvas, cx| {
+            let visible_nodes = canvas.visible_nodes(cx);
+            let scene_graph = canvas.scene_graph().read(cx);
+            let selected_nodes = canvas.selected_nodes.clone();
+            let theme = canvas.theme.clone();
+
+            // Collect all node rendering information into owned structures
+            let mut nodes_to_render = Vec::new();
+
+            for node in visible_nodes {
+                let node_id = node.id();
+
+                if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
+                    if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
+                        nodes_to_render.push(NodeRenderInfo {
+                            node_id,
+                            bounds: gpui::Bounds {
+                                origin: gpui::Point::new(
+                                    gpui::Pixels(world_bounds.origin.x),
+                                    gpui::Pixels(world_bounds.origin.y),
+                                ),
+                                size: gpui::Size::new(
+                                    gpui::Pixels(world_bounds.size.width),
+                                    gpui::Pixels(world_bounds.size.height),
+                                ),
+                            },
+                            fill_color: node.fill(),
+                            border_color: node.border_color(),
+                        });
+                    }
+                }
+            }
+
+            (nodes_to_render, theme, selected_nodes)
+        });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Paint each node with its transformation from the scene graph
-            for node in visible_nodes {
-                // Get node ID and scene node ID
-                let node_id = node.id();
-                let scene_node_id = scene_graph.get_scene_node_id(node_id);
+            for node_info in &nodes_to_render {
+                // Paint the fill if it exists
+                if let Some(fill_color) = node_info.fill_color {
+                    window.paint_quad(gpui::fill(node_info.bounds, fill_color));
+                }
 
-                if let Some(scene_node_id) = scene_node_id {
-                    // Get the world transform for this node
-                    if let Some(transform) = scene_graph.get_world_transform(scene_node_id) {
-                        // Get node layout
-                        let layout = node.layout();
+                // Paint the border if it exists
+                if let Some(border_color) = node_info.border_color {
+                    window.paint_quad(gpui::outline(node_info.bounds, border_color));
+                }
 
-                        // Create bounds in local space (at origin 0,0)
-                        // This is important - with scene graph transformations, we define
-                        // the shape at its local origin and let the transform position it
-                        let bounds = gpui::Bounds {
-                            origin: gpui::Point::new(gpui::Pixels(0.0), gpui::Pixels(0.0)),
-                            size: gpui::Size::new(
-                                gpui::Pixels(layout.width),
-                                gpui::Pixels(layout.height),
-                            ),
-                        };
-
-                        // Apply transformation from scene graph
-                        window.with_transformation(transform, |window| {
-                            // Paint the fill if it exists
-                            if let Some(fill_color) = node.fill() {
-                                window.paint_quad(gpui::fill(bounds, fill_color));
-                            }
-
-                            // Paint the border if it exists
-                            if let Some(border_color) = node.border_color() {
-                                window.paint_quad(gpui::outline(bounds, border_color));
-                            }
-
-                            // Draw selection indicator if the node is selected
-                            if selected_nodes.contains(&node.id()) {
-                                // Create a slightly larger bounds for selection indicator
-                                let selection_bounds = gpui::Bounds {
-                                    origin: gpui::Point::new(
-                                        bounds.origin.x - gpui::Pixels(2.0),
-                                        bounds.origin.y - gpui::Pixels(2.0),
-                                    ),
-                                    size: gpui::Size::new(
-                                        bounds.size.width + gpui::Pixels(4.0),
-                                        bounds.size.height + gpui::Pixels(4.0),
-                                    ),
-                                };
-                                window.paint_quad(gpui::outline(selection_bounds, theme.selected));
-                            }
-                        });
-                    }
+                // Draw selection indicator if the node is selected
+                if selected_node_ids.contains(&node_info.node_id) {
+                    // Create a slightly larger bounds for selection indicator
+                    let selection_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+                    window.paint_quad(gpui::outline(selection_bounds, theme.selected));
                 }
             }
 
@@ -557,9 +572,9 @@ impl Element for CanvasElement {
         cx: &mut gpui::App,
     ) {
         let canvas = self.canvas.clone();
-        let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
+        // let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
-        window.set_key_context(key_context);
+        // window.set_key_context(key_context);
 
         // register_actions
         // register_key_listeners
@@ -572,26 +587,18 @@ impl Element for CanvasElement {
 
         window.with_text_style(Some(text_style), |window| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                // Clone the canvas to avoid multiple borrows of cx
+                let canvas_clone = self.canvas.clone();
                 self.paint_mouse_listeners(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
                 self.paint_nodes(layout, window, cx);
 
-                // Get theme and global state
-                let theme = Theme::get_global(cx);
-                let state = GlobalState::get(cx);
-
-                // Clone the canvas to avoid multiple borrows of cx
-                let canvas_clone = self.canvas.clone();
-
-                // Now get any needed data for additional paint operations
-                let (active_drag, active_element_draw, active_tool) = {
-                    let canvas = canvas_clone.read(cx);
-                    (
-                        canvas.active_drag.clone(),
-                        canvas.active_element_draw.clone(),
-                        canvas.active_tool.clone(),
-                    )
-                };
+                // Read canvas once to get all needed data
+                let canvas_read = canvas_clone.read(cx);
+                let active_drag = canvas_read.active_drag.clone();
+                let active_element_draw = canvas_read.active_element_draw.clone();
+                let active_tool = canvas_read.active_tool.clone();
+                let theme = &canvas_read.theme;
 
                 // Paint selection rectangle if dragging with selection tool
                 if let Some(active_drag) = active_drag {
@@ -599,17 +606,10 @@ impl Element for CanvasElement {
                 }
 
                 // Paint rectangle preview if drawing with rectangle tool
-                if let Some(element_draw) = active_element_draw {
+                if let Some((node_id, node_type, drag)) = active_element_draw {
                     match active_tool {
                         ToolKind::Rectangle => {
-                            self.paint_draw_rectangle(
-                                element_draw.0 .0,
-                                &element_draw.2,
-                                layout,
-                                window,
-                                state,
-                                cx,
-                            );
+                            self.paint_draw_rectangle(node_id, &drag, layout, window, cx);
                         }
                         _ => {}
                     }

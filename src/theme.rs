@@ -1,5 +1,6 @@
 use gpui::{hsla, App, Global, Hsla};
 
+#[derive(Debug, Clone)]
 pub struct Theme {
     pub background_color: Hsla,
     pub canvas_color: Hsla,
