@@ -7,14 +7,15 @@ use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
-    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
+    MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
+    Window, WindowBackgroundAppearance, WindowOptions,
 };
 
 mod canvas;
 mod canvas_element;
 mod interactivity;
 mod node;
+mod scene_graph;
 mod util;
 
 // Import NodeCommon trait to bring it into scope
@@ -499,11 +500,11 @@ impl RenderOnce for LayerList {
 
         // Get all nodes from Canvas
         let canvas = self.canvas.read(cx);
-        
+
         // Add all nodes to the layer list
         for node in &canvas.nodes {
             let kind = ElementKind::ShapeSquare; // We only have rectangle nodes now
-            
+
             let name = format!("Node {}", node.id().0);
             let selected = canvas.is_node_selected(node.id());
 
@@ -537,9 +538,7 @@ impl Render for Sidebar {
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
             .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
-            .child(
-                div().flex().flex_1().w_full().child(ToolStrip::new()),
-            );
+            .child(div().flex().flex_1().w_full().child(ToolStrip::new()));
 
         div()
             .id("titlebar")

@@ -141,6 +141,9 @@ impl CanvasElement {
 
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
+        let state = GlobalState::get(cx);
+        let current_background_color = state.current_background_color.clone();
+        let current_border_color = state.current_border_color.clone();
 
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
@@ -177,8 +180,8 @@ impl CanvasElement {
                         *rect.layout_mut() = NodeLayout::new(rel_x, rel_y, width, height);
 
                         // Set colors
-                        rect.set_fill(Some(state.current_background_color));
-                        rect.set_border(Some(state.current_border_color), 1.0);
+                        rect.set_fill(Some(current_background_color));
+                        rect.set_border(Some(current_border_color), 1.0);
 
                         // Add the node to the canvas
                         canvas.add_node(rect);
@@ -392,6 +395,75 @@ impl CanvasElement {
             }
         });
     }
+
+    fn paint_nodes(
+        &self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        theme: &Theme,
+        cx: &App,  // Change from &mut App to &App since we only need immutable access
+    ) {
+        // Fetch all visible nodes from the canvas
+        let canvas = self.canvas.read(cx);
+        let visible_nodes = canvas.visible_nodes();
+        let selected_nodes = &canvas.selected_nodes;
+        let zoom = canvas.zoom();
+        let scroll_position = canvas.content_bounds().origin;
+
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            // Paint each node
+            for node in visible_nodes {
+                // Get node position and size from the layout
+                let layout = node.layout();
+                
+                // Apply zoom and scroll transformations
+                let adjusted_x = (layout.x - scroll_position.x) * zoom;
+                let adjusted_y = (layout.y - scroll_position.y) * zoom;
+                let adjusted_width = layout.width * zoom;
+                let adjusted_height = layout.height * zoom;
+                
+                // Create bounds for the node
+                let bounds = Bounds {
+                    origin: Point::new(
+                        gpui::Pixels(adjusted_x),
+                        gpui::Pixels(adjusted_y)
+                    ),
+                    size: Size::new(
+                        gpui::Pixels(adjusted_width),
+                        gpui::Pixels(adjusted_height)
+                    ),
+                };
+
+                // Paint the fill if it exists
+                if let Some(fill_color) = node.fill() {
+                    window.paint_quad(gpui::fill(bounds, fill_color));
+                }
+
+                // Paint the border if it exists
+                if let Some(border_color) = node.border_color() {
+                    window.paint_quad(gpui::outline(bounds, border_color));
+                }
+                
+                // Draw selection indicator if the node is selected
+                if selected_nodes.contains(&node.id()) {
+                    // Create a slightly larger bounds for selection indicator
+                    let selection_bounds = Bounds {
+                        origin: Point::new(
+                            bounds.origin.x - gpui::Pixels(2.0),
+                            bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: Size::new(
+                            bounds.size.width + gpui::Pixels(4.0),
+                            bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+                    window.paint_quad(gpui::outline(selection_bounds, theme.selected));
+                }
+            }
+            
+            window.request_animation_frame();
+        });
+    }
 }
 
 impl Element for CanvasElement {
@@ -451,10 +523,11 @@ impl Element for CanvasElement {
                 let style = self.style.clone();
                 let hitbox = window.insert_hitbox(bounds, false);
 
-                // Check for active drags in the canvas itself instead of using cx.has_active_drag()
-                let has_active_drag = self
-                    .canvas
-                    .update(cx, |canvas, _| canvas.active_drag.is_some());
+                // Check for active drags in the canvas itself
+                let has_active_drag = {
+                    let canvas = self.canvas.read(cx);
+                    canvas.active_drag.is_some()
+                };
 
                 if !has_active_drag {
                     // anything that shouldn't be painted when
@@ -494,19 +567,25 @@ impl Element for CanvasElement {
                 self.paint_mouse_listeners(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
 
-                // Get all canvas data we'll need for painting first (this needs a mutable borrow)
-                let (active_drag, active_element_draw, active_tool) =
-                    canvas.update(cx, |canvas, _| {
-                        (
-                            canvas.active_drag.clone(),
-                            canvas.active_element_draw.clone(),
-                            canvas.active_tool.clone(),
-                        )
-                    });
-
-                // Then get theme and global state (this only needs immutable borrow)
+                // Get theme and global state
                 let theme = Theme::get_global(cx);
                 let state = GlobalState::get(cx);
+                
+                // Clone the canvas to avoid multiple borrows of cx
+                let canvas_clone = self.canvas.clone();
+                
+                // First paint the nodes (this uses read-only access to canvas)
+                self.paint_nodes(layout, window, theme, cx);
+                
+                // Now get any needed data for additional paint operations
+                let (active_drag, active_element_draw, active_tool) = {
+                    let canvas = canvas_clone.read(cx);
+                    (
+                        canvas.active_drag.clone(),
+                        canvas.active_element_draw.clone(),
+                        canvas.active_tool.clone(),
+                    )
+                };
 
                 // Paint selection rectangle if dragging with selection tool
                 if let Some(active_drag) = active_drag {
