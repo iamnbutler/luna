@@ -108,8 +108,8 @@ impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let app_state = cx.new(|cx| AppState {
             active_tool: ToolKind::default(),
-            current_border_color: gpui::white(),
-            current_background_color: gpui::black(),
+            current_border_color: gpui::black().opacity(0.24),
+            current_background_color: gpui::white(),
         });
         let focus_handle = cx.focus_handle();
         let scene_graph = cx.new(|cx| SceneGraph::new());
