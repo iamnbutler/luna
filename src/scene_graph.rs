@@ -399,19 +399,22 @@ pub struct SceneNode {
     children: Vec<SceneNodeId>,
 
     /// The transformation matrix relative to the parent node
-    /// This defines how this node is positioned, scaled, and rotated relative to its parent
+    ///
+    /// Example: translate(10, 20) or scale(2.0)
     local_transform: TransformationMatrix,
 
     /// The absolute transformation matrix in world space
-    /// This is the combination of all parent transformations with the local transform
+    ///
+    /// Example: If parent has translate(10,0) and node has scale(2.0), world is translate(10,0).scale(2.0)
     world_transform: TransformationMatrix,
 
-    /// The bounding box of this node in its local coordinate space before transformation
-    /// This is typically derived from the node's layout properties
+    /// The bounding box of this node in its local coordinate space
+    ///
+    /// Example: a 100x100 rectangle at local position (0,0)
     local_bounds: Bounds<f32>,
 
-    /// The bounding box of this node in world space after all transformations
-    /// Used for visibility culling and hit testing
+    /// The bounding box of this node in world space
+    /// Example: A 100x100 rectangle with scale(2.0) becomes a 200x200 rectangle in world space
     world_bounds: Bounds<f32>,
 
     /// Reference to the associated data node in the flat data model, if any
