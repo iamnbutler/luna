@@ -1,8 +1,7 @@
-use gpui::{Bounds, TransformationMatrix};
-use std::fmt::Debug;
-
 use crate::node::NodeId;
 use crate::scene_graph::SceneNodeId;
+use gpui::{Bounds, TransformationMatrix};
+use std::fmt::Debug;
 
 /// A node in the scene graph hierarchy
 #[derive(Debug)]
@@ -34,10 +33,7 @@ pub struct SceneNode {
 
 impl SceneNode {
     /// Creates a new scene node
-    pub fn new(
-        parent: Option<SceneNodeId>,
-        data_node_id: Option<NodeId>,
-    ) -> Self {
+    pub fn new(parent: Option<SceneNodeId>, data_node_id: Option<NodeId>) -> Self {
         Self {
             parent,
             children: Vec::new(),

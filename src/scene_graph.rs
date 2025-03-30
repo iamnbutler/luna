@@ -1,14 +1,12 @@
 #![allow(unused, dead_code)]
+use crate::node::NodeId;
+use gpui::{Bounds, Point, Size, TransformationMatrix};
+use slotmap::{KeyData, SlotMap};
 use std::{
     collections::HashMap,
     fmt::{self, Display},
     num::NonZeroU64,
 };
-
-use gpui::{Bounds, Point, Size, TransformationMatrix};
-use slotmap::{KeyData, SlotMap};
-
-use crate::node::NodeId;
 
 slotmap::new_key_type! {
 /// Defines a unique identifier for nodes within the scene graph.
