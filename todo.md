@@ -15,14 +15,14 @@ This document outlines the steps needed to implement a scene graph on top of GPU
 
 ## 2. Core Scene Graph Operations
 
-- [ ] Implement node creation and hierarchy management
-  - [ ] `create_node(parent_id, data_node_id)` to create new scene nodes
-  - [ ] `add_child(parent_id, child_id)` to build hierarchy
-  - [ ] `remove_node(node_id)` to remove nodes
-- [ ] Implement transformation operations
-  - [ ] `set_local_transform(node_id, transform)` to set node transforms
-  - [ ] `update_world_transform(node_id)` to propagate transforms down the tree
-  - [ ] `update_world_bounds(node_id)` to update transformed bounds
+- [x] Implement node creation and hierarchy management
+  - [x] `create_node(parent_id, data_node_id)` to create new scene nodes
+  - [x] `add_child(parent_id, child_id)` to build hierarchy
+  - [x] `remove_node(node_id)` to remove nodes
+- [x] Implement transformation operations
+  - [x] `set_local_transform(node_id, transform)` to set node transforms
+  - [x] `update_world_transform(node_id)` to propagate transforms down the tree
+  - [x] `update_world_bounds(node_id)` to update transformed bounds
 
 ## 3. Scene Graph Utility Operations
 

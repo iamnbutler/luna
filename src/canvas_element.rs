@@ -1,4 +1,4 @@
-#![allow(unused_variables)]
+#![allow(unused, dead_code)]
 use gpui::{
     hsla, prelude::*, px, relative, App, ContentMask, DispatchPhase, ElementId, Entity, Focusable,
     Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
@@ -401,7 +401,7 @@ impl CanvasElement {
         layout: &CanvasLayout,
         window: &mut Window,
         theme: &Theme,
-        cx: &App,  // Change from &mut App to &App since we only need immutable access
+        cx: &App, // Change from &mut App to &App since we only need immutable access
     ) {
         // Fetch all visible nodes from the canvas
         let canvas = self.canvas.read(cx);
@@ -415,23 +415,17 @@ impl CanvasElement {
             for node in visible_nodes {
                 // Get node position and size from the layout
                 let layout = node.layout();
-                
+
                 // Apply zoom and scroll transformations
                 let adjusted_x = (layout.x - scroll_position.x) * zoom;
                 let adjusted_y = (layout.y - scroll_position.y) * zoom;
                 let adjusted_width = layout.width * zoom;
                 let adjusted_height = layout.height * zoom;
-                
+
                 // Create bounds for the node
                 let bounds = Bounds {
-                    origin: Point::new(
-                        gpui::Pixels(adjusted_x),
-                        gpui::Pixels(adjusted_y)
-                    ),
-                    size: Size::new(
-                        gpui::Pixels(adjusted_width),
-                        gpui::Pixels(adjusted_height)
-                    ),
+                    origin: Point::new(gpui::Pixels(adjusted_x), gpui::Pixels(adjusted_y)),
+                    size: Size::new(gpui::Pixels(adjusted_width), gpui::Pixels(adjusted_height)),
                 };
 
                 // Paint the fill if it exists
@@ -443,7 +437,7 @@ impl CanvasElement {
                 if let Some(border_color) = node.border_color() {
                     window.paint_quad(gpui::outline(bounds, border_color));
                 }
-                
+
                 // Draw selection indicator if the node is selected
                 if selected_nodes.contains(&node.id()) {
                     // Create a slightly larger bounds for selection indicator
@@ -460,7 +454,7 @@ impl CanvasElement {
                     window.paint_quad(gpui::outline(selection_bounds, theme.selected));
                 }
             }
-            
+
             window.request_animation_frame();
         });
     }
@@ -570,13 +564,13 @@ impl Element for CanvasElement {
                 // Get theme and global state
                 let theme = Theme::get_global(cx);
                 let state = GlobalState::get(cx);
-                
+
                 // Clone the canvas to avoid multiple borrows of cx
                 let canvas_clone = self.canvas.clone();
-                
+
                 // First paint the nodes (this uses read-only access to canvas)
                 self.paint_nodes(layout, window, theme, cx);
-                
+
                 // Now get any needed data for additional paint operations
                 let (active_drag, active_element_draw, active_tool) = {
                     let canvas = canvas_clone.read(cx);

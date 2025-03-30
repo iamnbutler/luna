@@ -1,5 +1,4 @@
-#![allow(unused_variables)]
-
+#![allow(unused, dead_code)]
 use std::{fs, path::PathBuf};
 
 use canvas::Canvas;
@@ -16,6 +15,7 @@ mod canvas_element;
 mod interactivity;
 mod node;
 mod scene_graph;
+mod scene_node;
 mod util;
 
 // Import NodeCommon trait to bring it into scope

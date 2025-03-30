@@ -1,5 +1,4 @@
-#![allow(unused_variables)]
-
+#![allow(unused, dead_code)]
 use gpui::{Bounds, Hsla, Point, Size};
 
 /// A unique identifier for a canvas node

@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(unused, dead_code)]
 
 use gpui::Pixels;
 use gpui::Point;
