@@ -150,35 +150,6 @@ impl Luna {
             .update(cx, |state, _| state.active_tool = ToolKind::Rectangle);
         cx.notify();
     }
-
-    fn swap_current_colors(
-        &mut self,
-        _: &SwapCurrentColors,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.app_state.update(cx, |state, cx| {
-            let border_color = state.current_border_color;
-            let background_color = state.current_background_color;
-
-            state.current_border_color = background_color;
-            state.current_background_color = border_color;
-            cx.notify();
-        });
-    }
-
-    fn reset_current_colors(
-        &mut self,
-        _: &ResetCurrentColors,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.app_state.update(cx, |state, cx| {
-            state.current_border_color = gpui::white();
-            state.current_background_color = gpui::black();
-        });
-        cx.notify();
-    }
 }
 
 impl Render for Luna {
@@ -212,8 +183,7 @@ impl Render for Luna {
             })
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
-            .on_action(cx.listener(Self::reset_current_colors))
-            .on_action(cx.listener(Self::swap_current_colors))
+            .on_action(cx.listener(Self::activate_rectangle_tool))
             // .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
             //     let toggle_ui = keystroke_builder("cmd-.");
             //     let selection_tool = keystroke_builder("v");
