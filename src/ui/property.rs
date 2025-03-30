@@ -6,7 +6,7 @@ use gpui::{
 use crate::{canvas::LunaCanvas, theme::Theme, AppState};
 
 pub fn property_input(
-    value: impl Into<SharedString>,
+    value: Option<Vec<f32>>,
     icon: impl Into<SharedString>,
 ) -> PropertyInput {
     PropertyInput::new(value, icon)
@@ -14,14 +14,14 @@ pub fn property_input(
 
 #[derive(IntoElement)]
 pub struct PropertyInput {
-    value: SharedString,
+    value: Option<Vec<f32>>,
     icon: SharedString,
 }
 
 impl PropertyInput {
-    pub fn new(value: impl Into<SharedString>, icon: impl Into<SharedString>) -> Self {
+    pub fn new(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> Self {
         Self {
-            value: value.into(),
+            value,
             icon: icon.into(),
         }
     }
@@ -30,7 +30,16 @@ impl PropertyInput {
 impl RenderOnce for PropertyInput {
     fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
         let theme = Theme::new();
-        let no_value = self.value.is_empty();
+        
+        // Convert Option<Vec<f32>> to display string
+        let display_value = match &self.value {
+            None => SharedString::from(""),
+            Some(values) if values.is_empty() => SharedString::from("Multiple"),
+            Some(values) if values.len() == 1 => SharedString::from(format!("{}", values[0])),
+            Some(_) => SharedString::from("Multiple"),
+        };
+        
+        let no_value = display_value.is_empty();
 
         div().flex().flex_row().child(
             div()
@@ -47,7 +56,7 @@ impl RenderOnce for PropertyInput {
                     this.text_color(theme.foreground.alpha(0.4))
                 })
                 .text_size(px(11.))
-                .child(div().flex_1().child(self.value))
+                .child(div().flex_1().child(display_value))
                 .child(
                     div()
                         .flex()
