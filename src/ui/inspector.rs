@@ -25,28 +25,15 @@ pub enum NodeSelection {
 
 impl From<HashSet<NodeId>> for NodeSelection {
     fn from(nodes: HashSet<NodeId>) -> Self {
-        println!("Converting HashSet<NodeId> to NodeSelection, nodes: {:?}", nodes);
         match nodes.len() {
-            0 => {
-                println!("No nodes selected, returning NodeSelection::None");
-                NodeSelection::None
-            },
+            0 => NodeSelection::None,
             1 => {
-                println!("One node selected, attempting to get its ID");
-                // Fix the unwrap_or usage by properly handling the Option
                 match nodes.iter().next() {
-                    Some(node_id) => {
-                        println!("Successfully got node ID: {:?}", node_id);
-                        NodeSelection::Single(*node_id)
-                    },
-                    None => {
-                        println!("Couldn't select node, falling back to None");
-                        NodeSelection::None
-                    }
+                    Some(node_id) => NodeSelection::Single(*node_id),
+                    None => NodeSelection::None
                 }
             }
             _ => {
-                println!("Multiple nodes selected: {} nodes", nodes.len());
                 let nodes_vec: Vec<NodeId> = nodes.into_iter().collect();
                 NodeSelection::Multiple(nodes_vec)
             }
@@ -104,23 +91,12 @@ impl Inspector {
                 // Keep properties empty for no selection
             }
             NodeSelection::Single(node_id) => {
-                println!("Inspector: Looking for single node with ID: {:?}", node_id);
                 let canvas_read = canvas.read(cx);
-                println!("Inspector: Canvas has {} nodes total", canvas_read.nodes.len());
-                
-                // Log all node IDs for comparison
-                for (i, node) in canvas_read.nodes.iter().enumerate() {
-                    println!("Inspector: Node {}: ID={:?}", i, node.id());
-                }
-                
                 if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == node_id) {
-                    println!("Inspector: Found node with matching ID");
                     self.properties.x.push(node.layout().x);
                     self.properties.y.push(node.layout().y);
                     self.properties.width.push(node.layout().width);
                     self.properties.height.push(node.layout().height);
-                } else {
-                    println!("Inspector: Could not find node with ID: {:?}", node_id);
                 }
             }
             NodeSelection::Multiple(nodes) => {

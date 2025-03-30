@@ -4,13 +4,29 @@ use gpui::{
     Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
     TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
-use gpui::{point, Bounds, Point, Size};
+use gpui::{point, size, Bounds, Point, Size};
+use std::collections::HashSet;
+
+/// Helper function to check if two bounds rectangles intersect
+fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
+    // Check if one rectangle is to the left of the other
+    if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
+        return false;
+    }
+
+    // Check if one rectangle is above the other
+    if a.origin.y + a.size.height < b.origin.y || b.origin.y + b.size.height < a.origin.y {
+        return false;
+    }
+
+    true
+}
 
 use crate::scene_graph::SceneGraph;
 use crate::theme::Theme;
 use crate::AppState;
 use crate::{
-    canvas::{register_canvas_action, LunaCanvas},
+    canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
@@ -89,6 +105,35 @@ impl CanvasElement {
     }
 
     // handle_mouse_down, etc
+    // Helper function to find the top node at a given point using scene graph for efficiency
+    fn find_top_node_at_point(
+        canvas: &LunaCanvas,
+        window_point: Point<f32>,
+        cx: &Context<LunaCanvas>,
+    ) -> Option<NodeId> {
+        // Convert window coordinate to canvas coordinate
+        let canvas_point = canvas.window_to_canvas_point(window_point);
+        
+        // Instead of trying to access the private canvas_node directly,
+        // we'll use the existing node methods to find a node at this point
+        
+        // Let's create a selection area of 1x1 pixels at the point
+        let select_point_bounds = Bounds {
+            origin: canvas_point,
+            size: Size::new(1.0, 1.0),
+        };
+        
+        // Test each node to see if it contains this point
+        for node in &canvas.nodes {
+            let node_bounds = node.bounds();
+            if node_bounds.contains(&canvas_point) {
+                return Some(node.id());
+            }
+        }
+        
+        None
+    }
+
     fn handle_left_mouse_down(
         canvas: &mut LunaCanvas,
         event: &MouseDownEvent,
@@ -99,24 +144,43 @@ impl CanvasElement {
             return;
         }
 
-        println!("Left mouse down");
-
         let position = event.position;
-
         let canvas_point = point(position.x.0, position.y.0);
 
         match canvas.active_tool {
             ToolKind::Selection => {
-                // if let Some(node_id) = canvas.top_node_at_point(canvas_point) {
-                //     canvas.select_node(node_id);
-                //     canvas.mark_dirty(cx);
-                // } else {
-                canvas.active_drag = Some(ActiveDrag {
-                    start_position: position,
-                    current_position: position,
-                });
-                canvas.mark_dirty(cx);
-                // }
+                // Attempt to find a node at the clicked point
+                if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
+                    // Clicked on a node - select it
+                    
+                    // If shift is not pressed, clear current selection first
+                    let modifiers = event.modifiers;
+                    if !modifiers.shift {
+                        canvas.clear_selection(&ClearSelection, window, cx);
+                    }
+                    
+                    // If shift is pressed and node is already selected, deselect it
+                    if modifiers.shift && canvas.is_node_selected(node_id) {
+                        canvas.deselect_node(node_id);
+                    } else {
+                        // Otherwise select the node
+                        canvas.select_node(node_id);
+                    }
+                    
+                    canvas.mark_dirty(cx);
+                } else {
+                    // Clicked on empty space - start a selection rectangle drag
+                    // First clear selection if shift is not pressed
+                    if !event.modifiers.shift {
+                        canvas.clear_selection(&ClearSelection, window, cx);
+                    }
+                    
+                    canvas.active_drag = Some(ActiveDrag {
+                        start_position: position,
+                        current_position: position,
+                    });
+                    canvas.mark_dirty(cx);
+                }
             }
             ToolKind::Rectangle => {
                 // Use the generate_id method directly since it already returns the correct type
@@ -212,22 +276,66 @@ impl CanvasElement {
         window: &mut Window,
         cx: &mut Context<LunaCanvas>,
     ) {
-        println!("mouse drag");
-
         let position = event.position;
-
         let canvas_point = point(position.x.0, position.y.0);
 
-        // if we are selecting, check if we have entered the bounds of
-        // any root node. If so, select it.
-
+        // Handle selection box if we're dragging with the selection tool
         if let Some(active_drag) = canvas.active_drag.take() {
-            canvas.active_drag = Some(ActiveDrag {
+            // Update the drag with new position
+            let new_drag = ActiveDrag {
                 start_position: active_drag.start_position,
                 current_position: position,
-            });
+            };
+            canvas.active_drag = Some(new_drag);
+            
+            // If we're using the selection tool, update the selection based on
+            // which nodes intersect with the selection rectangle
+            if canvas.active_tool == ToolKind::Selection {
+                // Calculate the selection rectangle in canvas coordinates
+                let start_pos = active_drag.start_position;
+                let min_x = start_pos.x.0.min(position.x.0);
+                let min_y = start_pos.y.0.min(position.y.0);
+                let max_x = start_pos.x.0.max(position.x.0);
+                let max_y = start_pos.y.0.max(position.y.0);
+                
+                // Convert to canvas coordinates
+                let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
+                let max_point = canvas.window_to_canvas_point(Point::new(max_x, max_y));
+                
+                // Create selection bounds
+                let selection_bounds = Bounds {
+                    origin: min_point,
+                    size: Size::new(max_point.x - min_point.x, max_point.y - min_point.y),
+                };
+                
+                // Pre-calculate all nodes that intersect with selection
+                let nodes_in_selection: HashSet<NodeId> = canvas.nodes.iter()
+                    .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
+                    .map(|node| node.id())
+                    .collect();
+                
+                // Check if we want to add to existing selection (shift pressed)
+                // or replace it (shift not pressed)
+                if event.modifiers.shift {
+                    // Add new nodes to selection
+                    for node_id in nodes_in_selection {
+                        canvas.select_node(node_id);
+                    }
+                } else {
+                    // Replace selection
+                    if nodes_in_selection != canvas.selected_nodes {
+                        canvas.clear_selection(&ClearSelection, window, cx);
+                        for node_id in nodes_in_selection {
+                            canvas.select_node(node_id);
+                        }
+                    }
+                }
+            }
+            
+            canvas.mark_dirty(cx);
         }
 
+        // Handle rectangle drawing
         if let Some(active_draw) = canvas.active_element_draw.take() {
             match canvas.active_tool {
                 ToolKind::Rectangle => {

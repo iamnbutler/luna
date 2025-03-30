@@ -108,7 +108,7 @@ struct Luna {
 impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let app_state = cx.new(|cx| AppState {
-            active_tool: ToolKind::default(),
+            active_tool: ToolKind::Selection,
             current_border_color: gpui::black().opacity(0.24),
             current_background_color: gpui::white(),
         });
