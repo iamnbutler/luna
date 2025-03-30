@@ -142,27 +142,35 @@ impl LunaCanvas {
         
         // Create a red rectangle
         let node1_id = canvas.generate_id();
+        println!("Creating red rectangle with ID: {:?}", node1_id);
         let mut rect1 = RectangleNode::with_rect(node1_id, 100.0, 100.0, 200.0, 150.0);
         rect1.set_fill(Some(hsla(0.0, 0.7, 0.7, 1.0))); // Red color
         rect1.set_border(Some(hsla(0.0, 0.8, 0.3, 1.0)), 2.0); // Darker red border
         let node1_id = canvas.add_node(rect1, cx);
+        println!("Added red rectangle, returned ID: {:?}", node1_id);
         
         // Create a blue rectangle
         let node2_id = canvas.generate_id();
+        println!("Creating blue rectangle with ID: {:?}", node2_id);
         let mut rect2 = RectangleNode::with_rect(node2_id, 350.0, 150.0, 180.0, 180.0);
         rect2.set_fill(Some(hsla(210.0, 0.7, 0.7, 1.0))); // Blue color
         rect2.set_border(Some(hsla(210.0, 0.8, 0.3, 1.0)), 2.0); // Darker blue border
         let node2_id = canvas.add_node(rect2, cx);
+        println!("Added blue rectangle, returned ID: {:?}", node2_id);
         
         // Create a green rectangle
         let node3_id = canvas.generate_id();
+        println!("Creating green rectangle with ID: {:?}", node3_id);
         let mut rect3 = RectangleNode::with_rect(node3_id, 200.0, 280.0, 220.0, 130.0);
         rect3.set_fill(Some(hsla(120.0, 0.7, 0.7, 1.0))); // Green color
         rect3.set_border(Some(hsla(120.0, 0.8, 0.3, 1.0)), 2.0); // Darker green border
         let node3_id = canvas.add_node(rect3, cx);
+        println!("Added green rectangle, returned ID: {:?}", node3_id);
         
         // Select the second element (blue rectangle)
+        println!("Selecting node with ID: {:?}", node2_id);
         canvas.select_node(node2_id);
+        println!("Selection set now contains: {:?}", canvas.selected_nodes);
         
         canvas
     }
@@ -248,9 +256,16 @@ impl LunaCanvas {
 
     /// Select a node
     pub fn select_node(&mut self, node_id: NodeId) {
-        if self.nodes.iter().any(|node| node.id() == node_id) {
+        println!("Attempting to select node: {:?}", node_id);
+        let found = self.nodes.iter().any(|node| node.id() == node_id);
+        println!("Node exists in nodes list: {}", found);
+        
+        if found {
             self.selected_nodes.insert(node_id);
+            println!("Added node to selected_nodes set: {:?}", self.selected_nodes);
             self.dirty = true;
+        } else {
+            println!("Node not found in nodes list, not selecting");
         }
     }
 

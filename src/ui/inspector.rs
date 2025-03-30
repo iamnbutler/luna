@@ -25,18 +25,30 @@ pub enum NodeSelection {
 
 impl From<HashSet<NodeId>> for NodeSelection {
     fn from(nodes: HashSet<NodeId>) -> Self {
+        println!("Converting HashSet<NodeId> to NodeSelection, nodes: {:?}", nodes);
         match nodes.len() {
-            0 => NodeSelection::None,
+            0 => {
+                println!("No nodes selected, returning NodeSelection::None");
+                NodeSelection::None
+            },
             1 => {
-                let node_id = nodes.iter().next().unwrap_or({
-                    println!("Couldn't select node, falling back to None");
-                    return NodeSelection::None;
-                });
-                NodeSelection::Single(*node_id)
+                println!("One node selected, attempting to get its ID");
+                // Fix the unwrap_or usage by properly handling the Option
+                match nodes.iter().next() {
+                    Some(node_id) => {
+                        println!("Successfully got node ID: {:?}", node_id);
+                        NodeSelection::Single(*node_id)
+                    },
+                    None => {
+                        println!("Couldn't select node, falling back to None");
+                        NodeSelection::None
+                    }
+                }
             }
             _ => {
+                println!("Multiple nodes selected: {} nodes", nodes.len());
                 let nodes_vec: Vec<NodeId> = nodes.into_iter().collect();
-                NodeSelection::Multiple(nodes_vec.into_iter().collect())
+                NodeSelection::Multiple(nodes_vec)
             }
         }
     }
@@ -74,36 +86,48 @@ impl Inspector {
             properties: InspectorProperties::default(),
         }
     }
-    
+
     /// Updates the inspector properties based on the currently selected nodes
     pub fn update_selected_node_properties(&mut self, cx: &mut Context<Self>) {
         let canvas = self.canvas.clone();
         let selected_node_set = canvas.read(cx).selected_nodes.clone();
         let selected_nodes = NodeSelection::from(selected_node_set);
-        
+
         // Clear the current properties
         self.properties.x.clear();
         self.properties.y.clear();
         self.properties.width.clear();
         self.properties.height.clear();
-        
+
         match selected_nodes {
             NodeSelection::None => {
                 // Keep properties empty for no selection
-            },
+            }
             NodeSelection::Single(node_id) => {
+                println!("Inspector: Looking for single node with ID: {:?}", node_id);
                 let canvas_read = canvas.read(cx);
+                println!("Inspector: Canvas has {} nodes total", canvas_read.nodes.len());
+                
+                // Log all node IDs for comparison
+                for (i, node) in canvas_read.nodes.iter().enumerate() {
+                    println!("Inspector: Node {}: ID={:?}", i, node.id());
+                }
+                
                 if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == node_id) {
+                    println!("Inspector: Found node with matching ID");
                     self.properties.x.push(node.layout().x);
                     self.properties.y.push(node.layout().y);
                     self.properties.width.push(node.layout().width);
                     self.properties.height.push(node.layout().height);
+                } else {
+                    println!("Inspector: Could not find node with ID: {:?}", node_id);
                 }
-            },
+            }
             NodeSelection::Multiple(nodes) => {
                 let canvas_read = canvas.read(cx);
                 for node_id in &nodes {
-                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id) {
+                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id)
+                    {
                         self.properties.x.push(node.layout().x);
                         self.properties.y.push(node.layout().y);
                         self.properties.width.push(node.layout().width);
@@ -112,35 +136,37 @@ impl Inspector {
                 }
             }
         }
+
+        cx.notify();
     }
 }
 
 impl Render for Inspector {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::new();
-        
+
         // Update properties based on current selection
         self.update_selected_node_properties(cx);
-        
+
         // Convert SmallVec properties to Option<Vec<f32>> as needed by property_input
         let x = if self.properties.x.is_empty() {
             None
         } else {
             Some(self.properties.x.iter().cloned().collect())
         };
-        
+
         let y = if self.properties.y.is_empty() {
             None
         } else {
             Some(self.properties.y.iter().cloned().collect())
         };
-        
+
         let width = if self.properties.width.is_empty() {
             None
         } else {
             Some(self.properties.width.iter().cloned().collect())
         };
-        
+
         let height = if self.properties.height.is_empty() {
             None
         } else {
