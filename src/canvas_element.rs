@@ -6,6 +6,7 @@ use gpui::{
 };
 use gpui::{point, Bounds, Point, Size};
 
+use crate::scene_graph::SceneGraph;
 use crate::theme::Theme;
 use crate::{
     canvas::{register_canvas_action, Canvas},
@@ -62,7 +63,7 @@ pub struct CanvasElement {
 }
 
 impl CanvasElement {
-    pub fn new(canvas: &Entity<Canvas>, cx: &mut App) -> Self {
+    pub fn new(canvas: &Entity<Canvas>, scene_graph: &Entity<SceneGraph>, cx: &mut App) -> Self {
         let style = CanvasStyle::new(cx);
 
         Self {

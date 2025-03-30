@@ -10,6 +10,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 use node::NodeCommon;
+use scene_graph::SceneGraph;
 use std::{fs, path::PathBuf};
 use strum::Display;
 use theme::Theme;
@@ -97,10 +98,10 @@ pub struct AppState {
 }
 
 struct Luna {
-    focus_handle: FocusHandle,
-    canvas: Entity<Canvas>,
-    sidebar: Entity<Sidebar>,
     app_state: Entity<AppState>,
+    canvas: Entity<Canvas>,
+    focus_handle: FocusHandle,
+    scene_graph: Entity<SceneGraph>,
 }
 
 impl Luna {
@@ -111,16 +112,14 @@ impl Luna {
             current_background_color: gpui::black(),
         });
         let focus_handle = cx.focus_handle();
-        let canvas = cx.new(|cx| Canvas::new(app_state.clone(), window, cx));
-        let weak_canvas = canvas.downgrade();
-
-        let sidebar = cx.new(|cx| Sidebar::new(weak_canvas));
+        let scene_graph = cx.new(|cx| SceneGraph::new());
+        let canvas = cx.new(|cx| Canvas::new(&app_state, &scene_graph, window, cx));
 
         Luna {
             focus_handle,
             canvas,
-            sidebar,
             app_state,
+            scene_graph,
         }
     }
 
@@ -184,27 +183,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
-            // .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
-            //     let toggle_ui = keystroke_builder("cmd-.");
-            //     let selection_tool = keystroke_builder("v");
-            //     let hand_tool = keystroke_builder("h");
-            //     let swap_colors = keystroke_builder("x");
-            //     let rectangle_tool = keystroke_builder("r");
-            //     if e.keystroke == hand_tool {
-            //         this.activate_hand_tool(&Default::default(), window, cx);
-            //     }
-            //     if e.keystroke == selection_tool {
-            //         this.activate_selection_tool(&Default::default(), window, cx);
-            //     }
-            //     if e.keystroke == swap_colors {
-            //         this.swap_current_colors(&Default::default(), window, cx);
-            //     }
-            //     if e.keystroke == rectangle_tool {
-            //         this.activate_rectangle_tool(&Default::default(), window, cx);
-            //     }
-            // }))
-            .child(CanvasElement::new(&self.canvas, cx))
-        // .child(self.sidebar.clone())
+            .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
     }
 }
 

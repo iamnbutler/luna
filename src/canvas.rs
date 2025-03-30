@@ -3,6 +3,7 @@
 use crate::{
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
+    scene_graph::SceneGraph,
     AppState, ToolKind,
 };
 use gpui::{
@@ -50,6 +51,9 @@ pub fn register_canvas_action<T: Action>(
 /// A Canvas manages a collection of nodes that can be rendered and manipulated
 pub struct Canvas {
     app_state: Entity<AppState>,
+
+    scene_graph: Entity<SceneGraph>,
+
     /// Vector of nodes in insertion order
     pub nodes: Vec<RectangleNode>,
 
@@ -86,7 +90,12 @@ pub struct Canvas {
 
 impl Canvas {
     /// Create a new canvas
-    pub fn new(app_state: Entity<AppState>, window: &Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        app_state: &Entity<AppState>,
+        scene_graph: &Entity<SceneGraph>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let initial_viewport_px = window.viewport_size();
         let initial_viewport = size(initial_viewport_px.width.0, initial_viewport_px.height.0);
 
@@ -99,7 +108,8 @@ impl Canvas {
         let content_bounds = viewport.clone();
 
         Self {
-            app_state,
+            app_state: app_state.clone(),
+            scene_graph: scene_graph.clone(),
             nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
