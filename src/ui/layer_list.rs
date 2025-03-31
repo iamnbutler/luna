@@ -1,3 +1,8 @@
+//! Layer list component for displaying and managing elements.
+//!
+//! Provides a hierarchical view of elements in the canvas,
+//! showing their selection state and allowing interaction.
+
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -7,6 +12,10 @@ use gpui::{
 
 use crate::{canvas::LunaCanvas, node::NodeType, theme::Theme};
 
+/// Individual item in the layer list representing a canvas element
+///
+/// Displays a single element with its name, type icon, and selection state,
+/// with appropriate styling based on interaction state.
 #[derive(IntoElement)]
 pub struct LayerListItem {
     kind: NodeType,
@@ -60,6 +69,10 @@ impl RenderOnce for LayerListItem {
     }
 }
 
+/// Container for the list of layer items representing canvas elements
+///
+/// Renders a scrollable list of [`LayerListItem`]s representing the elements
+/// in the canvas, with their current selection state.
 #[derive(IntoElement)]
 struct LayerList {
     canvas: Entity<LunaCanvas>,
