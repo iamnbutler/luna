@@ -12,3 +12,4 @@ target/
 /reference
 
 .DS_Store
+.idea
