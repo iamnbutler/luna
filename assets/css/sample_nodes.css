@@ -1,0 +1,142 @@
+.rect1 {
+    left: 100px;
+    top: 100px;
+    width: 200px;
+    height: 150px;
+    background-color: #e8f5e9;
+    border-color: rgba(58, 58, 58, 0.7);
+    border-width: 1px;
+    border-radius: 5px;
+}
+
+.rect2 {
+    left: 350px;
+    top: 150px;
+    width: 180px;
+    height: 180px;
+    background-color: #bbdefb;
+    border-color: #2196f3;
+    border-width: 2px;
+    border-radius: 10px;
+}
+
+.rect3 {
+    left: 200px;
+    top: 280px;
+    width: 250px;
+    height: 130px;
+    background-color: #ffecb3;
+    border-color: #ffa000;
+    border-width: 4px;
+    border-radius: 0px;
+}
+
+.rect4 {
+    left: 450px;
+    top: 320px;
+    width: 180px;
+    height: 120px;
+    background-color: #e1bee7;
+    border-color: transparent;
+    border-width: 0px;
+    border-radius: 15px;
+}
+
+.rect5 {
+    left: 150px;
+    top: 400px;
+    width: 160px;
+    height: 140px;
+    background-color: #c8e6c9;
+    border-color: #4caf50;
+    border-width: 3px;
+    border-radius: 8px;
+}
+
+.rect6 {
+    left: 550px;
+    top: 180px;
+    width: 160px;
+    height: 100px;
+    background-color: #ffcdd2;
+    border-color: rgba(244, 67, 54, 0.5);
+    border-width: 3px;
+    border-radius: 0px;
+}
+
+.rect7 {
+    left: 320px;
+    top: 400px;
+    width: 120px;
+    height: 210px;
+    background-color: #d1c4e9;
+    border-color: #673ab7;
+    border-width: 1px;
+    border-radius: 20px;
+}
+
+.rect8 {
+    left: 500px;
+    top: 50px;
+    width: 140px;
+    height: 100px;
+    background-color: #b3e5fc;
+    border-color: rgba(3, 169, 244, 0.3);
+    border-width: 2px;
+    border-radius: 5px;
+}
+
+.rect9 {
+    left: 50px;
+    top: 280px;
+    width: 130px;
+    height: 110px;
+    background-color: #dcedc8;
+    border-color: #8bc34a;
+    border-width: 0px;
+    border-radius: 0px;
+}
+
+.rect10 {
+    left: 650px;
+    top: 300px;
+    width: 150px;
+    height: 150px;
+    background-color: #f8bbd0;
+    border-color: #e91e63;
+    border-width: 4px;
+    border-radius: 75px;
+}
+
+.rect11 {
+    left: 450px;
+    top: 500px;
+    width: 220px;
+    height: 120px;
+    background-color: #ffe0b2;
+    border-color: transparent;
+    border-width: 0px;
+    border-radius: 10px;
+}
+
+.rect12 {
+    left: 700px;
+    top: 100px;
+    width: 120px;
+    height: 200px;
+    background-color: #b2dfdb;
+    border-color: rgba(0, 150, 136, 0.6);
+    border-width: 2px;
+    border-radius: 0px;
+}
+
+.rect13 {
+    left: 600px;
+    top: 450px;
+    width: 190px;
+    height: 140px;
+    background-color: #cfd8dc;
+    border-color: #607d8b;
+    border-width: 3px;
+    border-radius: 12px;
+}

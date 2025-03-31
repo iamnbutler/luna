@@ -21,6 +21,7 @@ use util::keystroke_builder;
 mod assets;
 mod canvas;
 mod canvas_element;
+mod css_parser;
 mod interactivity;
 mod node;
 mod scene_graph;
