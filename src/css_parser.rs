@@ -1,19 +1,3 @@
-//! # CSS Parsing System
-//!
-//! This module provides a lightweight CSS parser focused on extracting visual properties
-//! for rectangle elements. It supports parsing both individual CSS declarations and
-//! complete CSS files with multiple rulesets.
-//!
-//! ## Capabilities
-//!
-//! - Parsing basic CSS properties (width, height, position, colors, borders)
-//! - Converting CSS color formats (hex, rgb/rgba, named colors) to HSLA
-//! - Extracting multiple rectangle definitions from CSS files
-//! - Unit conversions (px, percentages)
-//!
-//! The parser is deliberately simplified to focus on the subset of CSS needed
-//! for rectangle styling rather than implementing the full CSS specification.
-
 use crate::node::{NodeCommon, NodeFactory, RectangleNode};
 use gpui::Hsla;
 use std::collections::HashMap;
@@ -213,29 +197,9 @@ fn parse_rgb_component(value: &str) -> Option<f32> {
     }
 }
 
-/// Converts RGB color representation to HSL (Hue, Saturation, Lightness) colorspace
+/// Convert RGB to HSL colorspace
 /// 
-/// This implementation follows the standard RGB to HSL conversion algorithm:
-/// 1. Finds min/max RGB component values to determine chroma (delta)
-/// 2. Calculates lightness as the average of min and max components
-/// 3. Calculates saturation based on chroma and lightness
-/// 4. Determines hue by comparing which RGB component is dominant
-/// 
-/// The function handles edge cases like grayscale values (zero saturation)
-/// where hue is mathematically undefined.
-/// 
-/// # Arguments
-/// 
-/// * `r` - Red component in range [0, 1]
-/// * `g` - Green component in range [0, 1]
-/// * `b` - Blue component in range [0, 1]
-/// 
-/// # Returns
-/// 
-/// A tuple (h, s, l) with all values normalized to range [0, 1]:
-/// * h - Hue (0 = red, 0.33 = green, 0.67 = blue)
-/// * s - Saturation (0 = grayscale, 1 = fully saturated)
-/// * l - Lightness (0 = black, 0.5 = full color, 1 = white)
+/// Returns (hue, saturation, lightness) tuple with values in the range [0, 1]
 fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
     let max = r.max(g.max(b));
     let min = r.min(g.min(b));
@@ -305,27 +269,9 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
     None
 }
 
-/// Parses a complete CSS file and extracts multiple rectangle nodes
+/// Parse a CSS file and extract multiple rectangle nodes
 ///
-/// This function serves as the main entry point for processing CSS files containing
-/// multiple rule blocks. It implements a simplified CSS parser that:
-///
-/// 1. Tokenizes the CSS by scanning for rule blocks (content between braces)
-/// 2. Ignores selectors and focuses only on property declarations
-/// 3. Creates a separate RectangleNode for each valid rule block
-/// 4. Applies style properties to each node using parse_rectangle_from_css
-///
-/// Note that this implementation deliberately ignores selector specificity and
-/// cascading rules, as it's designed for direct 1:1 mapping of CSS blocks to elements.
-///
-/// # Arguments
-///
-/// * `css` - Full CSS file content as a string
-/// * `factory` - NodeFactory to generate unique IDs for each rectangle
-///
-/// # Returns
-///
-/// A vector of RectangleNode instances with styles applied from the CSS
+/// Each CSS rule with a selector will create a separate RectangleNode
 pub fn parse_rectangles_from_css_file(css: &str, factory: &mut NodeFactory) -> Vec<RectangleNode> {
     let mut result = Vec::new();
     
