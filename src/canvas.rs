@@ -142,29 +142,87 @@ impl LunaCanvas {
         let current_background_color = app_state_read.current_background_color;
         let current_border_color = app_state_read.current_border_color;
 
-        // Create a red rectangle
         let node1_id = canvas.generate_id();
         let mut rect1 = RectangleNode::with_rect(node1_id, 100.0, 100.0, 200.0, 150.0);
         rect1.set_fill(Some(current_background_color));
         rect1.set_border(Some(current_border_color), 1.0);
         let node1_id = canvas.add_node(rect1, cx);
 
-        // Create a blue rectangle
         let node2_id = canvas.generate_id();
         let mut rect2 = RectangleNode::with_rect(node2_id, 350.0, 150.0, 180.0, 180.0);
         rect2.set_fill(Some(current_background_color));
         rect2.set_border(Some(current_border_color), 2.0);
         let node2_id = canvas.add_node(rect2, cx);
 
-        // Create a green rectangle
         let node3_id = canvas.generate_id();
         let mut rect3 = RectangleNode::with_rect(node3_id, 200.0, 280.0, 220.0, 130.0);
         rect3.set_fill(Some(current_background_color));
         rect3.set_border(Some(current_border_color), 4.0);
         let node3_id = canvas.add_node(rect3, cx);
 
-        // Select the second element (blue rectangle)
+        let node4_id = canvas.generate_id();
+        let mut rect4 = RectangleNode::with_rect(node4_id, 450.0, 320.0, 180.0, 120.0);
+        rect4.set_fill(Some(current_background_color));
+        rect4.set_border(Some(current_border_color), 1.0);
+        let node4_id = canvas.add_node(rect4, cx);
+
+        let node5_id = canvas.generate_id();
+        let mut rect5 = RectangleNode::with_rect(node5_id, 150.0, 400.0, 160.0, 140.0);
+        rect5.set_fill(Some(current_background_color));
+        rect5.set_border(Some(current_border_color), 2.0);
+        let node5_id = canvas.add_node(rect5, cx);
+
+        let node6_id = canvas.generate_id();
+        let mut rect6 = RectangleNode::with_rect(node6_id, 550.0, 180.0, 160.0, 100.0);
+        rect6.set_fill(Some(current_background_color));
+        rect6.set_border(Some(current_border_color), 3.0);
+        let node6_id = canvas.add_node(rect6, cx);
+
+        let node7_id = canvas.generate_id();
+        let mut rect7 = RectangleNode::with_rect(node7_id, 320.0, 400.0, 120.0, 180.0);
+        rect7.set_fill(Some(current_background_color));
+        rect7.set_border(Some(current_border_color), 1.0);
+        let node7_id = canvas.add_node(rect7, cx);
+
+        let node8_id = canvas.generate_id();
+        let mut rect8 = RectangleNode::with_rect(node8_id, 500.0, 50.0, 140.0, 100.0);
+        rect8.set_fill(Some(current_background_color));
+        rect8.set_border(Some(current_border_color), 2.0);
+        let node8_id = canvas.add_node(rect8, cx);
+
+        let node9_id = canvas.generate_id();
+        let mut rect9 = RectangleNode::with_rect(node9_id, 50.0, 280.0, 130.0, 110.0);
+        rect9.set_fill(Some(current_background_color));
+        rect9.set_border(Some(current_border_color), 3.0);
+        let node9_id = canvas.add_node(rect9, cx);
+
+        let node10_id = canvas.generate_id();
+        let mut rect10 = RectangleNode::with_rect(node10_id, 650.0, 300.0, 150.0, 150.0);
+        rect10.set_fill(Some(current_background_color));
+        rect10.set_border(Some(current_border_color), 4.0);
+        let node10_id = canvas.add_node(rect10, cx);
+
+        let node11_id = canvas.generate_id();
+        let mut rect11 = RectangleNode::with_rect(node11_id, 450.0, 500.0, 200.0, 120.0);
+        rect11.set_fill(Some(current_background_color));
+        rect11.set_border(Some(current_border_color), 1.0);
+        let node11_id = canvas.add_node(rect11, cx);
+
+        let node12_id = canvas.generate_id();
+        let mut rect12 = RectangleNode::with_rect(node12_id, 700.0, 100.0, 120.0, 180.0);
+        rect12.set_fill(Some(current_background_color));
+        rect12.set_border(Some(current_border_color), 2.0);
+        let node12_id = canvas.add_node(rect12, cx);
+
+        let node13_id = canvas.generate_id();
+        let mut rect13 = RectangleNode::with_rect(node13_id, 600.0, 450.0, 170.0, 140.0);
+        rect13.set_fill(Some(current_background_color));
+        rect13.set_border(Some(current_border_color), 3.0);
+        let node13_id = canvas.add_node(rect13, cx);
+
         canvas.select_node(node2_id);
+
+        // Select the second element (blue rectangle)
 
         canvas
     }
