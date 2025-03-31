@@ -1,3 +1,8 @@
+//! Left sidebar containing tools and controls.
+//!
+//! The sidebar renders the primary tool selection interface and
+//! other controls for interacting with the canvas.
+
 use crate::{canvas::LunaCanvas, theme::Theme, tools::ToolStrip};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
@@ -8,6 +13,10 @@ use gpui::{
 
 use super::TITLEBAR_HEIGHT;
 
+/// Container for tool selection and other canvas controls
+///
+/// Renders the vertical sidebar on the left side of the application,
+/// hosting the [`ToolStrip`] and other controls for canvas interaction.
 pub struct Sidebar {
     canvas: Entity<LunaCanvas>,
 }
