@@ -102,10 +102,10 @@ impl RenderOnce for ToolButton {
         let selected = false;
 
         let icon_color = match (selected, self.disabled) {
-            (true, true) => theme.selected.alpha(0.3),
-            (true, false) => theme.selected,
-            (false, true) => theme.foreground_disabled,
-            (false, false) => theme.foreground_muted,
+            (true, true) => theme.tokens.selected.alpha(0.3),
+            (true, false) => theme.tokens.selected,
+            (false, true) => theme.tokens.foreground_disabled,
+            (false, false) => theme.tokens.foreground_muted,
         };
 
         div()
@@ -118,7 +118,7 @@ impl RenderOnce for ToolButton {
             .rounded(px(3.))
             .my_neg_1()
             .when(!self.disabled, |div| {
-                div.hover(|div| div.bg(theme.foreground.opacity(0.05)))
+                div.hover(|div| div.bg(theme.tokens.foreground.opacity(0.05)))
             })
             // .on_click(move |_, _, cx| {
             //     let tool_kind = tool_kind.clone();
@@ -227,7 +227,7 @@ impl RenderOnce for ToolStrip {
                         .h_px()
                         .w_full()
                         .rounded_full()
-                        .bg(theme.foreground.alpha(0.12)),
+                        .bg(theme.tokens.foreground.alpha(0.12)),
                 )
         };
 

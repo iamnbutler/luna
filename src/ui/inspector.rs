@@ -198,7 +198,7 @@ impl Inspector {
 
 impl Render for Inspector {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = Theme::new();
+        let theme = Theme::default();
 
         // Update properties based on current selection
         self.update_selected_node_properties(cx);
@@ -254,7 +254,7 @@ impl Render for Inspector {
                     .flex()
                     .flex_wrap()
                     .gap(px(8.))
-                    .border_color(theme.foreground.alpha(0.06))
+                    .border_color(theme.tokens.foreground.alpha(0.06))
                     .border_b_1()
                     .child(property_input(x, "X"))
                     .child(property_input(y, "Y"))
@@ -274,9 +274,9 @@ impl Render for Inspector {
             .cursor_default()
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
-            .border_color(theme.foreground.alpha(0.06))
+            .border_color(theme.tokens.foreground.alpha(0.06))
             .border_l_1()
-            .bg(theme.panel)
+            .bg(theme.tokens.panel)
             .on_click(cx.listener(|_, _, _, cx| {
                 cx.stop_propagation();
             }))

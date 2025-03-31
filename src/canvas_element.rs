@@ -46,8 +46,8 @@ impl CanvasStyle {
         let theme = Theme::get_global(cx);
 
         Self {
-            background: theme.canvas,
-            cursor_color: theme.cursor,
+            background: theme.tokens.canvas,
+            cursor_color: theme.tokens.cursor,
             ..Default::default()
         }
     }
@@ -400,8 +400,8 @@ impl CanvasElement {
                 size: Size::new(width, height),
             };
 
-            window.paint_quad(gpui::fill(rect_bounds, theme.selected.opacity(0.08)));
-            window.paint_quad(gpui::outline(rect_bounds, theme.selected));
+            window.paint_quad(gpui::fill(rect_bounds, theme.tokens.selected.opacity(0.08)));
+            window.paint_quad(gpui::outline(rect_bounds, theme.tokens.selected));
             window.request_animation_frame();
         });
     }
@@ -594,7 +594,7 @@ impl CanvasElement {
                             node_info.bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
-                    window.paint_quad(gpui::outline(selection_bounds, theme.selected));
+                    window.paint_quad(gpui::outline(selection_bounds, theme.tokens.selected));
                 }
             }
 

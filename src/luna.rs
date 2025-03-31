@@ -114,7 +114,7 @@ impl Luna {
         });
         let focus_handle = cx.focus_handle();
         let scene_graph = cx.new(|cx| SceneGraph::new());
-        let theme = Theme::new();
+        let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
 
@@ -171,8 +171,8 @@ impl Render for Luna {
             .flex()
             .font_family("Berkeley Mono")
             .text_xs()
-            .bg(theme.panel)
-            .text_color(theme.foreground)
+            .bg(theme.tokens.panel)
+            .text_color(theme.tokens.foreground)
             .border_1()
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
@@ -199,7 +199,7 @@ impl Focusable for Luna {
 }
 
 fn init_globals(cx: &mut App) {
-    cx.set_global(GlobalTheme(Arc::new(Theme::new())));
+    cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalState::new());
 }
 

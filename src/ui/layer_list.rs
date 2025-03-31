@@ -34,9 +34,9 @@ impl RenderOnce for LayerListItem {
         let theme = Theme::get_global(cx);
 
         let text_color = if self.selected {
-            theme.foreground
+            theme.tokens.foreground
         } else {
-            theme.foreground_muted
+            theme.tokens.foreground_muted
         };
 
         div()
@@ -46,8 +46,8 @@ impl RenderOnce for LayerListItem {
             .items_center()
             .rounded_tl(px(4.))
             .rounded_bl(px(4.))
-            .when(self.selected, |div| div.bg(theme.selected.alpha(0.12)))
-            .active(|div| div.bg(theme.foreground.opacity(0.05)))
+            .when(self.selected, |div| div.bg(theme.tokens.selected.alpha(0.12)))
+            .active(|div| div.bg(theme.tokens.foreground.opacity(0.05)))
             .text_color(text_color)
             .gap(px(10.))
             // .child(
