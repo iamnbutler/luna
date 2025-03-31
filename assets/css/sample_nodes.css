@@ -1,8 +1,8 @@
 .rect1 {
     left: 100px;
     top: 100px;
-    width: 300px;
-    height: 220px;
+    width: 30px;
+    height: 22px;
     background-color: #e8f5e9;
     border-color: rgba(58, 58, 58, 0.7);
     border-width: 1px;
@@ -23,7 +23,7 @@
 .rect3 {
     left: 200px;
     top: 280px;
-    width: 350px;
+    width: 390px;
     height: 130px;
     background-color: #ffecb3;
     border-color: #ffa000;
@@ -99,7 +99,7 @@
 
 .rect10 {
     left: 650px;
-    top: 300px;
+    top: 600px;
     width: 230px;
     height: 230px;
     background-color: #f8bbd0;
@@ -109,7 +109,7 @@
 }
 
 .rect11 {
-    left: 450px;
+    left: 150px;
     top: 500px;
     width: 320px;
     height: 120px;
