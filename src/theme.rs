@@ -13,7 +13,7 @@ pub enum ThemeVariant {
 
 impl Default for ThemeVariant {
     fn default() -> Self {
-        ThemeVariant::Latte
+        ThemeVariant::Mocha
     }
 }
 
@@ -213,7 +213,7 @@ pub struct ThemeTokens {
 
     // Typography category
     /// Text/body copy
-    pub foreground: Hsla,
+    pub text: Hsla,
     /// Muted text
     pub foreground_muted: Hsla,
     /// Disabled text
@@ -340,7 +340,7 @@ impl ActiveTheme for App {
 impl Theme {
     /// Create a new theme with the default variant
     pub fn default() -> Self {
-        Self::from_palette("Cappucin Latte", latte())
+        Self::from_palette("Cappucin Latte", mocha())
     }
 
     pub fn from_palette(name: &str, palette: Palette) -> Self {
@@ -359,7 +359,7 @@ impl Theme {
             overlay2: palette.overlay2,
 
             // Typography
-            foreground: palette.text,
+            text: palette.text,
             foreground_muted: palette.subtext0,
             foreground_disabled: palette.subtext1,
             subtext0: palette.subtext0,
@@ -372,9 +372,9 @@ impl Theme {
 
             // UI elements
             cursor: palette.rosewater,
-            selected: palette.overlay2.alpha(0.3), // Selection background at 30% opacity
+            selected: palette.overlay2.alpha(0.3),
             active_border: palette.lavender,
-            inactive_border: palette.overlay0,
+            inactive_border: palette.surface0,
             bell_border: palette.yellow,
 
             // Syntax highlighting

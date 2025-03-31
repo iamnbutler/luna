@@ -34,7 +34,7 @@ impl RenderOnce for LayerListItem {
         let theme = Theme::get_global(cx);
 
         let text_color = if self.selected {
-            theme.tokens.foreground
+            theme.tokens.text
         } else {
             theme.tokens.subtext0 // Use subtext0 for unselected items
         };

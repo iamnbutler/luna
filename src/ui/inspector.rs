@@ -254,7 +254,7 @@ impl Render for Inspector {
                     .flex()
                     .flex_wrap()
                     .gap(px(8.))
-                    .border_color(theme.tokens.overlay0) // Use overlay0 for dividers/borders per style guide
+                    .border_color(theme.tokens.inactive_border)
                     .border_b_1()
                     .child(property_input(x, "X"))
                     .child(property_input(y, "Y"))
@@ -274,9 +274,9 @@ impl Render for Inspector {
             .cursor_default()
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
-            .border_color(theme.tokens.inactive_border) // Use semantic token for borders
+            .border_color(theme.tokens.inactive_border)
             .border_l_1()
-            .bg(theme.tokens.surface0) // Use surface0 for inspector panel
+            .bg(theme.tokens.background_secondary)
             .on_click(cx.listener(|_, _, _, cx| {
                 cx.stop_propagation();
             }))

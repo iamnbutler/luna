@@ -46,7 +46,7 @@ impl CanvasStyle {
         let theme = Theme::get_global(cx);
 
         Self {
-            background: theme.tokens.background_secondary, // Use background_secondary for canvas area
+            background: theme.tokens.background,
             cursor_color: theme.tokens.cursor,
             ..Default::default()
         }
@@ -391,8 +391,6 @@ impl CanvasElement {
             round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            // Use the theme parameter instead of getting it from cx
-            // Round the position to ensure pixel-perfect rendering
             let position = rounded_point(min_x, min_y);
 
             let rect_bounds = Bounds {
@@ -400,7 +398,6 @@ impl CanvasElement {
                 size: Size::new(width, height),
             };
 
-            // Use Overlay2 with 25% opacity for selection backgrounds per style guide
             window.paint_quad(gpui::fill(rect_bounds, theme.tokens.overlay2.opacity(0.25)));
             window.paint_quad(gpui::outline(rect_bounds, theme.tokens.active_border));
             window.request_animation_frame();
