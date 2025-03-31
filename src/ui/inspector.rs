@@ -1,3 +1,9 @@
+//! Properties inspector for selected elements.
+//!
+//! The inspector displays and allows editing of properties for selected elements
+//! in the canvas. It handles both single and multiple selections with appropriate
+//! UI for mixed values.
+
 use std::collections::HashSet;
 
 use gpui::{
@@ -17,9 +23,13 @@ use super::property::property_input;
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
+/// Represents the current selection state in the canvas
 pub enum NodeSelection {
+    /// No nodes are selected
     None,
+    /// Exactly one node is selected
     Single(NodeId),
+    /// Multiple nodes are selected
     Multiple(Vec<NodeId>),
 }
 
@@ -39,6 +49,11 @@ impl From<HashSet<NodeId>> for NodeSelection {
     }
 }
 
+/// Stores property values for currently selected elements
+///
+/// Uses [`SmallVec`] to efficiently handle both single values and
+/// multiple values (for mixed-value states) without heap allocation
+/// in the common case.
 pub struct InspectorProperties {
     pub x: SmallVec<[f32; 1]>,
     pub y: SmallVec<[f32; 1]>,
@@ -61,6 +76,11 @@ impl Default for InspectorProperties {
     }
 }
 
+/// Properties panel for viewing and editing element attributes
+///
+/// The inspector maintains property values for selected elements and renders
+/// them with appropriate controls. It handles both single selection (showing
+/// exact values) and multiple selection (showing common or mixed values).
 pub struct Inspector {
     state: Entity<AppState>,
     canvas: Entity<LunaCanvas>,
