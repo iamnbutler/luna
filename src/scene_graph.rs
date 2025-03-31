@@ -300,9 +300,6 @@ impl SceneGraph {
     /// 2. Transforms each corner of the local bounds to world space
     /// 3. Computes the min/max coordinates to form an AABB
     /// 4. Updates the node's world_bounds property
-    ///
-    /// # Arguments
-    /// * `node_id` - The ID of the node to update
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
         // First collect the data we need
         let (transform, local_bounds) = match self.nodes.get(node_id) {
@@ -413,13 +410,6 @@ impl SceneGraph {
     ///
     /// The algorithm uses iterative parent traversal rather than recursion
     /// to handle arbitrary depth hierarchies efficiently.
-    ///
-    /// # Arguments
-    /// * `node_id` - The potential ancestor node
-    /// * `descendant_id` - The potential descendant node 
-    ///
-    /// # Returns
-    /// `true` if node_id is an ancestor of descendant_id, `false` otherwise
     fn is_ancestor(&self, node_id: SceneNodeId, descendant_id: SceneNodeId) -> bool {
         let mut current = Some(descendant_id);
         while let Some(id) = current {

@@ -69,10 +69,6 @@ impl Icon {
     /// This method maps each icon to its actual file location, providing
     /// a layer of indirection that allows icon files to be reorganized
     /// without changing the code that references them.
-    ///
-    /// # Returns
-    ///
-    /// A SharedString containing the relative path to the SVG file
     pub fn src(self) -> SharedString {
         match self {
             Icon::ArrowCounterClockwise => "svg/arrow_counter_clockwise.svg".into(),

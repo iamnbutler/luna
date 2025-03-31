@@ -72,11 +72,6 @@ impl SceneNode {
     ///
     /// After creation, the node must be inserted into the scene graph and
     /// have its transforms and bounds updated accordingly.
-    ///
-    /// # Arguments
-    ///
-    /// * `parent` - Optional parent node ID for hierarchy placement
-    /// * `data_node_id` - Optional link to a data node in the element model
     pub fn new(parent: Option<SceneNodeId>, data_node_id: Option<NodeId>) -> Self {
         Self {
             parent,

@@ -18,14 +18,6 @@ use gpui::{Keystroke, Modifiers, Pixels, Point};
 /// This function ensures pixel values align with the physical pixel grid,
 /// which is essential for crisp rendering on displays. Without proper rounding,
 /// elements can appear blurry due to anti-aliasing across pixel boundaries.
-///
-/// # Arguments
-///
-/// * `value` - The pixel value to round
-///
-/// # Returns
-///
-/// A new Pixels value rounded to the nearest integer
 pub fn round_to_pixel(value: Pixels) -> Pixels {
     Pixels(value.0.round())
 }
@@ -35,15 +27,6 @@ pub fn round_to_pixel(value: Pixels) -> Pixels {
 /// This convenience function applies pixel rounding to both coordinates
 /// of a point simultaneously, ensuring elements are positioned on the pixel
 /// grid for crisp rendering.
-///
-/// # Arguments
-///
-/// * `x` - The x-coordinate to round
-/// * `y` - The y-coordinate to round
-///
-/// # Returns
-///
-/// A new Point with both coordinates rounded to integer pixels
 pub fn rounded_point(x: Pixels, y: Pixels) -> Point<Pixels> {
     Point::new(round_to_pixel(x), round_to_pixel(y))
 }
@@ -71,14 +54,6 @@ pub fn rounded_point(x: Pixels, y: Pixels) -> Point<Pixels> {
 /// // Creates simple 'a' keystroke (no modifiers)
 /// let type_a = keystroke_builder("a");
 /// ```
-///
-/// # Arguments
-///
-/// * `str` - String representation of the keystroke (e.g., "ctrl-shift-s")
-///
-/// # Returns
-///
-/// A GPUI Keystroke with the appropriate modifiers and key set
 pub fn keystroke_builder(str: &str) -> Keystroke {
     let parts: Vec<&str> = str.split('-').collect();
 
