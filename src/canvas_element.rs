@@ -398,6 +398,12 @@ impl CanvasElement {
         window: &mut Window,
         theme: &Theme,
     ) {
+        // Only draw selection rectangle if this is actually a selection drag
+        // Don't draw it when dragging elements
+        if active_drag.drag_type != DragType::Selection {
+            return;
+        }
+        
         let min_x = round_to_pixel(
             active_drag
                 .start_position
