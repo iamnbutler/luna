@@ -1,3 +1,20 @@
+//! # Luna: A GPU-accelerated design canvas
+//!
+//! Luna is a modern design application built on the GPUI framework, providing a high-performance
+//! canvas for creating and manipulating design elements.
+//!
+//! ## Architecture
+//!
+//! Luna is built around several core abstractions:
+//!
+//! - **Canvas**: The central drawing surface where elements are rendered and manipulated
+//! - **SceneGraph**: Manages spatial relationships between nodes for efficient transformations
+//! - **Elements**: Visual objects (rectangles, etc.) that can be created, selected, and modified
+//! - **Tools**: Different interaction modes (selection, rectangle creation, hand tool, etc.)
+//!
+//! The application uses a combination of immediate and retained UI patterns, with a scene graph
+//! for efficient spatial operations and a component-based architecture for the UI.
+
 #![allow(unused, dead_code)]
 use anyhow::Result;
 use assets::Assets;
@@ -44,13 +61,15 @@ actions!(
     ]
 );
 
-// TODO: Most of this will get moved to Canvas
-// TODO: The rest will move to Entity<AppState> on Luna
-/// A temporary place to throw a grab bag of various states until
-/// they can be organize and structured more clearly.
+/// Application-wide state accessible from any context
 ///
-/// At the very least this will need to be refactored before adding
-/// muliple windows, as the global state will apply to all windows.
+/// GlobalState provides access to application-level state that applies across
+/// the entire application. It utilizes GPUI's global mechanism to make this
+/// state available throughout the component hierarchy without explicit passing.
+///
+/// This includes UI configuration like sidebar state, canvas navigation state,
+/// and input tracking. In a multi-window implementation, this would need to be
+/// refactored to per-window state.
 struct GlobalState {
     hide_sidebar: bool,
     sidebar_width: Pixels,
@@ -92,17 +111,43 @@ impl GlobalState {
 
 impl Global for GlobalState {}
 
+/// Core application state shared between components
+///
+/// Unlike GlobalState, AppState is an Entity that can be updated and observed
+/// through GPUI's reactive update mechanism. Components can subscribe to changes
+/// in this state to update their rendering accordingly.
+///
+/// This state includes the currently active tool and the current element styling
+/// properties that will be applied to newly created elements.
 pub struct AppState {
+    /// The currently active tool determining interaction behavior
     pub active_tool: ToolKind,
+    /// Current border color for new elements
     pub current_border_color: Hsla,
+    /// Current background color for new elements
     pub current_background_color: Hsla,
 }
 
+/// Main application component that orchestrates the Luna design application
+///
+/// Luna is the root component of the application, responsible for:
+/// - Managing core application entities (canvas, scene graph, app state)
+/// - Handling tool activation and application-level event routing
+/// - Coordinating between UI components (inspector, canvas, etc.)
+/// - Rendering the main application layout
+///
+/// It serves as the connection point between the GPUI framework and Luna-specific
+/// functionality, managing the overall application lifecycle.
 struct Luna {
+    /// Shared application state accessible by multiple components
     app_state: Entity<AppState>,
+    /// The main canvas where elements are rendered and manipulated
     canvas: Entity<LunaCanvas>,
+    /// Focus handle for keyboard event routing
     focus_handle: FocusHandle,
+    /// Scene graph for managing spatial relationships between nodes
     scene_graph: Entity<SceneGraph>,
+    /// Inspector panel for element properties and tools
     inspector: Entity<Inspector>,
 }
 
@@ -204,6 +249,11 @@ fn init_globals(cx: &mut App) {
     cx.set_global(GlobalState::new());
 }
 
+/// Application entry point
+///
+/// Initializes the GPUI application, sets up global state, defines menus,
+/// and opens the main application window. This function is the starting point
+/// for the entire Luna application.
 fn main() {
     Application::new()
         .with_assets(Assets {
