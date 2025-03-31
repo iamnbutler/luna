@@ -527,6 +527,7 @@ impl CanvasElement {
             bounds: gpui::Bounds<Pixels>,
             fill_color: Option<Hsla>,
             border_color: Option<Hsla>,
+            border_width: f32,
         }
 
         // Get all the data we need in one place
@@ -558,6 +559,7 @@ impl CanvasElement {
                             },
                             fill_color: node.fill(),
                             border_color: node.border_color(),
+                            border_width: node.border_width(),
                         });
                     }
                 }
@@ -576,7 +578,13 @@ impl CanvasElement {
 
                 // Paint the border if it exists
                 if let Some(border_color) = node_info.border_color {
-                    window.paint_quad(gpui::outline(node_info.bounds, border_color));
+                    window.paint_quad(gpui::PaintQuad {
+                        bounds: node_info.bounds,
+                        corner_radii: (0.).into(),
+                        background: gpui::transparent_black().into(),
+                        border_widths: (node_info.border_width).into(),
+                        border_color: border_color.into(),
+                    });
                 }
 
                 // Draw selection indicator if the node is selected
