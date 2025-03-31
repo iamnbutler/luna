@@ -46,8 +46,8 @@ impl CanvasStyle {
         let theme = Theme::get_global(cx);
 
         Self {
-            background: theme.canvas_color,
-            cursor_color: theme.cursor_color,
+            background: theme.canvas,
+            cursor_color: theme.cursor,
             ..Default::default()
         }
     }
@@ -113,16 +113,16 @@ impl CanvasElement {
     ) -> Option<NodeId> {
         // Convert window coordinate to canvas coordinate
         let canvas_point = canvas.window_to_canvas_point(window_point);
-        
+
         // Instead of trying to access the private canvas_node directly,
         // we'll use the existing node methods to find a node at this point
-        
+
         // Let's create a selection area of 1x1 pixels at the point
         let select_point_bounds = Bounds {
             origin: canvas_point,
             size: Size::new(1.0, 1.0),
         };
-        
+
         // Test each node to see if it contains this point
         for node in &canvas.nodes {
             let node_bounds = node.bounds();
@@ -130,7 +130,7 @@ impl CanvasElement {
                 return Some(node.id());
             }
         }
-        
+
         None
     }
 
@@ -152,13 +152,13 @@ impl CanvasElement {
                 // Attempt to find a node at the clicked point
                 if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
                     // Clicked on a node - select it
-                    
+
                     // If shift is not pressed, clear current selection first
                     let modifiers = event.modifiers;
                     if !modifiers.shift {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
-                    
+
                     // If shift is pressed and node is already selected, deselect it
                     if modifiers.shift && canvas.is_node_selected(node_id) {
                         canvas.deselect_node(node_id);
@@ -166,7 +166,7 @@ impl CanvasElement {
                         // Otherwise select the node
                         canvas.select_node(node_id);
                     }
-                    
+
                     canvas.mark_dirty(cx);
                 } else {
                     // Clicked on empty space - start a selection rectangle drag
@@ -174,7 +174,7 @@ impl CanvasElement {
                     if !event.modifiers.shift {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
-                    
+
                     canvas.active_drag = Some(ActiveDrag {
                         start_position: position,
                         current_position: position,
@@ -287,7 +287,7 @@ impl CanvasElement {
                 current_position: position,
             };
             canvas.active_drag = Some(new_drag);
-            
+
             // If we're using the selection tool, update the selection based on
             // which nodes intersect with the selection rectangle
             if canvas.active_tool == ToolKind::Selection {
@@ -297,23 +297,25 @@ impl CanvasElement {
                 let min_y = start_pos.y.0.min(position.y.0);
                 let max_x = start_pos.x.0.max(position.x.0);
                 let max_y = start_pos.y.0.max(position.y.0);
-                
+
                 // Convert to canvas coordinates
                 let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
                 let max_point = canvas.window_to_canvas_point(Point::new(max_x, max_y));
-                
+
                 // Create selection bounds
                 let selection_bounds = Bounds {
                     origin: min_point,
                     size: Size::new(max_point.x - min_point.x, max_point.y - min_point.y),
                 };
-                
+
                 // Pre-calculate all nodes that intersect with selection
-                let nodes_in_selection: HashSet<NodeId> = canvas.nodes.iter()
+                let nodes_in_selection: HashSet<NodeId> = canvas
+                    .nodes
+                    .iter()
                     .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
                     .map(|node| node.id())
                     .collect();
-                
+
                 // Check if we want to add to existing selection (shift pressed)
                 // or replace it (shift not pressed)
                 if event.modifiers.shift {
@@ -331,7 +333,7 @@ impl CanvasElement {
                     }
                 }
             }
-            
+
             canvas.mark_dirty(cx);
         }
 

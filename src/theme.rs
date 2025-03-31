@@ -13,7 +13,7 @@ pub enum ThemeVariant {
 
 impl Default for ThemeVariant {
     fn default() -> Self {
-        ThemeVariant::Latte
+        ThemeVariant::Frappe
     }
 }
 
@@ -221,12 +221,12 @@ pub struct Theme {
     pub palette: ThemePalette,
 
     // Semantic tokens
-    pub background_color: Hsla,
-    pub canvas_color: Hsla,
+    pub panel: Hsla,
+    pub canvas: Hsla,
     pub foreground: Hsla,
     pub foreground_muted: Hsla,
     pub foreground_disabled: Hsla,
-    pub cursor_color: Hsla,
+    pub cursor: Hsla,
     pub selected: Hsla,
 }
 
@@ -243,9 +243,9 @@ impl ActiveTheme for App {
 }
 
 impl Theme {
-    /// Create a new theme with the default variant (Mocha)
+    /// Create a new theme with the default variant
     pub fn new() -> Self {
-        Self::create_theme(ThemeVariant::Mocha)
+        Self::create_theme(ThemeVariant::Latte)
     }
 
     /// Private helper to create a theme with the specified variant
@@ -254,22 +254,22 @@ impl Theme {
 
         Self {
             // Semantic tokens that reference palette colors
-            background_color: palette.base,
-            canvas_color: palette.mantle,
+            panel: palette.crust,
+            canvas: palette.base,
             foreground: palette.text,
             foreground_muted: palette.subtext1,
             foreground_disabled: palette.subtext0,
-            cursor_color: palette.blue,
-            selected: palette.lavender,
+            cursor: palette.blue,
+            selected: palette.blue,
 
             // Store the full palette for access to all colors
             palette,
         }
     }
 
-    /// Create a new theme with the default variant (Mocha)
+    /// Create a new theme with the default variant
     pub fn default() -> Self {
-        Self::create_theme(ThemeVariant::Mocha)
+        Self::create_theme(ThemeVariant::Latte)
     }
 
     /// Get the theme variant

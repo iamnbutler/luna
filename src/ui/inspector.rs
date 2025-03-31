@@ -27,12 +27,10 @@ impl From<HashSet<NodeId>> for NodeSelection {
     fn from(nodes: HashSet<NodeId>) -> Self {
         match nodes.len() {
             0 => NodeSelection::None,
-            1 => {
-                match nodes.iter().next() {
-                    Some(node_id) => NodeSelection::Single(*node_id),
-                    None => NodeSelection::None
-                }
-            }
+            1 => match nodes.iter().next() {
+                Some(node_id) => NodeSelection::Single(*node_id),
+                None => NodeSelection::None,
+            },
             _ => {
                 let nodes_vec: Vec<NodeId> = nodes.into_iter().collect();
                 NodeSelection::Multiple(nodes_vec)
@@ -111,7 +109,7 @@ impl Inspector {
                 // For multiple selections, we'll collect all values and then
                 // check if they're all the same to properly handle the "Mixed" state
                 let canvas_read = canvas.read(cx);
-                
+
                 // Temporary collections for all values
                 let mut all_x = Vec::new();
                 let mut all_y = Vec::new();
@@ -119,10 +117,11 @@ impl Inspector {
                 let mut all_height = Vec::new();
                 let mut all_border_width = Vec::new();
                 let mut all_corner_radius = Vec::new();
-                
+
                 // Collect all values first
                 for node_id in &nodes {
-                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id) {
+                    if let Some(node) = canvas_read.nodes.iter().find(|node| node.id() == *node_id)
+                    {
                         all_x.push(node.layout().x);
                         all_y.push(node.layout().y);
                         all_width.push(node.layout().width);
@@ -131,7 +130,7 @@ impl Inspector {
                         all_corner_radius.push(node.corner_radius());
                     }
                 }
-                
+
                 // Helper function to check if all values in a vector are the same
                 let all_same = |values: &[f32]| -> bool {
                     if values.is_empty() {
@@ -140,7 +139,7 @@ impl Inspector {
                     let first = values[0];
                     values.iter().all(|&v| (v - first).abs() < f32::EPSILON)
                 };
-                
+
                 // If all values are the same, just use the first one
                 // Otherwise, use all values to indicate they're different (will show as "Mixed")
                 if !all_x.is_empty() {
@@ -150,7 +149,7 @@ impl Inspector {
                         self.properties.x.extend(all_x);
                     }
                 }
-                
+
                 if !all_y.is_empty() {
                     if all_same(&all_y) {
                         self.properties.y.push(all_y[0]);
@@ -158,7 +157,7 @@ impl Inspector {
                         self.properties.y.extend(all_y);
                     }
                 }
-                
+
                 if !all_width.is_empty() {
                     if all_same(&all_width) {
                         self.properties.width.push(all_width[0]);
@@ -166,7 +165,7 @@ impl Inspector {
                         self.properties.width.extend(all_width);
                     }
                 }
-                
+
                 if !all_height.is_empty() {
                     if all_same(&all_height) {
                         self.properties.height.push(all_height[0]);
@@ -174,7 +173,7 @@ impl Inspector {
                         self.properties.height.extend(all_height);
                     }
                 }
-                
+
                 if !all_border_width.is_empty() {
                     if all_same(&all_border_width) {
                         self.properties.border_width.push(all_border_width[0]);
@@ -182,7 +181,7 @@ impl Inspector {
                         self.properties.border_width.extend(all_border_width);
                     }
                 }
-                
+
                 if !all_corner_radius.is_empty() {
                     if all_same(&all_corner_radius) {
                         self.properties.corner_radius.push(all_corner_radius[0]);
@@ -228,13 +227,13 @@ impl Render for Inspector {
         } else {
             Some(self.properties.height.iter().cloned().collect())
         };
-        
+
         let border_width = if self.properties.border_width.is_empty() {
             None
         } else {
             Some(self.properties.border_width.iter().cloned().collect())
         };
-        
+
         let corner_radius = if self.properties.corner_radius.is_empty() {
             None
         } else {
@@ -277,7 +276,7 @@ impl Render for Inspector {
             .rounded_br(px(15.))
             .border_color(theme.foreground.alpha(0.06))
             .border_l_1()
-            .bg(theme.background_color)
+            .bg(theme.panel)
             .on_click(cx.listener(|_, _, _, cx| {
                 cx.stop_propagation();
             }))
