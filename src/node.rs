@@ -1,3 +1,20 @@
+//! # Node System
+//!
+//! This module defines the core data model for visual elements in Luna. The node system
+//! implements a type-safe approach to representing and manipulating canvas elements.
+//!
+//! ## Key Components
+//!
+//! - **NodeId**: Unique identifier for canvas nodes
+//! - **NodeType**: Enumeration of supported element types (Rectangle, etc.)
+//! - **NodeLayout**: Position and dimension properties shared by all nodes
+//! - **NodeCommon**: Trait defining shared behavior across node types
+//! - **RectangleNode**: Concrete implementation of a rectangle element
+//!
+//! The node system focuses on managing the data model aspect of elements, while
+//! the scene graph handles spatial relationships and transformations. This separation
+//! allows for efficient data management independent of visual representation.
+
 #![allow(unused, dead_code)]
 use gpui::{Bounds, Hsla, Point, Size};
 
@@ -51,7 +68,18 @@ impl NodeLayout {
     }
 }
 
-/// Common properties shared by all canvas nodes
+/// Core trait defining the common interface for all canvas elements
+///
+/// This trait establishes a unified API for interacting with different node types,
+/// enforcing consistent behavior for essential operations like:
+/// - Identity and type determination
+/// - Layout manipulation and bounds calculation
+/// - Visual styling (fill, border, corner radius)
+/// - Spatial queries (point containment)
+///
+/// By implementing this trait, node types gain consistent behavior while allowing
+/// type-specific customization. This enables polymorphic operations across
+/// heterogeneous collections of nodes.
 pub trait NodeCommon: std::fmt::Debug {
     /// Get the node's ID
     fn id(&self) -> NodeId;
@@ -98,7 +126,17 @@ pub trait NodeCommon: std::fmt::Debug {
     }
 }
 
-/// A rectangle node that can be rendered on the canvas
+/// Concrete implementation of a rectangle visual element
+///
+/// RectangleNode represents a rectangular element with configurable:
+/// - Position and dimensions via NodeLayout
+/// - Fill color (optional)
+/// - Border properties (color and width)
+/// - Corner radius for rounded rectangles
+///
+/// As the fundamental building block in the canvas system, rectangles
+/// serve as the basis for many other visual elements and are optimized
+/// for efficient rendering and manipulation.
 #[derive(Debug)]
 pub struct RectangleNode {
     pub id: NodeId,
@@ -176,9 +214,18 @@ impl NodeCommon for RectangleNode {
     }
 }
 
-/// A factory for creating and managing nodes
+/// Factory for generating nodes with guaranteed unique identifiers
+///
+/// NodeFactory centralizes node creation and ID allocation, ensuring that:
+/// - Each node receives a unique NodeId
+/// - Node creation follows consistent initialization patterns
+/// - Factory methods encapsulate creation logic for different node types
+///
+/// This pattern allows the application to maintain referential integrity
+/// across the node system without exposing ID generation details.
 #[derive(Debug)]
 pub struct NodeFactory {
+    /// Internal counter for generating sequential node IDs
     next_id: usize,
 }
 

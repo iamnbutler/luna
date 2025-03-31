@@ -1,12 +1,7 @@
-# luna
+# Luna
 
-Created with Create GPUI App.
+Luna is an in-development software design tool in the vein of figma, sketchapp, and old Framer.
 
-- [`gpui`](https://www.gpui.rs/)
-- [GPUI documentation](https://github.com/zed-industries/zed/tree/main/crates/gpui/docs)
-- [GPUI examples](https://github.com/zed-industries/zed/tree/main/crates/gpui/examples)
+It's built on top of [gpui](https://www.gpui.rs/), the UI framework designed by the @zedindustries team to power [zed](https://github.com/zedindustries/zed).
 
-## Usage
-
-- Ensure Rust is installed - [Rustup](https://rustup.rs/)
-- Run your app with `cargo run`
+Luna is in active development, and is very firmly in the "toy editor" stage right now.

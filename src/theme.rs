@@ -1,3 +1,21 @@
+//! # Theming System
+//!
+//! This module implements a comprehensive theming system based on the Catppuccin color palette.
+//! It provides a type-safe and semantically meaningful approach to colors and visual styles
+//! throughout the application.
+//!
+//! ## Architecture
+//!
+//! The theming system is built around several key components:
+//!
+//! - **Palette**: Raw color definitions for a specific theme variant
+//! - **ThemeTokens**: Semantic mapping of UI elements to specific colors
+//! - **Theme**: Main container combining a palette with semantic tokens
+//! - **GlobalTheme**: Application-wide theming mechanism using GPUI's global state
+//!
+//! The system is designed to enable consistent styling across the application while
+//! allowing for theme variants and potential future theme customization.
+
 use gpui::{hsla, App, Global, Hsla, SharedString, UpdateGlobal};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -187,6 +205,18 @@ pub fn mocha() -> Palette {
     }
 }
 
+/// Semantic mapping of UI elements to specific colors
+///
+/// ThemeTokens provides a semantic layer between the raw color palette and 
+/// application components. It categorizes colors by their functional role in the UI,
+/// allowing components to reference colors by semantic meaning rather than
+/// directly using palette colors.
+///
+/// This abstraction enables:
+/// - Consistent styling across the application
+/// - Easy theme switching while maintaining semantic relationships
+/// - Separation between raw colors and their application-specific usage
+/// - Centralized control over the application's visual language
 #[derive(Debug, Clone)]
 pub struct ThemeTokens {
     // Background category
@@ -325,9 +355,20 @@ pub struct ThemeRegistry {
     active_theme: Arc<Theme>,
 }
 
-/// Implementing this trait allows accessing the active theme.
+/// Application-wide access point for the current theme
+///
+/// The ActiveTheme trait provides a standardized mechanism for components to access
+/// the current theme from within any context that has access to the application state.
+/// It serves as the primary interface through which components obtain styling information.
+///
+/// By implementing this trait for the App type, any component with an App context
+/// can use consistent styling without explicitly passing theme references through
+/// the component hierarchy.
 pub trait ActiveTheme {
-    /// Returns the active theme.
+    /// Returns a reference to the currently active theme
+    ///
+    /// This method is the primary entry point for accessing theme-related styling
+    /// information throughout the application.
     fn theme(&self) -> &Arc<Theme>;
 }
 
@@ -426,6 +467,15 @@ impl Theme {
     }
 }
 
+/// Global container for the application-wide theme instance
+///
+/// GlobalTheme implements GPUI's Global trait to provide application-wide
+/// access to the current theme. It wraps an Arc<Theme> to enable efficient
+/// sharing of theme data across components without unnecessary cloning.
+///
+/// The dereferencing implementations allow convenient access to the underlying
+/// Theme while maintaining the reference-counting semantics needed for
+/// efficient theme sharing.
 #[derive(Clone, Debug)]
 pub struct GlobalTheme(pub Arc<Theme>);
 

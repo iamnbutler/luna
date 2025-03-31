@@ -1,8 +1,12 @@
+//! Implements the asset loading mechanism for Luna.
+
 use anyhow::Result;
 use gpui::{AssetSource, SharedString};
 use std::{fs, path::PathBuf};
 
+/// Filesystem-based asset provider implementing [`AssetSource`]
 pub struct Assets {
+    /// Base directory path where assets are located
     pub base: PathBuf,
 }
 
