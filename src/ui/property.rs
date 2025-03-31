@@ -1,3 +1,8 @@
+//! Property editing components for the inspector panel.
+//!
+//! Provides reusable UI components for displaying and editing
+//! element properties, with support for mixed-value states.
+
 use gpui::{
     div, prelude::*, px, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
     Window,
@@ -5,10 +10,17 @@ use gpui::{
 
 use crate::{canvas::LunaCanvas, theme::Theme, AppState};
 
+/// Creates a new property input field with the given value and icon
 pub fn property_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
     PropertyInput::new(value, icon)
 }
 
+/// Input field for numeric property values with support for mixed states
+///
+/// Displays property values with appropriate formatting based on selection state:
+/// - No value: Empty field
+/// - Single value: Shows the exact value
+/// - Multiple different values: Shows "Mixed"
 #[derive(IntoElement)]
 pub struct PropertyInput {
     value: Option<Vec<f32>>,
