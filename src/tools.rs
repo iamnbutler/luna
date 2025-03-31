@@ -1,3 +1,19 @@
+//! # Tool System
+//!
+//! This module implements the tool selection and interaction system for Luna.
+//! It defines both the available tools and their UI representations.
+//!
+//! ## Architecture
+//!
+//! The tool system is built around three key components:
+//!
+//! - **ToolKind**: An enumeration representing the different interaction modes available in the app
+//! - **ToolButton**: UI component for rendering individual tool buttons with appropriate styling
+//! - **ToolStrip**: Container component that organizes tools into a vertical toolbar
+//!
+//! Tools are central to Luna's interaction model, determining how mouse and keyboard
+//! input is interpreted when interacting with the canvas.
+
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
 use crate::GlobalState;
@@ -73,9 +89,21 @@ pub fn tool_button(tool: ToolKind) -> ToolButton {
     ToolButton::new(tool)
 }
 
+/// UI component for rendering a tool selection button
+///
+/// ToolButton renders a selectable button with an icon corresponding to a specific tool.
+/// It handles various visual states (normal, hover, selected, disabled) and provides
+/// consistent styling across the application's tool interface.
+///
+/// The component adapts its appearance based on:
+/// - The current selection state (whether this tool is currently active)
+/// - Whether the tool is disabled (not yet implemented or currently unavailable)
+/// - Theme-appropriate colors for each state
 #[derive(IntoElement)]
 pub struct ToolButton {
+    /// The tool this button represents
     tool_kind: ToolKind,
+    /// Whether this tool is currently unavailable
     disabled: bool,
 }
 
@@ -202,10 +230,21 @@ impl RenderOnce for ToolButton {
 //     }
 // }
 
+/// Main toolbar component that organizes and displays available tools
+///
+/// ToolStrip creates a vertical strip of tool buttons, logically grouped with dividers
+/// to create a cohesive and organized tool selection UI. It implements:
+/// 
+/// - Visual categorization of related tools (selection, drawing, shapes, etc.)
+/// - Consistent spacing and alignment of tool buttons
+/// - Theme-appropriate styling for the toolbar container
+///
+/// This component forms the primary tool selection interface in the application.
 #[derive(IntoElement)]
 pub struct ToolStrip {}
 
 impl ToolStrip {
+    /// Creates a new ToolStrip with default configuration
     pub fn new() -> Self {
         ToolStrip {}
     }
