@@ -46,7 +46,7 @@ impl CanvasStyle {
         let theme = Theme::get_global(cx);
 
         Self {
-            background: theme.tokens.canvas,
+            background: theme.tokens.background_secondary, // Use background_secondary for canvas area
             cursor_color: theme.tokens.cursor,
             ..Default::default()
         }
@@ -400,8 +400,9 @@ impl CanvasElement {
                 size: Size::new(width, height),
             };
 
-            window.paint_quad(gpui::fill(rect_bounds, theme.tokens.selected.opacity(0.08)));
-            window.paint_quad(gpui::outline(rect_bounds, theme.tokens.selected));
+            // Use Overlay2 with 25% opacity for selection backgrounds per style guide
+            window.paint_quad(gpui::fill(rect_bounds, theme.tokens.overlay2.opacity(0.25)));
+            window.paint_quad(gpui::outline(rect_bounds, theme.tokens.active_border));
             window.request_animation_frame();
         });
     }
@@ -594,7 +595,8 @@ impl CanvasElement {
                             node_info.bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
-                    window.paint_quad(gpui::outline(selection_bounds, theme.tokens.selected));
+                    // Use active_border for selection outlines per style guide
+                    window.paint_quad(gpui::outline(selection_bounds, theme.tokens.active_border));
                 }
             }
 

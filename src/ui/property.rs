@@ -48,10 +48,10 @@ impl RenderOnce for PropertyInput {
                 .pr(px(4.))
                 .w(px(84.))
                 .rounded(px(4.))
-                .bg(theme.tokens.foreground.alpha(0.06))
-                .text_color(theme.tokens.foreground.alpha(0.9))
+                .bg(theme.tokens.surface1) // Use surface1 for input background
+                .text_color(theme.tokens.foreground)
                 .when(no_value || mixed, |this| {
-                    this.text_color(theme.tokens.foreground.alpha(0.4))
+                    this.text_color(theme.tokens.subtext1) // Use subtext1 for disabled/empty state
                 })
                 .text_size(px(11.))
                 .child(div().flex_1().child(display_value))

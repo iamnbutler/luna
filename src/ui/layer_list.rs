@@ -36,7 +36,7 @@ impl RenderOnce for LayerListItem {
         let text_color = if self.selected {
             theme.tokens.foreground
         } else {
-            theme.tokens.foreground_muted
+            theme.tokens.subtext0 // Use subtext0 for unselected items
         };
 
         div()
@@ -46,8 +46,8 @@ impl RenderOnce for LayerListItem {
             .items_center()
             .rounded_tl(px(4.))
             .rounded_bl(px(4.))
-            .when(self.selected, |div| div.bg(theme.tokens.selected.alpha(0.12)))
-            .active(|div| div.bg(theme.tokens.foreground.opacity(0.05)))
+            .when(self.selected, |div| div.bg(theme.tokens.selected)) // Already has appropriate opacity
+            .active(|div| div.bg(theme.tokens.surface2.opacity(0.7))) // Use surface2 for hover state
             .text_color(text_color)
             .gap(px(10.))
             // .child(

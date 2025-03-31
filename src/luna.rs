@@ -171,7 +171,7 @@ impl Render for Luna {
             .flex()
             .font_family("Berkeley Mono")
             .text_xs()
-            .bg(theme.tokens.panel)
+            .bg(theme.tokens.background) // Use background for main pane
             .text_color(theme.tokens.foreground)
             .border_1()
             .border_color(gpui::white().alpha(0.08))

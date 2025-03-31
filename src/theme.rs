@@ -189,13 +189,127 @@ pub fn mocha() -> Palette {
 
 #[derive(Debug, Clone)]
 pub struct ThemeTokens {
+    // Background category
+    /// Panel background
     pub panel: Hsla,
+    /// Canvas background
     pub canvas: Hsla,
+    /// Main background (base)
+    pub background: Hsla,
+    /// Secondary panes (crust/mantle)
+    pub background_secondary: Hsla,
+    /// Surface element (first level)
+    pub surface0: Hsla,
+    /// Surface element (second level)
+    pub surface1: Hsla,
+    /// Surface element (third level)
+    pub surface2: Hsla,
+    /// Overlay element (first level)
+    pub overlay0: Hsla,
+    /// Overlay element (second level)
+    pub overlay1: Hsla,
+    /// Overlay element (third level)
+    pub overlay2: Hsla,
+
+    // Typography category
+    /// Text/body copy
     pub foreground: Hsla,
+    /// Muted text
     pub foreground_muted: Hsla,
+    /// Disabled text
     pub foreground_disabled: Hsla,
+    /// Sub-headlines, labels
+    pub subtext0: Hsla,
+    /// Subtext variant
+    pub subtext1: Hsla,
+    /// Links, URLs (blue)
+    pub link: Hsla,
+    /// Success messages (green)
+    pub success: Hsla,
+    /// Warnings (yellow)
+    pub warning: Hsla,
+    /// Errors (red)
+    pub error: Hsla,
+    /// Tags, pills (blue)
+    pub tag: Hsla,
+
+    // UI elements category
+    /// Cursor (rosewater)
     pub cursor: Hsla,
+    /// Selection background
     pub selected: Hsla,
+    /// Active window border (lavender)
+    pub active_border: Hsla,
+    /// Inactive window border (overlay0)
+    pub inactive_border: Hsla,
+    /// Bell border (yellow)
+    pub bell_border: Hsla,
+
+    /// Syntax highlighting category
+
+    /// Keywords (mauve)
+    pub keyword: Hsla,
+    /// Strings (green)
+    pub string: Hsla,
+    /// Symbols, atoms (red)
+    pub symbol: Hsla,
+    /// Escape sequences, regex (pink)
+    pub escape: Hsla,
+    /// Comments (overlay2)
+    pub comment: Hsla,
+    /// Constants, numbers (peach)
+    pub constant: Hsla,
+    /// Operators (sky)
+    pub operator: Hsla,
+    /// Braces, delimiters (overlay2)
+    pub delimiter: Hsla,
+    /// Methods, functions (blue)
+    pub function: Hsla,
+    /// Parameters (maroon)
+    pub parameter: Hsla,
+    /// Builtins (red)
+    pub builtin: Hsla,
+    /// Classes, interfaces, types (yellow)
+    pub type_name: Hsla,
+    /// Enum variants (teal)
+    pub enum_variant: Hsla,
+    /// Property e.g. JSON keys (blue)
+    pub property: Hsla,
+    /// XML-style attributes (yellow)
+    pub attribute: Hsla,
+    /// Macros (rosewater)
+    pub macro_: Hsla,
+
+    /// Line highlighting category
+
+    /// Line numbers (overlay1)
+    pub line_number: Hsla,
+    /// Active line number (lavender)
+    pub active_line_number: Hsla,
+    /// Cursor line background
+    pub cursor_line: Hsla,
+
+    /// Diff & Merge category
+
+    /// Diff header (blue)
+    pub diff_header: Hsla,
+    /// File path markers (pink)
+    pub diff_file_path: Hsla,
+    /// Hunk header (peach)
+    pub diff_hunk_header: Hsla,
+    /// Changed text/line
+    pub diff_changed: Hsla,
+    /// Inserted text/line
+    pub diff_inserted: Hsla,
+    /// Removed text/line
+    pub diff_removed: Hsla,
+
+    /// Debugging category
+
+    /// Breakpoint icon (red)
+    pub debug_breakpoint: Hsla,
+    /// Breakpoint line during execution (yellow)
+    pub debug_line: Hsla,
 }
 
 #[derive(Debug, Clone)]
@@ -230,14 +344,73 @@ impl Theme {
     }
 
     pub fn from_palette(name: &str, palette: Palette) -> Self {
+        // Create tokens that map 1:1 with Catppuccin's style guide
         let tokens = ThemeTokens {
+            // Background colors
             panel: palette.surface0,
             canvas: palette.surface0,
-            foreground: palette.base,
-            foreground_muted: palette.mantle,
-            foreground_disabled: palette.crust,
-            cursor: palette.surface0,
-            selected: palette.surface0,
+            background: palette.base,
+            background_secondary: palette.mantle,
+            surface0: palette.surface0,
+            surface1: palette.surface1,
+            surface2: palette.surface2,
+            overlay0: palette.overlay0,
+            overlay1: palette.overlay1,
+            overlay2: palette.overlay2,
+
+            // Typography
+            foreground: palette.text,
+            foreground_muted: palette.subtext0,
+            foreground_disabled: palette.subtext1,
+            subtext0: palette.subtext0,
+            subtext1: palette.subtext1,
+            link: palette.blue,
+            success: palette.green,
+            warning: palette.yellow,
+            error: palette.red,
+            tag: palette.blue,
+
+            // UI elements
+            cursor: palette.rosewater,
+            selected: palette.overlay2.alpha(0.3), // Selection background at 30% opacity
+            active_border: palette.lavender,
+            inactive_border: palette.overlay0,
+            bell_border: palette.yellow,
+
+            // Syntax highlighting
+            keyword: palette.mauve,
+            string: palette.green,
+            symbol: palette.red,
+            escape: palette.pink,
+            comment: palette.overlay2,
+            constant: palette.peach,
+            operator: palette.sky,
+            delimiter: palette.overlay2,
+            function: palette.blue,
+            parameter: palette.maroon,
+            builtin: palette.red,
+            type_name: palette.yellow,
+            enum_variant: palette.teal,
+            property: palette.blue,
+            attribute: palette.yellow,
+            macro_: palette.rosewater,
+
+            // Line highlighting
+            line_number: palette.overlay1,
+            active_line_number: palette.lavender,
+            cursor_line: palette.text.alpha(0.1), // Cursor line at 10% opacity
+
+            // Diff & Merge
+            diff_header: palette.blue,
+            diff_file_path: palette.pink,
+            diff_hunk_header: palette.peach,
+            diff_changed: palette.blue.alpha(0.2),
+            diff_inserted: palette.green.alpha(0.2),
+            diff_removed: palette.red.alpha(0.2),
+
+            // Debugging
+            debug_breakpoint: palette.red,
+            debug_line: palette.yellow.alpha(0.15),
         };
 
         Theme {
