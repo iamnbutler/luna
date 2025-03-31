@@ -1,8 +1,7 @@
 //! Properties inspector for selected elements.
 //!
-//! The inspector displays and allows editing of properties for selected elements
-//! in the canvas. It handles both single and multiple selections with appropriate
-//! UI for mixed values.
+//! The inspector displays and allows editing of properties
+//! for selected elements in the canvas.
 
 use std::collections::HashSet;
 
