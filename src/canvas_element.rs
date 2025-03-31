@@ -640,7 +640,8 @@ impl CanvasElement {
                         ),
                     };
                     
-                    // If there are multiple selected elements, use 20% opacity for individual selection outlines
+                    // Reduce outline opacity to 20% when multiple elements are selected to visually
+                    // de-emphasize individual selection indicators in favor of the group selection
                     let selection_color = if selected_node_ids.len() > 1 {
                         theme.tokens.active_border.opacity(0.2)
                     } else {
@@ -651,9 +652,10 @@ impl CanvasElement {
                 }
             }
             
-            // Draw a single selection rectangle around all selected elements if multiple are selected
+            // Render a unified bounding rectangle that encompasses all selected elements
+            // This provides a visual group representation when multiple items are selected
             if selected_node_ids.len() > 1 {
-                // Find the bounds that encompass all selected elements
+                // Calculate the axis-aligned bounding box (AABB) that contains all selected elements
                 let mut min_x = f32::MAX;
                 let mut min_y = f32::MAX;
                 let mut max_x = f32::MIN;

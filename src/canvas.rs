@@ -466,8 +466,11 @@ impl LunaCanvas {
         self.dirty = true;
     }
     
-    /// Save the initial positions of all selected nodes
-    /// Used when starting to drag multiple elements
+    /// Captures initial coordinates of all selected nodes in element_initial_positions
+    /// 
+    /// This method should be called at the start of an element drag operation to establish
+    /// a reference point for relative transformations. The stored positions are used by
+    /// move_selected_nodes_with_drag to preserve element relationships during movement.
     pub fn save_selected_nodes_positions(&mut self) {
         self.element_initial_positions.clear();
         
@@ -482,8 +485,15 @@ impl LunaCanvas {
         }
     }
     
-    /// Move selected nodes to new positions based on the drag delta
-    /// This preserves the relative positions of all elements
+    /// Transforms selected elements by applying the provided delta to their initial positions
+    /// 
+    /// This method operates on the captured initial positions, ensuring that multiple elements
+    /// maintain their relative spatial relationships during dragging. It also updates the
+    /// scene graph to reflect the visual changes.
+    /// 
+    /// # Arguments
+    /// * `delta` - The transformation vector to apply to all selected elements
+    /// * `cx` - Context used for scene graph updates
     pub fn move_selected_nodes_with_drag(&mut self, delta: Point<f32>, cx: &mut Context<Self>) {
         for node in &mut self.nodes {
             // Get the node ID first before any mutable borrows
