@@ -27,7 +27,7 @@ use crate::theme::Theme;
 use crate::AppState;
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
-    interactivity::ActiveDrag,
+    interactivity::{ActiveDrag, DragType},
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
     GlobalState, ToolKind,
@@ -151,20 +151,30 @@ impl CanvasElement {
             ToolKind::Selection => {
                 // Attempt to find a node at the clicked point
                 if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
-                    // Clicked on a node - select it
-
-                    // If shift is not pressed, clear current selection first
+                    // Check if we clicked on a node that's already selected
+                    let already_selected = canvas.is_node_selected(node_id);
+                    
+                    // If shift is not pressed, clear current selection first (unless clicking on already selected)
                     let modifiers = event.modifiers;
-                    if !modifiers.shift {
+                    if !modifiers.shift && !already_selected {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
                     // If shift is pressed and node is already selected, deselect it
-                    if modifiers.shift && canvas.is_node_selected(node_id) {
+                    if modifiers.shift && already_selected {
                         canvas.deselect_node(node_id);
                     } else {
                         // Otherwise select the node
                         canvas.select_node(node_id);
+                    }
+                    
+                    // If we clicked on a selected node, we should start dragging it
+                    if canvas.is_node_selected(node_id) {
+                        // Save initial positions of all selected elements
+                        canvas.save_selected_nodes_positions();
+                        
+                        // Start a move elements drag operation
+                        canvas.active_drag = Some(ActiveDrag::new_move_elements(position));
                     }
 
                     canvas.mark_dirty(cx);
@@ -175,10 +185,7 @@ impl CanvasElement {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
-                    canvas.active_drag = Some(ActiveDrag {
-                        start_position: position,
-                        current_position: position,
-                    });
+                    canvas.active_drag = Some(ActiveDrag::new_selection(position));
                     canvas.mark_dirty(cx);
                 }
             }
@@ -186,10 +193,7 @@ impl CanvasElement {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
-                let active_drag = ActiveDrag {
-                    start_position: position,
-                    current_position: position,
-                };
+                let active_drag = ActiveDrag::new_create_element(position);
                 canvas.active_element_draw = Some((new_node_id, NodeType::Rectangle, active_drag));
                 canvas.mark_dirty(cx);
             }
@@ -207,8 +211,6 @@ impl CanvasElement {
     ) {
         // check if selection is pending
         // if so, clear it and fire any selection events
-
-        println!("Left mouse up");
 
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
@@ -232,18 +234,10 @@ impl CanvasElement {
 
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
-                        // Get the global state for colors and sidebar info
-                        let state = GlobalState::get(cx);
-
                         // Convert window coordinates to canvas coordinates
                         let canvas_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
                         let rel_x = canvas_point.x;
                         let rel_y = canvas_point.y;
-
-                        println!(
-                            "Window coords: ({}, {}), Converted to canvas coords: ({}, {})",
-                            min_x, min_y, rel_x, rel_y
-                        );
 
                         // Create a new rectangle node
                         let mut rect = RectangleNode::new(node_id);
@@ -264,8 +258,21 @@ impl CanvasElement {
             }
         }
 
-        // End of drag, clean up any remaining selection
-        canvas.active_drag.take();
+        // Handle ending drag operations
+        if let Some(active_drag) = canvas.active_drag.take() {
+            match active_drag.drag_type {
+                DragType::MoveElements => {
+                    // Finalize the move by clearing initial positions
+                    canvas.element_initial_positions.clear();
+                },
+                DragType::Selection => {
+                    // Selection handling is already done in the drag handler
+                },
+                DragType::CreateElement => {
+                    // Element creation is handled above
+                }
+            }
+        }
 
         cx.stop_propagation();
     }
@@ -279,58 +286,75 @@ impl CanvasElement {
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
 
-        // Handle selection box if we're dragging with the selection tool
+        // Handle active drag operations
         if let Some(active_drag) = canvas.active_drag.take() {
             // Update the drag with new position
             let new_drag = ActiveDrag {
                 start_position: active_drag.start_position,
                 current_position: position,
+                drag_type: active_drag.drag_type.clone(),
             };
-            canvas.active_drag = Some(new_drag);
+            canvas.active_drag = Some(new_drag.clone());
 
-            // If we're using the selection tool, update the selection based on
-            // which nodes intersect with the selection rectangle
-            if canvas.active_tool == ToolKind::Selection {
-                // Calculate the selection rectangle in canvas coordinates
-                let start_pos = active_drag.start_position;
-                let min_x = start_pos.x.0.min(position.x.0);
-                let min_y = start_pos.y.0.min(position.y.0);
-                let max_x = start_pos.x.0.max(position.x.0);
-                let max_y = start_pos.y.0.max(position.y.0);
+            match new_drag.drag_type {
+                DragType::Selection => {
+                    // Handle selection rectangle
+                    if canvas.active_tool == ToolKind::Selection {
+                        // Calculate the selection rectangle in canvas coordinates
+                        let start_pos = active_drag.start_position;
+                        let min_x = start_pos.x.0.min(position.x.0);
+                        let min_y = start_pos.y.0.min(position.y.0);
+                        let max_x = start_pos.x.0.max(position.x.0);
+                        let max_y = start_pos.y.0.max(position.y.0);
 
-                // Convert to canvas coordinates
-                let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
-                let max_point = canvas.window_to_canvas_point(Point::new(max_x, max_y));
+                        // Convert to canvas coordinates
+                        let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
+                        let max_point = canvas.window_to_canvas_point(Point::new(max_x, max_y));
 
-                // Create selection bounds
-                let selection_bounds = Bounds {
-                    origin: min_point,
-                    size: Size::new(max_point.x - min_point.x, max_point.y - min_point.y),
-                };
+                        // Create selection bounds
+                        let selection_bounds = Bounds {
+                            origin: min_point,
+                            size: Size::new(max_point.x - min_point.x, max_point.y - min_point.y),
+                        };
 
-                // Pre-calculate all nodes that intersect with selection
-                let nodes_in_selection: HashSet<NodeId> = canvas
-                    .nodes
-                    .iter()
-                    .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
-                    .map(|node| node.id())
-                    .collect();
+                        // Pre-calculate all nodes that intersect with selection
+                        let nodes_in_selection: HashSet<NodeId> = canvas
+                            .nodes
+                            .iter()
+                            .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
+                            .map(|node| node.id())
+                            .collect();
 
-                // Check if we want to add to existing selection (shift pressed)
-                // or replace it (shift not pressed)
-                if event.modifiers.shift {
-                    // Add new nodes to selection
-                    for node_id in nodes_in_selection {
-                        canvas.select_node(node_id);
-                    }
-                } else {
-                    // Replace selection
-                    if nodes_in_selection != canvas.selected_nodes {
-                        canvas.clear_selection(&ClearSelection, window, cx);
-                        for node_id in nodes_in_selection {
-                            canvas.select_node(node_id);
+                        // Check if we want to add to existing selection (shift pressed)
+                        // or replace it (shift not pressed)
+                        if event.modifiers.shift {
+                            // Add new nodes to selection
+                            for node_id in nodes_in_selection {
+                                canvas.select_node(node_id);
+                            }
+                        } else {
+                            // Replace selection
+                            if nodes_in_selection != canvas.selected_nodes {
+                                canvas.clear_selection(&ClearSelection, window, cx);
+                                for node_id in nodes_in_selection {
+                                    canvas.select_node(node_id);
+                                }
+                            }
                         }
                     }
+                },
+                DragType::MoveElements => {
+                    // Move selected elements based on drag delta
+                    if !canvas.selected_nodes.is_empty() {
+                        // Calculate the drag delta in canvas coordinates
+                        let delta = new_drag.delta();
+                        
+                        // Move all selected nodes with the drag delta
+                        canvas.move_selected_nodes_with_drag(delta, cx);
+                    }
+                },
+                DragType::CreateElement => {
+                    // Nothing to do here - handled in the rectangle drawing code below
                 }
             }
 
@@ -344,6 +368,7 @@ impl CanvasElement {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
                         current_position: position,
+                        drag_type: DragType::CreateElement,
                     };
                     canvas.active_element_draw = Some((active_draw.0, active_draw.1, new_drag));
                     canvas.mark_dirty(cx);
@@ -373,6 +398,12 @@ impl CanvasElement {
         window: &mut Window,
         theme: &Theme,
     ) {
+        // Only draw selection rectangle if this is actually a selection drag
+        // Don't draw it when dragging elements
+        if active_drag.drag_type != DragType::Selection {
+            return;
+        }
+        
         let min_x = round_to_pixel(
             active_drag
                 .start_position
@@ -608,8 +639,56 @@ impl CanvasElement {
                             node_info.bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
-                    // Use active_border for selection outlines per style guide
-                    window.paint_quad(gpui::outline(selection_bounds, theme.tokens.active_border));
+                    
+                    // Reduce outline opacity to 20% when multiple elements are selected to visually
+                    // de-emphasize individual selection indicators in favor of the group selection
+                    let selection_color = if selected_node_ids.len() > 1 {
+                        theme.tokens.active_border.opacity(0.2)
+                    } else {
+                        theme.tokens.active_border
+                    };
+                    
+                    window.paint_quad(gpui::outline(selection_bounds, selection_color));
+                }
+            }
+            
+            // Render a unified bounding rectangle that encompasses all selected elements
+            // This provides a visual group representation when multiple items are selected
+            if selected_node_ids.len() > 1 {
+                // Calculate the axis-aligned bounding box (AABB) that contains all selected elements
+                let mut min_x = f32::MAX;
+                let mut min_y = f32::MAX;
+                let mut max_x = f32::MIN;
+                let mut max_y = f32::MIN;
+                
+                for node_info in &nodes_to_render {
+                    if selected_node_ids.contains(&node_info.node_id) {
+                        min_x = min_x.min(node_info.bounds.origin.x.0);
+                        min_y = min_y.min(node_info.bounds.origin.y.0);
+                        max_x = max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
+                        max_y = max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
+                    }
+                }
+                
+                // Only draw if we found valid bounds
+                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN {
+                    // Create the group selection bounds with some padding
+                    let group_selection_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            gpui::Pixels(min_x - 5.0),
+                            gpui::Pixels(min_y - 5.0),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(max_x - min_x + 10.0),
+                            gpui::Pixels(max_y - min_y + 10.0),
+                        ),
+                    };
+                    
+                    // Draw the group selection rectangle
+                    window.paint_quad(gpui::outline(
+                        group_selection_bounds, 
+                        theme.tokens.active_border
+                    ));
                 }
             }
 
