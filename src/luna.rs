@@ -13,7 +13,7 @@ use node::NodeCommon;
 use scene_graph::SceneGraph;
 use std::{fs, path::PathBuf, sync::Arc};
 use strum::Display;
-use theme::{GlobalTheme, Theme};
+use theme::{ActiveTheme, GlobalTheme, Theme};
 use tools::ToolKind;
 use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
 use util::keystroke_builder;
@@ -109,8 +109,8 @@ impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let app_state = cx.new(|cx| AppState {
             active_tool: ToolKind::Selection,
-            current_border_color: gpui::black().opacity(0.24),
-            current_background_color: gpui::white(),
+            current_border_color: cx.theme().tokens.overlay0,
+            current_background_color: cx.theme().tokens.surface0,
         });
         let focus_handle = cx.focus_handle();
         let scene_graph = cx.new(|cx| SceneGraph::new());
