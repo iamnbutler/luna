@@ -114,37 +114,33 @@ fn parse_length(value: &str) -> Option<f32> {
 
 /// Parse a CSS color value into an Hsla
 ///
-/// Supports hex colors and rgb() format
+/// Supports:
+/// - Hex colors (#RGB, #RRGGBB)
+/// - RGB/RGBA format (rgb(r,g,b), rgba(r,g,b,a))
+/// - Named colors (red, green, blue, transparent, etc.)
 fn parse_color(value: &str) -> Option<Hsla> {
     let value = value.trim().to_lowercase();
+    
+    // Handle transparent special case
+    if value == "transparent" {
+        return Some(Hsla { h: 0.0, s: 0.0, l: 0.0, a: 0.0 });
+    }
     
     // Handle hex colors
     if value.starts_with('#') {
         return parse_hex_color(&value);
     }
     
-    // Handle rgb()
+    // Handle rgba() format
+    if value.starts_with("rgba(") && value.ends_with(')') {
+        let rgba = &value[5..value.len()-1];
+        return parse_rgba_components(rgba);
+    }
+    
+    // Handle rgb() format
     if value.starts_with("rgb(") && value.ends_with(')') {
         let rgb = &value[4..value.len()-1];
-        let parts: Vec<&str> = rgb.split(',').collect();
-        
-        if parts.len() >= 3 {
-            let r = parts[0].trim().parse::<u8>().ok()? as f32 / 255.0;
-            let g = parts[1].trim().parse::<u8>().ok()? as f32 / 255.0;
-            let b = parts[2].trim().parse::<u8>().ok()? as f32 / 255.0;
-            let a = if parts.len() > 3 {
-                parts[3].trim().parse::<f32>().unwrap_or(1.0)
-            } else {
-                1.0
-            };
-            
-            return Some(Hsla {
-                h: 0.0, // We're not accurately converting RGB to HSL
-                s: 0.0, // This is a simplification
-                l: (r + g + b) / 3.0, // Just using average as lightness
-                a,
-            });
-        }
+        return parse_rgba_components(rgb);
     }
     
     // Handle named colors
@@ -154,8 +150,85 @@ fn parse_color(value: &str) -> Option<Hsla> {
         "red" => Some(Hsla { h: 0.0, s: 1.0, l: 0.5, a: 1.0 }),
         "green" => Some(Hsla { h: 0.33, s: 1.0, l: 0.5, a: 1.0 }),
         "blue" => Some(Hsla { h: 0.67, s: 1.0, l: 0.5, a: 1.0 }),
+        "yellow" => Some(Hsla { h: 0.17, s: 1.0, l: 0.5, a: 1.0 }),
+        "cyan" => Some(Hsla { h: 0.5, s: 1.0, l: 0.5, a: 1.0 }),
+        "magenta" => Some(Hsla { h: 0.83, s: 1.0, l: 0.5, a: 1.0 }),
+        "gray" | "grey" => Some(Hsla { h: 0.0, s: 0.0, l: 0.5, a: 1.0 }),
         _ => None,
     }
+}
+
+/// Parse RGB or RGBA components from a string
+fn parse_rgba_components(components: &str) -> Option<Hsla> {
+    let parts: Vec<&str> = components.split(',').collect();
+    
+    if parts.len() >= 3 {
+        // Parse RGB components
+        let r = parse_rgb_component(parts[0])?;
+        let g = parse_rgb_component(parts[1])?;
+        let b = parse_rgb_component(parts[2])?;
+        
+        // Parse alpha component if present
+        let a = if parts.len() > 3 {
+            parts[3].trim().parse::<f32>().ok().unwrap_or(1.0)
+        } else {
+            1.0
+        };
+        
+        // Convert RGB to HSL (more accurate conversion)
+        let (h, s, l) = rgb_to_hsl(r, g, b);
+        
+        return Some(Hsla { h, s, l, a });
+    }
+    
+    None
+}
+
+/// Parse a single RGB component which can be a number (0-255) or percentage
+fn parse_rgb_component(value: &str) -> Option<f32> {
+    let value = value.trim();
+    
+    if value.ends_with('%') {
+        // Handle percentage value
+        value[..value.len() - 1].parse::<f32>().ok().map(|v| v / 100.0)
+    } else {
+        // Handle numeric value (0-255)
+        value.parse::<u8>().ok().map(|v| v as f32 / 255.0)
+    }
+}
+
+/// Convert RGB to HSL colorspace
+/// 
+/// Returns (hue, saturation, lightness) tuple with values in the range [0, 1]
+fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let max = r.max(g.max(b));
+    let min = r.min(g.min(b));
+    let delta = max - min;
+    
+    // Calculate lightness
+    let l = (max + min) / 2.0;
+    
+    // Calculate saturation
+    let s = if delta.abs() < f32::EPSILON {
+        0.0 // Achromatic (gray)
+    } else {
+        delta / (1.0 - (2.0 * l - 1.0).abs())
+    };
+    
+    // Calculate hue
+    let h = if delta.abs() < f32::EPSILON {
+        0.0 // Achromatic (gray)
+    } else if max == r {
+        let segment = (g - b) / delta;
+        let shift = if segment < 0.0 { 6.0 } else { 0.0 };
+        (segment + shift) / 6.0
+    } else if max == g {
+        ((b - r) / delta + 2.0) / 6.0
+    } else {
+        ((r - g) / delta + 4.0) / 6.0
+    };
+    
+    (h, s, l)
 }
 
 /// Parse a hex color into an Hsla
@@ -168,12 +241,8 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
         let g = u8::from_str_radix(&hex[1..2], 16).ok()? as f32 / 15.0;
         let b = u8::from_str_radix(&hex[2..3], 16).ok()? as f32 / 15.0;
         
-        return Some(Hsla {
-            h: 0.0, // Again, a simplification
-            s: 0.0,
-            l: (r + g + b) / 3.0,
-            a: 1.0,
-        });
+        let (h, s, l) = rgb_to_hsl(r, g, b);
+        return Some(Hsla { h, s, l, a: 1.0 });
     }
     
     // Handle #RRGGBB format
@@ -182,12 +251,19 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
         let g = u8::from_str_radix(&hex[2..4], 16).ok()? as f32 / 255.0;
         let b = u8::from_str_radix(&hex[4..6], 16).ok()? as f32 / 255.0;
         
-        return Some(Hsla {
-            h: 0.0, // This would ideally be a proper RGB to HSL conversion
-            s: 0.0,
-            l: (r + g + b) / 3.0,
-            a: 1.0,
-        });
+        let (h, s, l) = rgb_to_hsl(r, g, b);
+        return Some(Hsla { h, s, l, a: 1.0 });
+    }
+    
+    // Handle #RRGGBBAA format
+    if hex.len() == 8 {
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()? as f32 / 255.0;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()? as f32 / 255.0;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()? as f32 / 255.0;
+        let a = u8::from_str_radix(&hex[6..8], 16).ok()? as f32 / 255.0;
+        
+        let (h, s, l) = rgb_to_hsl(r, g, b);
+        return Some(Hsla { h, s, l, a });
     }
     
     None
