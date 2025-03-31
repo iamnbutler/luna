@@ -1,3 +1,20 @@
+//! # Scene Graph System
+//!
+//! The scene graph is a core architectural component that provides spatial organization
+//! for visual elements in Luna. It implements a hierarchical tree structure that efficiently
+//! manages transformations, visibility, and spatial operations.
+//!
+//! ## Key Concepts
+//!
+//! - **Scene Nodes**: Hierarchical nodes that form the structure of the graph
+//! - **Transformations**: Each node has local and world transformations that propagate through the hierarchy
+//! - **Bounds Computation**: Automatic calculation of axis-aligned bounding boxes in world space
+//! - **Data Mapping**: Bi-directional mapping between scene nodes and data model nodes
+//!
+//! The scene graph is separated from the actual data model, functioning purely as a spatial
+//! organization layer. This separation of concerns allows the data model to focus on properties
+//! and relationships while the scene graph handles coordinate systems and transformations.
+
 #![allow(unused, dead_code)]
 use crate::node::NodeId;
 use gpui::{Bounds, Point, Size, TransformationMatrix};
@@ -222,7 +239,15 @@ impl SceneGraph {
         }
     }
 
-    /// Updates the world transform for a node and all its children
+    /// Updates the world transform for a node and all its children recursively
+    ///
+    /// This method recalculates the absolute (world) transformation matrix for the specified node
+    /// by composing its local transformation with its parent's world transformation. The update
+    /// propagates to all child nodes to maintain transformation hierarchy integrity.
+    ///
+    /// The implementation carefully manages borrowing to avoid conflicts when recursively
+    /// processing the node hierarchy, first collecting necessary information before modifying
+    /// any nodes.
     fn update_world_transform(&mut self, node_id: SceneNodeId) {
         // First gather all the information we need to avoid borrowing issues
         let (parent_transform, local_transform, children) = {
@@ -263,7 +288,18 @@ impl SceneGraph {
         }
     }
 
-    /// Updates the world bounds for a node based on its local bounds and world transform
+    /// Computes the axis-aligned bounding box (AABB) in world space
+    ///
+    /// This method transforms the four corners of a node's local bounds using its world
+    /// transformation matrix, then calculates the minimum axis-aligned rectangle that
+    /// contains all transformed points. This is essential for efficient spatial queries
+    /// like hit testing and visibility culling.
+    ///
+    /// The algorithm:
+    /// 1. Extracts the local bounds and world transform
+    /// 2. Transforms each corner of the local bounds to world space
+    /// 3. Computes the min/max coordinates to form an AABB
+    /// 4. Updates the node's world_bounds property
     ///
     /// # Arguments
     /// * `node_id` - The ID of the node to update
@@ -368,7 +404,22 @@ impl SceneGraph {
         }
     }
 
-    /// Checks if a node is an ancestor of another node
+    /// Determines if a node is an ancestor of another node in the hierarchy
+    ///
+    /// This method traverses the parent chain of the descendant node upward
+    /// to determine if the specified node exists in its ancestry. This check
+    /// is critical for preventing cycles during hierarchy modifications, which
+    /// would create infinite loops during transformation propagation.
+    ///
+    /// The algorithm uses iterative parent traversal rather than recursion
+    /// to handle arbitrary depth hierarchies efficiently.
+    ///
+    /// # Arguments
+    /// * `node_id` - The potential ancestor node
+    /// * `descendant_id` - The potential descendant node 
+    ///
+    /// # Returns
+    /// `true` if node_id is an ancestor of descendant_id, `false` otherwise
     fn is_ancestor(&self, node_id: SceneNodeId, descendant_id: SceneNodeId) -> bool {
         let mut current = Some(descendant_id);
         while let Some(id) = current {
