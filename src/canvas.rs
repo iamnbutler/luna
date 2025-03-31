@@ -91,6 +91,11 @@ pub struct LunaCanvas {
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
     pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
+    
+    /// The initial positions of selected elements before dragging
+    /// Used to calculate relative positions when dragging multiple elements
+    pub element_initial_positions: HashMap<NodeId, Point<f32>>,
+    
     pub theme: Theme,
 }
 
@@ -134,6 +139,7 @@ impl LunaCanvas {
             active_tool: ToolKind::default(),
             active_drag: None,
             active_element_draw: None,
+            element_initial_positions: HashMap::new(),
             theme: theme.clone(),
         };
 
@@ -454,6 +460,63 @@ impl LunaCanvas {
                 let layout = node.layout_mut();
                 layout.x += delta.x;
                 layout.y += delta.y;
+            }
+        }
+
+        self.dirty = true;
+    }
+    
+    /// Save the initial positions of all selected nodes
+    /// Used when starting to drag multiple elements
+    pub fn save_selected_nodes_positions(&mut self) {
+        self.element_initial_positions.clear();
+        
+        for node in &self.nodes {
+            if self.selected_nodes.contains(&node.id()) {
+                let layout = node.layout();
+                self.element_initial_positions.insert(
+                    node.id(),
+                    Point::new(layout.x, layout.y)
+                );
+            }
+        }
+    }
+    
+    /// Move selected nodes to new positions based on the drag delta
+    /// This preserves the relative positions of all elements
+    pub fn move_selected_nodes_with_drag(&mut self, delta: Point<f32>, cx: &mut Context<Self>) {
+        for node in &mut self.nodes {
+            // Get the node ID first before any mutable borrows
+            let node_id = node.id();
+            
+            if self.selected_nodes.contains(&node_id) {
+                if let Some(initial_pos) = self.element_initial_positions.get(&node_id) {
+                    // First, update the layout
+                    let layout = node.layout_mut();
+                    layout.x = initial_pos.x + delta.x;
+                    layout.y = initial_pos.y + delta.y;
+                    
+                    // Store values we need before releasing the mutable borrow
+                    let new_x = layout.x;
+                    let new_y = layout.y;
+                    let width = layout.width;
+                    let height = layout.height;
+                    
+                    // Update the scene graph bounds
+                    if let Some(scene_node_id) = self.scene_graph.update(cx, |sg, _cx| {
+                        sg.get_scene_node_id(node_id)
+                    }) {
+                        self.scene_graph.update(cx, |sg, _cx| {
+                            sg.set_local_bounds(
+                                scene_node_id,
+                                Bounds {
+                                    origin: Point::new(new_x, new_y),
+                                    size: Size::new(width, height),
+                                }
+                            );
+                        });
+                    }
+                }
             }
         }
 
