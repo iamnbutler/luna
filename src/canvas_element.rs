@@ -124,7 +124,8 @@ impl CanvasElement {
         };
 
         // Test each node to see if it contains this point
-        for node in &canvas.nodes {
+        // Iterate in reverse order to match the painting order (last node is visually on top)
+        for node in canvas.nodes.iter().rev() {
             let node_bounds = node.bounds();
             if node_bounds.contains(&canvas_point) {
                 return Some(node.id());
