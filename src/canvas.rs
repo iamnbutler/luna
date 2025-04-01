@@ -64,6 +64,9 @@ pub struct LunaCanvas {
 
     /// Currently selected nodes
     pub selected_nodes: HashSet<NodeId>,
+    
+    /// Currently hovered node (for hover effects)
+    pub hovered_node: Option<NodeId>,
 
     /// The visible viewport of the canvas in canvas coordinates
     viewport: Bounds<f32>,
@@ -141,6 +144,7 @@ impl LunaCanvas {
             active_element_draw: None,
             element_initial_positions: HashMap::new(),
             theme: theme.clone(),
+            hovered_node: None,
         };
 
         // Load rectangles from CSS file
