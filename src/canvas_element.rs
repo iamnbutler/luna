@@ -124,7 +124,8 @@ impl CanvasElement {
         };
 
         // Test each node to see if it contains this point
-        for node in &canvas.nodes {
+        // Iterate in reverse order to match the painting order (last node is visually on top)
+        for node in canvas.nodes.iter().rev() {
             let node_bounds = node.bounds();
             if node_bounds.contains(&canvas_point) {
                 return Some(node.id());
@@ -153,7 +154,7 @@ impl CanvasElement {
                 if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
                     // Check if we clicked on a node that's already selected
                     let already_selected = canvas.is_node_selected(node_id);
-                    
+
                     // If shift is not pressed, clear current selection first (unless clicking on already selected)
                     let modifiers = event.modifiers;
                     if !modifiers.shift && !already_selected {
@@ -167,12 +168,12 @@ impl CanvasElement {
                         // Otherwise select the node
                         canvas.select_node(node_id);
                     }
-                    
+
                     // If we clicked on a selected node, we should start dragging it
                     if canvas.is_node_selected(node_id) {
                         // Save initial positions of all selected elements
                         canvas.save_selected_nodes_positions();
-                        
+
                         // Start a move elements drag operation
                         canvas.active_drag = Some(ActiveDrag::new_move_elements(position));
                     }
@@ -264,10 +265,10 @@ impl CanvasElement {
                 DragType::MoveElements => {
                     // Finalize the move by clearing initial positions
                     canvas.element_initial_positions.clear();
-                },
+                }
                 DragType::Selection => {
                     // Selection handling is already done in the drag handler
-                },
+                }
                 DragType::CreateElement => {
                     // Element creation is handled above
                 }
@@ -342,17 +343,17 @@ impl CanvasElement {
                             }
                         }
                     }
-                },
+                }
                 DragType::MoveElements => {
                     // Move selected elements based on drag delta
                     if !canvas.selected_nodes.is_empty() {
                         // Calculate the drag delta in canvas coordinates
                         let delta = new_drag.delta();
-                        
+
                         // Move all selected nodes with the drag delta
                         canvas.move_selected_nodes_with_drag(delta, cx);
                     }
-                },
+                }
                 DragType::CreateElement => {
                     // Nothing to do here - handled in the rectangle drawing code below
                 }
@@ -384,11 +385,17 @@ impl CanvasElement {
         window: &mut Window,
         cx: &mut Context<LunaCanvas>,
     ) {
-        // if canvas.position_has_hitbox()  {
-        // handle hover event
-        // } else {
-        // return
-        // }
+        let position = event.position;
+        let canvas_point = point(position.x.0, position.y.0);
+
+        // Find node under cursor for hover effect
+        let hovered = Self::find_top_node_at_point(canvas, canvas_point, cx);
+
+        // Only update and redraw if hover state changed
+        if canvas.hovered_node != hovered {
+            canvas.hovered_node = hovered;
+            canvas.mark_dirty(cx);
+        }
     }
 
     fn paint_selection(
@@ -403,7 +410,7 @@ impl CanvasElement {
         if active_drag.drag_type != DragType::Selection {
             return;
         }
-        
+
         let min_x = round_to_pixel(
             active_drag
                 .start_position
@@ -563,43 +570,45 @@ impl CanvasElement {
         }
 
         // Get all the data we need in one place
-        let (nodes_to_render, theme, selected_node_ids) = canvas.update(cx, |canvas, cx| {
-            let visible_nodes = canvas.visible_nodes(cx);
-            let scene_graph = canvas.scene_graph().read(cx);
-            let selected_nodes = canvas.selected_nodes.clone();
-            let theme = canvas.theme.clone();
+        let (nodes_to_render, theme, selected_node_ids, hovered_node) =
+            canvas.update(cx, |canvas, cx| {
+                let visible_nodes = canvas.visible_nodes(cx);
+                let scene_graph = canvas.scene_graph().read(cx);
+                let selected_nodes = canvas.selected_nodes.clone();
+                let theme = canvas.theme.clone();
+                let hovered_node = canvas.hovered_node.clone();
 
-            // Collect all node rendering information into owned structures
-            let mut nodes_to_render = Vec::new();
+                // Collect all node rendering information into owned structures
+                let mut nodes_to_render = Vec::new();
 
-            for node in visible_nodes {
-                let node_id = node.id();
+                for node in visible_nodes {
+                    let node_id = node.id();
 
-                if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
-                    if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
-                        nodes_to_render.push(NodeRenderInfo {
-                            node_id,
-                            bounds: gpui::Bounds {
-                                origin: gpui::Point::new(
-                                    gpui::Pixels(world_bounds.origin.x),
-                                    gpui::Pixels(world_bounds.origin.y),
-                                ),
-                                size: gpui::Size::new(
-                                    gpui::Pixels(world_bounds.size.width),
-                                    gpui::Pixels(world_bounds.size.height),
-                                ),
-                            },
-                            fill_color: node.fill(),
-                            border_color: node.border_color(),
-                            border_width: node.border_width(),
-                            corner_radius: node.corner_radius(),
-                        });
+                    if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
+                        if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
+                            nodes_to_render.push(NodeRenderInfo {
+                                node_id,
+                                bounds: gpui::Bounds {
+                                    origin: gpui::Point::new(
+                                        gpui::Pixels(world_bounds.origin.x),
+                                        gpui::Pixels(world_bounds.origin.y),
+                                    ),
+                                    size: gpui::Size::new(
+                                        gpui::Pixels(world_bounds.size.width),
+                                        gpui::Pixels(world_bounds.size.height),
+                                    ),
+                                },
+                                fill_color: node.fill(),
+                                border_color: node.border_color(),
+                                border_width: node.border_width(),
+                                corner_radius: node.corner_radius(),
+                            });
+                        }
                     }
                 }
-            }
 
-            (nodes_to_render, theme, selected_nodes)
-        });
+                (nodes_to_render, theme, selected_nodes, hovered_node)
+            });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Paint each node with its transformation from the scene graph
@@ -639,7 +648,7 @@ impl CanvasElement {
                             node_info.bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
-                    
+
                     // Reduce outline opacity to 20% when multiple elements are selected to visually
                     // de-emphasize individual selection indicators in favor of the group selection
                     let selection_color = if selected_node_ids.len() > 1 {
@@ -647,11 +656,29 @@ impl CanvasElement {
                     } else {
                         theme.tokens.active_border
                     };
-                    
+
                     window.paint_quad(gpui::outline(selection_bounds, selection_color));
                 }
+                // Draw hover indicator if the node is hovered but not selected
+                else if hovered_node.as_ref() == Some(&node_info.node_id) {
+                    // Create a slightly larger bounds for hover indicator
+                    let hover_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+
+                    let hover_color = theme.tokens.active_border.opacity(0.6);
+
+                    window.paint_quad(gpui::outline(hover_bounds, hover_color));
+                }
             }
-            
+
             // Render a unified bounding rectangle that encompasses all selected elements
             // This provides a visual group representation when multiple items are selected
             if selected_node_ids.len() > 1 {
@@ -660,18 +687,21 @@ impl CanvasElement {
                 let mut min_y = f32::MAX;
                 let mut max_x = f32::MIN;
                 let mut max_y = f32::MIN;
-                
+
                 for node_info in &nodes_to_render {
                     if selected_node_ids.contains(&node_info.node_id) {
                         min_x = min_x.min(node_info.bounds.origin.x.0);
                         min_y = min_y.min(node_info.bounds.origin.y.0);
-                        max_x = max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
-                        max_y = max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
+                        max_x =
+                            max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
+                        max_y =
+                            max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
                     }
                 }
-                
+
                 // Only draw if we found valid bounds
-                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN {
+                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN
+                {
                     // Create the group selection bounds with some padding
                     let group_selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -683,11 +713,11 @@ impl CanvasElement {
                             gpui::Pixels(max_y - min_y + 10.0),
                         ),
                     };
-                    
+
                     // Draw the group selection rectangle
                     window.paint_quad(gpui::outline(
-                        group_selection_bounds, 
-                        theme.tokens.active_border
+                        group_selection_bounds,
+                        theme.tokens.active_border,
                     ));
                 }
             }
