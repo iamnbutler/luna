@@ -8,19 +8,15 @@ use gpui::{
 use gpui::{point, size, Bounds, Point, Size};
 use std::collections::HashSet;
 
-/// Enum representing different layers for deferred rendering
+/// Defines z-ordering for rendering layers with reserved index ranges
 ///
-/// Each variant represents a layer with its own z-index range.
-/// Values for each layer should be within their designated range:
+/// Z-indices are allocated in blocks of 10,000 per layer:
 /// - Canvas: 10000-19999
 /// - CanvasOverlay: 20000-29999
 /// - CanvasModal: 30000-39999
 /// - UI: 40000-49999
 /// - UIOverlay: 50000-59999
 /// - UIModal: 60000-69999
-///
-/// Using these distinct ranges ensures that, for example, all CanvasOverlay
-/// elements will appear on top of all Canvas elements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DeferIndex {
     /// Canvas elements (base layer) - 10000-19999
@@ -94,7 +90,7 @@ impl DeferIndex {
     pub const RESIZE_HANDLES: Self = Self::CanvasOverlay(100);
 }
 
-/// Helper function to check if two bounds rectangles intersect
+/// Tests for AABB intersection between two bounds
 fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     // Check if one rectangle is to the left of the other
     if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
@@ -109,8 +105,7 @@ fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     true
 }
 
-/// Helper function to check if a point is within a resize handle
-/// Returns the handle if the point is inside, None otherwise
+/// Detects if a point intersects with a resize handle on the node boundaries
 fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Option<ResizeHandle> {
     use ResizeHandle;
 
@@ -268,10 +263,7 @@ impl CanvasElement {
         // Convert window coordinate to canvas coordinate
         let canvas_point = canvas.window_to_canvas_point(window_point);
 
-        // Instead of trying to access the private canvas_node directly,
-        // we'll use the existing node methods to find a node at this point
-
-        // Let's create a selection area of 1x1 pixels at the point
+        // Direct node testing with 1x1 selection point for hit detection
         let select_point_bounds = Bounds {
             origin: canvas_point,
             size: Size::new(1.0, 1.0),
@@ -667,7 +659,6 @@ impl CanvasElement {
                                     }
                                 }
                                 ResizeHandle::BottomRight => {
-                                    // Both width and height changes are positive
                                     let width_delta = delta.x;
                                     let height_delta = delta.y;
 
@@ -1066,13 +1057,10 @@ impl CanvasElement {
 
                     // Only draw resize handles if this is the only selected node
                     if selected_node_ids.len() == 1 {
-                        // Draw resize handles (7x7 px squares) at each corner
                         const HANDLE_SIZE: f32 = 7.0;
                         const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
 
-                        // Define the four corner positions
-                        // Position handles centered on the selection outline (not inset)
-                        // For 7px handle (HANDLE_SIZE), we want 3px outside and 3px inside
+                        // Center handles on the selection outline
                         let corners = [
                             // Top-left
                             (
@@ -1100,7 +1088,6 @@ impl CanvasElement {
                             ),
                         ];
 
-                        // Draw each resize handle
                         for (x, y) in corners {
                             let handle_bounds = gpui::Bounds {
                                 origin: gpui::Point::new(x, y),
@@ -1110,7 +1097,6 @@ impl CanvasElement {
                                 ),
                             };
 
-                            // White fill with selection color border
                             window.paint_quad(gpui::fill(
                                 handle_bounds,
                                 gpui::hsla(0.0, 0.0, 1.0, 1.0),
@@ -1156,7 +1142,6 @@ impl CanvasElement {
                         ),
                     };
 
-                    // Draw the group selection rectangle last, so it's on top of everything
                     window.paint_quad(gpui::outline(
                         group_selection_bounds,
                         theme.tokens.active_border,

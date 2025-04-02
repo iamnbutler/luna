@@ -235,10 +235,8 @@ impl LunaCanvas {
     pub fn add_node(&mut self, node: RectangleNode, cx: &mut Context<Self>) -> NodeId {
         let node_id = node.id();
 
-        // Add to flat data structure first
         self.nodes.push(node);
 
-        // Create scene node for this data node in the scene graph
         self.scene_graph.update(cx, |sg, _cx| {
             // Create scene node as child of canvas node
             let scene_node = sg.create_node(Some(self.canvas_node), Some(node_id));
@@ -547,9 +545,7 @@ impl LunaCanvas {
     pub fn set_scroll_position(&mut self, position: Point<f32>, cx: &mut Context<Self>) {
         self.scroll_position = position;
 
-        // Update canvas root transform
         self.scene_graph.update(cx, |sg, _cx| {
-            // Create a transform that applies zoom and scroll
             let transform = TransformationMatrix::unit()
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
@@ -569,7 +565,6 @@ impl LunaCanvas {
 
         // Update canvas root transform
         self.scene_graph.update(cx, |sg, _cx| {
-            // Create a transform that applies zoom and scroll
             let transform = TransformationMatrix::unit()
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
@@ -611,7 +606,7 @@ impl LunaCanvas {
     }
 }
 
-/// Helper function to check if two bounds rectangles intersect
+/// Tests for AABB intersection between two bounds
 fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     // Check if one rectangle is to the left of the other
     if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
