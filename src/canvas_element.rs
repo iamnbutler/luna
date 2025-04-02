@@ -1017,7 +1017,9 @@ impl CanvasElement {
                 }
 
                 // Process hover effects (only for non-selected nodes)
-                if hovered_node.as_ref() == Some(&node_info.node_id) && !selected_node_ids.contains(&node_info.node_id) {
+                if hovered_node.as_ref() == Some(&node_info.node_id)
+                    && !selected_node_ids.contains(&node_info.node_id)
+                {
                     // Create a slightly larger bounds for hover indicator
                     let hover_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -1035,9 +1037,9 @@ impl CanvasElement {
                 }
             }
 
-            // SECOND PASS: Paint all selection outlines and resize handles 
+            // SECOND PASS: Paint all selection outlines and resize handles
             // ===========================================================
-            
+
             // First draw individual selection outlines
             for node_info in &nodes_to_render {
                 if selected_node_ids.contains(&node_info.node_id) {
@@ -1069,30 +1071,32 @@ impl CanvasElement {
                         const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
 
                         // Define the four corner positions
+                        // Position handles centered on the selection outline (not inset)
+                        // For 7px handle (HANDLE_SIZE), we want 3px outside and 3px inside
                         let corners = [
                             // Top-left
                             (
-                                node_info.bounds.origin.x - gpui::Pixels(HALF_HANDLE),
-                                node_info.bounds.origin.y - gpui::Pixels(HALF_HANDLE),
+                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
                             ),
                             // Top-right
                             (
-                                node_info.bounds.origin.x + node_info.bounds.size.width
-                                    - gpui::Pixels(HALF_HANDLE),
-                                node_info.bounds.origin.y - gpui::Pixels(HALF_HANDLE),
+                                selection_bounds.origin.x + selection_bounds.size.width
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
                             ),
                             // Bottom-left
                             (
-                                node_info.bounds.origin.x - gpui::Pixels(HALF_HANDLE),
-                                node_info.bounds.origin.y + node_info.bounds.size.height
-                                    - gpui::Pixels(HALF_HANDLE),
+                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.y + selection_bounds.size.height
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
                             ),
                             // Bottom-right
                             (
-                                node_info.bounds.origin.x + node_info.bounds.size.width
-                                    - gpui::Pixels(HALF_HANDLE),
-                                node_info.bounds.origin.y + node_info.bounds.size.height
-                                    - gpui::Pixels(HALF_HANDLE),
+                                selection_bounds.origin.x + selection_bounds.size.width
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                selection_bounds.origin.y + selection_bounds.size.height
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
                             ),
                         ];
 
@@ -1130,13 +1134,16 @@ impl CanvasElement {
                     if selected_node_ids.contains(&node_info.node_id) {
                         min_x = min_x.min(node_info.bounds.origin.x.0);
                         min_y = min_y.min(node_info.bounds.origin.y.0);
-                        max_x = max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
-                        max_y = max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
+                        max_x =
+                            max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
+                        max_y =
+                            max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
                     }
                 }
 
                 // Only draw if we found valid bounds
-                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN {
+                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN
+                {
                     // Create the group selection bounds with some padding
                     let group_selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
