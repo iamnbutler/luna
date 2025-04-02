@@ -1,4 +1,5 @@
 #![allow(unused, dead_code)]
+use crate::interactivity::{ResizeHandle, ResizeOperation};
 use gpui::{
     hsla, prelude::*, px, relative, App, ContentMask, DispatchPhase, ElementId, Entity, Focusable,
     Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
@@ -7,7 +8,89 @@ use gpui::{
 use gpui::{point, size, Bounds, Point, Size};
 use std::collections::HashSet;
 
-/// Helper function to check if two bounds rectangles intersect
+/// Defines z-ordering for rendering layers with reserved index ranges
+///
+/// Z-indices are allocated in blocks of 10,000 per layer:
+/// - Canvas: 10000-19999
+/// - CanvasOverlay: 20000-29999
+/// - CanvasModal: 30000-39999
+/// - UI: 40000-49999
+/// - UIOverlay: 50000-59999
+/// - UIModal: 60000-69999
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DeferIndex {
+    /// Canvas elements (base layer) - 10000-19999
+    Canvas(usize),
+    /// Canvas overlay elements (selection, resize handles) - 20000-29999
+    CanvasOverlay(usize),
+    /// Canvas modal elements (dialogs specific to canvas) - 30000-39999
+    CanvasModal(usize),
+    /// UI elements (toolbar, panels) - 40000-49999
+    UI(usize),
+    /// UI overlay elements (tooltips, dropdowns) - 50000-59999
+    UIOverlay(usize),
+    /// UI modal elements (dialogs, popups) - 60000-69999
+    UIModal(usize),
+}
+
+impl DeferIndex {
+    // Base values for each layer
+    const CANVAS_BASE: usize = 10000;
+    const CANVAS_OVERLAY_BASE: usize = 20000;
+    const CANVAS_MODAL_BASE: usize = 30000;
+    const UI_BASE: usize = 40000;
+    const UI_OVERLAY_BASE: usize = 50000;
+    const UI_MODAL_BASE: usize = 60000;
+
+    // Maximum allowed index within a layer (10,000 values per layer)
+    const MAX_LAYER_INDEX: usize = 9999;
+
+    /// Returns the absolute priority value for use with GPUI's defer_draw
+    pub fn priority(&self) -> usize {
+        match *self {
+            DeferIndex::Canvas(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "Canvas index out of range");
+                Self::CANVAS_BASE + idx
+            }
+            DeferIndex::CanvasOverlay(idx) => {
+                assert!(
+                    idx <= Self::MAX_LAYER_INDEX,
+                    "CanvasOverlay index out of range"
+                );
+                Self::CANVAS_OVERLAY_BASE + idx
+            }
+            DeferIndex::CanvasModal(idx) => {
+                assert!(
+                    idx <= Self::MAX_LAYER_INDEX,
+                    "CanvasModal index out of range"
+                );
+                Self::CANVAS_MODAL_BASE + idx
+            }
+            DeferIndex::UI(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UI index out of range");
+                Self::UI_BASE + idx
+            }
+            DeferIndex::UIOverlay(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UIOverlay index out of range");
+                Self::UI_OVERLAY_BASE + idx
+            }
+            DeferIndex::UIModal(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UIModal index out of range");
+                Self::UI_MODAL_BASE + idx
+            }
+        }
+    }
+
+    /// Canvas layer constants
+    pub const CANVAS_BG: Self = Self::Canvas(0);
+    pub const CANVAS_NODES: Self = Self::Canvas(1000);
+
+    /// Canvas overlay constants
+    pub const SELECTION_OUTLINE: Self = Self::CanvasOverlay(0);
+    pub const RESIZE_HANDLES: Self = Self::CanvasOverlay(100);
+}
+
+/// Tests for AABB intersection between two bounds
 fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     // Check if one rectangle is to the left of the other
     if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
@@ -20,6 +103,72 @@ fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     }
 
     true
+}
+
+/// Detects if a point intersects with a resize handle on the node boundaries
+fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Option<ResizeHandle> {
+    use ResizeHandle;
+
+    // Define handle size and boundaries
+    const HANDLE_SIZE: f32 = 7.0;
+    const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
+
+    // Create bounds for each corner handle
+    let handles = [
+        // Top left
+        (
+            Bounds {
+                origin: Point::new(
+                    node_bounds.origin.x - HALF_HANDLE,
+                    node_bounds.origin.y - HALF_HANDLE,
+                ),
+                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
+            },
+            ResizeHandle::TopLeft,
+        ),
+        // Top right
+        (
+            Bounds {
+                origin: Point::new(
+                    node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
+                    node_bounds.origin.y - HALF_HANDLE,
+                ),
+                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
+            },
+            ResizeHandle::TopRight,
+        ),
+        // Bottom left
+        (
+            Bounds {
+                origin: Point::new(
+                    node_bounds.origin.x - HALF_HANDLE,
+                    node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
+                ),
+                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
+            },
+            ResizeHandle::BottomLeft,
+        ),
+        // Bottom right
+        (
+            Bounds {
+                origin: Point::new(
+                    node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
+                    node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
+                ),
+                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
+            },
+            ResizeHandle::BottomRight,
+        ),
+    ];
+
+    // Check if point is inside any handle
+    for (bounds, handle) in handles {
+        if bounds.contains(&point) {
+            return Some(handle);
+        }
+    }
+
+    None
 }
 
 use crate::scene_graph::SceneGraph;
@@ -114,10 +263,7 @@ impl CanvasElement {
         // Convert window coordinate to canvas coordinate
         let canvas_point = canvas.window_to_canvas_point(window_point);
 
-        // Instead of trying to access the private canvas_node directly,
-        // we'll use the existing node methods to find a node at this point
-
-        // Let's create a selection area of 1x1 pixels at the point
+        // Direct node testing with 1x1 selection point for hit detection
         let select_point_bounds = Bounds {
             origin: canvas_point,
             size: Size::new(1.0, 1.0),
@@ -150,6 +296,43 @@ impl CanvasElement {
 
         match canvas.active_tool {
             ToolKind::Selection => {
+                // First, check if we've clicked on a resize handle when only a single node is selected
+                if canvas.selected_nodes.len() == 1 {
+                    // Get the bounds of the selected node
+                    let selected_node_id = *canvas.selected_nodes.iter().next().unwrap();
+                    if let Some(node) = canvas.nodes.iter().find(|n| n.id() == selected_node_id) {
+                        let node_layout = node.layout();
+
+                        // Create node bounds to check for resize handle hits
+                        let node_bounds = Bounds {
+                            origin: Point::new(node_layout.x, node_layout.y),
+                            size: Size::new(node_layout.width, node_layout.height),
+                        };
+
+                        // Convert canvas point to world coordinates for hit detection
+                        let world_point = canvas.window_to_canvas_point(canvas_point);
+
+                        // Check if the point is within any resize handle
+                        if let Some(handle) = point_in_resize_handle(world_point, &node_bounds) {
+                            // Create a resize operation with the original node dimensions
+                            let resize_op = ResizeOperation::new(
+                                handle,
+                                node_layout.x,
+                                node_layout.y,
+                                node_layout.width,
+                                node_layout.height,
+                            );
+
+                            // Start a resize drag operation
+                            canvas.active_drag = Some(ActiveDrag::new_resize(position, resize_op));
+                            canvas.mark_dirty(cx);
+                            cx.stop_propagation();
+                            return;
+                        }
+                    }
+                }
+
+                // If we didn't hit a resize handle, proceed with normal selection behavior
                 // Attempt to find a node at the clicked point
                 if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
                     // Check if we clicked on a node that's already selected
@@ -272,6 +455,10 @@ impl CanvasElement {
                 DragType::CreateElement => {
                     // Element creation is handled above
                 }
+                DragType::Resize(_) => {
+                    // Finalize the resize operation - nothing special needed here
+                    // The resize has already been applied to the node during drag
+                }
             }
         }
 
@@ -357,6 +544,187 @@ impl CanvasElement {
                 DragType::CreateElement => {
                     // Nothing to do here - handled in the rectangle drawing code below
                 }
+                DragType::Resize(mut resize_op) => {
+                    // Handle resize operation
+                    if canvas.selected_nodes.len() == 1 {
+                        // Get the zoom value before any mutable borrows
+                        let zoom = canvas.zoom();
+
+                        // Get the selected node
+                        let selected_node_id = *canvas.selected_nodes.iter().next().unwrap();
+                        if let Some(node) =
+                            canvas.nodes.iter_mut().find(|n| n.id() == selected_node_id)
+                        {
+                            // Convert window delta to canvas delta
+                            let delta = Point::new(
+                                (position.x.0 - active_drag.start_position.x.0) / zoom,
+                                (position.y.0 - active_drag.start_position.y.0) / zoom,
+                            );
+
+                            // Check modifiers: shift for aspect ratio, option (alt) for resize from center
+                            let preserve_aspect_ratio = event.modifiers.shift;
+                            let resize_from_center = event.modifiers.alt;
+
+                            // Update resize config
+                            resize_op.config.preserve_aspect_ratio = preserve_aspect_ratio;
+                            resize_op.config.resize_from_center = resize_from_center;
+
+                            // Calculate new dimensions based on resize handle and modifiers
+                            let mut new_x = resize_op.original_x;
+                            let mut new_y = resize_op.original_y;
+                            let mut new_width = resize_op.original_width;
+                            let mut new_height = resize_op.original_height;
+
+                            // Calculate aspect ratio if needed
+                            let aspect_ratio = if preserve_aspect_ratio {
+                                resize_op.original_width / resize_op.original_height
+                            } else {
+                                0.0 // Not used when not preserving aspect ratio
+                            };
+
+                            // Adjust dimensions based on which handle is being dragged
+                            match resize_op.handle {
+                                ResizeHandle::TopLeft => {
+                                    // Width/height change is negative of delta for top-left
+                                    let width_delta = -delta.x;
+                                    let height_delta = -delta.y;
+
+                                    if preserve_aspect_ratio {
+                                        // Use whichever delta would make the shape larger
+                                        if width_delta.abs() / aspect_ratio > height_delta.abs() {
+                                            let adj_height = width_delta / aspect_ratio;
+                                            new_width = resize_op.original_width + width_delta;
+                                            new_height = resize_op.original_height + adj_height;
+                                            new_x = resize_op.original_x - width_delta;
+                                            new_y = resize_op.original_y - adj_height;
+                                        } else {
+                                            let adj_width = height_delta * aspect_ratio;
+                                            new_width = resize_op.original_width + adj_width;
+                                            new_height = resize_op.original_height + height_delta;
+                                            new_x = resize_op.original_x - adj_width;
+                                            new_y = resize_op.original_y - height_delta;
+                                        }
+                                    } else {
+                                        // Standard resize without aspect ratio constraint
+                                        new_width = resize_op.original_width + width_delta;
+                                        new_height = resize_op.original_height + height_delta;
+                                        new_x = resize_op.original_x - width_delta;
+                                        new_y = resize_op.original_y - height_delta;
+                                    }
+                                }
+                                ResizeHandle::TopRight => {
+                                    // Width change is positive, height change is negative
+                                    let width_delta = delta.x;
+                                    let height_delta = -delta.y;
+
+                                    if preserve_aspect_ratio {
+                                        if width_delta.abs() / aspect_ratio > height_delta.abs() {
+                                            let adj_height = width_delta / aspect_ratio;
+                                            new_width = resize_op.original_width + width_delta;
+                                            new_height = resize_op.original_height + adj_height;
+                                            new_y = resize_op.original_y - adj_height;
+                                        } else {
+                                            let adj_width = height_delta * aspect_ratio;
+                                            new_width = resize_op.original_width + adj_width;
+                                            new_height = resize_op.original_height + height_delta;
+                                            new_y = resize_op.original_y - height_delta;
+                                        }
+                                    } else {
+                                        new_width = resize_op.original_width + width_delta;
+                                        new_height = resize_op.original_height + height_delta;
+                                        new_y = resize_op.original_y - height_delta;
+                                    }
+                                }
+                                ResizeHandle::BottomLeft => {
+                                    // Width change is negative, height change is positive
+                                    let width_delta = -delta.x;
+                                    let height_delta = delta.y;
+
+                                    if preserve_aspect_ratio {
+                                        if width_delta.abs() / aspect_ratio > height_delta.abs() {
+                                            let adj_height = width_delta / aspect_ratio;
+                                            new_width = resize_op.original_width + width_delta;
+                                            new_height = resize_op.original_height + adj_height;
+                                            new_x = resize_op.original_x - width_delta;
+                                        } else {
+                                            let adj_width = height_delta * aspect_ratio;
+                                            new_width = resize_op.original_width + adj_width;
+                                            new_height = resize_op.original_height + height_delta;
+                                            new_x = resize_op.original_x - adj_width;
+                                        }
+                                    } else {
+                                        new_width = resize_op.original_width + width_delta;
+                                        new_height = resize_op.original_height + height_delta;
+                                        new_x = resize_op.original_x - width_delta;
+                                    }
+                                }
+                                ResizeHandle::BottomRight => {
+                                    let width_delta = delta.x;
+                                    let height_delta = delta.y;
+
+                                    if preserve_aspect_ratio {
+                                        if width_delta.abs() / aspect_ratio > height_delta.abs() {
+                                            let adj_height = width_delta / aspect_ratio;
+                                            new_width = resize_op.original_width + width_delta;
+                                            new_height = resize_op.original_height + adj_height;
+                                        } else {
+                                            let adj_width = height_delta * aspect_ratio;
+                                            new_width = resize_op.original_width + adj_width;
+                                            new_height = resize_op.original_height + height_delta;
+                                        }
+                                    } else {
+                                        new_width = resize_op.original_width + width_delta;
+                                        new_height = resize_op.original_height + height_delta;
+                                    }
+                                }
+                            }
+
+                            // If resize from center is enabled, adjust position to keep center fixed
+                            if resize_from_center {
+                                let orig_center_x =
+                                    resize_op.original_x + resize_op.original_width / 2.0;
+                                let orig_center_y =
+                                    resize_op.original_y + resize_op.original_height / 2.0;
+                                new_x = orig_center_x - new_width / 2.0;
+                                new_y = orig_center_y - new_height / 2.0;
+                            }
+
+                            // Ensure minimum dimensions (prevent negative width/height)
+                            if new_width > 1.0 && new_height > 1.0 {
+                                // Update node dimensions
+                                let layout = node.layout_mut();
+                                layout.x = new_x;
+                                layout.y = new_y;
+                                layout.width = new_width;
+                                layout.height = new_height;
+
+                                // Update scene graph
+                                if let Some(scene_node_id) = canvas
+                                    .scene_graph()
+                                    .update(cx, |sg, _cx| sg.get_scene_node_id(selected_node_id))
+                                {
+                                    canvas.scene_graph().update(cx, |sg, _cx| {
+                                        sg.set_local_bounds(
+                                            scene_node_id,
+                                            Bounds {
+                                                origin: Point::new(new_x, new_y),
+                                                size: Size::new(new_width, new_height),
+                                            },
+                                        );
+                                    });
+                                }
+                            }
+
+                            // Update the resize operation in the drag
+                            let updated_drag = ActiveDrag {
+                                start_position: active_drag.start_position,
+                                current_position: position,
+                                drag_type: DragType::Resize(resize_op),
+                            };
+                            canvas.active_drag = Some(updated_drag);
+                        }
+                    }
+                }
             }
 
             canvas.mark_dirty(cx);
@@ -407,8 +775,11 @@ impl CanvasElement {
     ) {
         // Only draw selection rectangle if this is actually a selection drag
         // Don't draw it when dragging elements
-        if active_drag.drag_type != DragType::Selection {
-            return;
+        match active_drag.drag_type {
+            DragType::Selection => {
+                // Continue with drawing the selection rectangle
+            }
+            _ => return, // Don't draw for other drag types
         }
 
         let min_x = round_to_pixel(
@@ -611,7 +982,8 @@ impl CanvasElement {
             });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            // Paint each node with its transformation from the scene graph
+            // FIRST PASS: Paint all nodes and hover effects
+            // ==============================================
             for node_info in &nodes_to_render {
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
@@ -635,32 +1007,10 @@ impl CanvasElement {
                     });
                 }
 
-                // Draw selection indicator if the node is selected
-                if selected_node_ids.contains(&node_info.node_id) {
-                    // Create a slightly larger bounds for selection indicator
-                    let selection_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
-                        ),
-                        size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
-                        ),
-                    };
-
-                    // Reduce outline opacity to 20% when multiple elements are selected to visually
-                    // de-emphasize individual selection indicators in favor of the group selection
-                    let selection_color = if selected_node_ids.len() > 1 {
-                        theme.tokens.active_border.opacity(0.2)
-                    } else {
-                        theme.tokens.active_border
-                    };
-
-                    window.paint_quad(gpui::outline(selection_bounds, selection_color));
-                }
-                // Draw hover indicator if the node is hovered but not selected
-                else if hovered_node.as_ref() == Some(&node_info.node_id) {
+                // Process hover effects (only for non-selected nodes)
+                if hovered_node.as_ref() == Some(&node_info.node_id)
+                    && !selected_node_ids.contains(&node_info.node_id)
+                {
                     // Create a slightly larger bounds for hover indicator
                     let hover_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -674,13 +1024,91 @@ impl CanvasElement {
                     };
 
                     let hover_color = theme.tokens.active_border.opacity(0.6);
-
                     window.paint_quad(gpui::outline(hover_bounds, hover_color));
                 }
             }
 
-            // Render a unified bounding rectangle that encompasses all selected elements
-            // This provides a visual group representation when multiple items are selected
+            // SECOND PASS: Paint all selection outlines and resize handles
+            // ===========================================================
+
+            // First draw individual selection outlines
+            for node_info in &nodes_to_render {
+                if selected_node_ids.contains(&node_info.node_id) {
+                    // Create a slightly larger bounds for selection indicator
+                    let selection_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+
+                    // Reduce outline opacity to 20% when multiple elements are selected
+                    let selection_color = if selected_node_ids.len() > 1 {
+                        theme.tokens.active_border.opacity(0.2)
+                    } else {
+                        theme.tokens.active_border
+                    };
+
+                    window.paint_quad(gpui::outline(selection_bounds, selection_color));
+
+                    // Only draw resize handles if this is the only selected node
+                    if selected_node_ids.len() == 1 {
+                        const HANDLE_SIZE: f32 = 7.0;
+                        const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
+
+                        // Center handles on the selection outline
+                        let corners = [
+                            // Top-left
+                            (
+                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
+                            ),
+                            // Top-right
+                            (
+                                selection_bounds.origin.x + selection_bounds.size.width
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
+                            ),
+                            // Bottom-left
+                            (
+                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.y + selection_bounds.size.height
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                            ),
+                            // Bottom-right
+                            (
+                                selection_bounds.origin.x + selection_bounds.size.width
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                selection_bounds.origin.y + selection_bounds.size.height
+                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                            ),
+                        ];
+
+                        for (x, y) in corners {
+                            let handle_bounds = gpui::Bounds {
+                                origin: gpui::Point::new(x, y),
+                                size: gpui::Size::new(
+                                    gpui::Pixels(HANDLE_SIZE),
+                                    gpui::Pixels(HANDLE_SIZE),
+                                ),
+                            };
+
+                            window.paint_quad(gpui::fill(
+                                handle_bounds,
+                                gpui::hsla(0.0, 0.0, 1.0, 1.0),
+                            ));
+                            window.paint_quad(gpui::outline(handle_bounds, selection_color));
+                        }
+                    }
+                }
+            }
+
+            // THIRD PASS: Draw the group selection outline (if multiple nodes are selected)
+            // =========================================================================
             if selected_node_ids.len() > 1 {
                 // Calculate the axis-aligned bounding box (AABB) that contains all selected elements
                 let mut min_x = f32::MAX;
@@ -714,7 +1142,6 @@ impl CanvasElement {
                         ),
                     };
 
-                    // Draw the group selection rectangle
                     window.paint_quad(gpui::outline(
                         group_selection_bounds,
                         theme.tokens.active_border,
