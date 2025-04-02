@@ -8,6 +8,92 @@ use gpui::{
 use gpui::{point, size, Bounds, Point, Size};
 use std::collections::HashSet;
 
+/// Enum representing different layers for deferred rendering
+///
+/// Each variant represents a layer with its own z-index range.
+/// Values for each layer should be within their designated range:
+/// - Canvas: 10000-19999
+/// - CanvasOverlay: 20000-29999
+/// - CanvasModal: 30000-39999
+/// - UI: 40000-49999
+/// - UIOverlay: 50000-59999
+/// - UIModal: 60000-69999
+///
+/// Using these distinct ranges ensures that, for example, all CanvasOverlay
+/// elements will appear on top of all Canvas elements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DeferIndex {
+    /// Canvas elements (base layer) - 10000-19999
+    Canvas(usize),
+    /// Canvas overlay elements (selection, resize handles) - 20000-29999
+    CanvasOverlay(usize),
+    /// Canvas modal elements (dialogs specific to canvas) - 30000-39999
+    CanvasModal(usize),
+    /// UI elements (toolbar, panels) - 40000-49999
+    UI(usize),
+    /// UI overlay elements (tooltips, dropdowns) - 50000-59999
+    UIOverlay(usize),
+    /// UI modal elements (dialogs, popups) - 60000-69999
+    UIModal(usize),
+}
+
+impl DeferIndex {
+    // Base values for each layer
+    const CANVAS_BASE: usize = 10000;
+    const CANVAS_OVERLAY_BASE: usize = 20000;
+    const CANVAS_MODAL_BASE: usize = 30000;
+    const UI_BASE: usize = 40000;
+    const UI_OVERLAY_BASE: usize = 50000;
+    const UI_MODAL_BASE: usize = 60000;
+
+    // Maximum allowed index within a layer (10,000 values per layer)
+    const MAX_LAYER_INDEX: usize = 9999;
+
+    /// Returns the absolute priority value for use with GPUI's defer_draw
+    pub fn priority(&self) -> usize {
+        match *self {
+            DeferIndex::Canvas(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "Canvas index out of range");
+                Self::CANVAS_BASE + idx
+            }
+            DeferIndex::CanvasOverlay(idx) => {
+                assert!(
+                    idx <= Self::MAX_LAYER_INDEX,
+                    "CanvasOverlay index out of range"
+                );
+                Self::CANVAS_OVERLAY_BASE + idx
+            }
+            DeferIndex::CanvasModal(idx) => {
+                assert!(
+                    idx <= Self::MAX_LAYER_INDEX,
+                    "CanvasModal index out of range"
+                );
+                Self::CANVAS_MODAL_BASE + idx
+            }
+            DeferIndex::UI(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UI index out of range");
+                Self::UI_BASE + idx
+            }
+            DeferIndex::UIOverlay(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UIOverlay index out of range");
+                Self::UI_OVERLAY_BASE + idx
+            }
+            DeferIndex::UIModal(idx) => {
+                assert!(idx <= Self::MAX_LAYER_INDEX, "UIModal index out of range");
+                Self::UI_MODAL_BASE + idx
+            }
+        }
+    }
+
+    /// Canvas layer constants
+    pub const CANVAS_BG: Self = Self::Canvas(0);
+    pub const CANVAS_NODES: Self = Self::Canvas(1000);
+
+    /// Canvas overlay constants
+    pub const SELECTION_OUTLINE: Self = Self::CanvasOverlay(0);
+    pub const RESIZE_HANDLES: Self = Self::CanvasOverlay(100);
+}
+
 /// Helper function to check if two bounds rectangles intersect
 fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
     // Check if one rectangle is to the left of the other
@@ -905,7 +991,8 @@ impl CanvasElement {
             });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            // Paint each node with its transformation from the scene graph
+            // FIRST PASS: Paint all nodes and hover effects
+            // ==============================================
             for node_info in &nodes_to_render {
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
@@ -929,7 +1016,30 @@ impl CanvasElement {
                     });
                 }
 
-                // Draw selection indicator if the node is selected
+                // Process hover effects (only for non-selected nodes)
+                if hovered_node.as_ref() == Some(&node_info.node_id) && !selected_node_ids.contains(&node_info.node_id) {
+                    // Create a slightly larger bounds for hover indicator
+                    let hover_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+
+                    let hover_color = theme.tokens.active_border.opacity(0.6);
+                    window.paint_quad(gpui::outline(hover_bounds, hover_color));
+                }
+            }
+
+            // SECOND PASS: Paint all selection outlines and resize handles 
+            // ===========================================================
+            
+            // First draw individual selection outlines
+            for node_info in &nodes_to_render {
                 if selected_node_ids.contains(&node_info.node_id) {
                     // Create a slightly larger bounds for selection indicator
                     let selection_bounds = gpui::Bounds {
@@ -943,8 +1053,7 @@ impl CanvasElement {
                         ),
                     };
 
-                    // Reduce outline opacity to 20% when multiple elements are selected to visually
-                    // de-emphasize individual selection indicators in favor of the group selection
+                    // Reduce outline opacity to 20% when multiple elements are selected
                     let selection_color = if selected_node_ids.len() > 1 {
                         theme.tokens.active_border.opacity(0.2)
                     } else {
@@ -1006,28 +1115,10 @@ impl CanvasElement {
                         }
                     }
                 }
-                // Draw hover indicator if the node is hovered but not selected
-                else if hovered_node.as_ref() == Some(&node_info.node_id) {
-                    // Create a slightly larger bounds for hover indicator
-                    let hover_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
-                        ),
-                        size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
-                        ),
-                    };
-
-                    let hover_color = theme.tokens.active_border.opacity(0.6);
-
-                    window.paint_quad(gpui::outline(hover_bounds, hover_color));
-                }
             }
 
-            // Render a unified bounding rectangle that encompasses all selected elements
-            // This provides a visual group representation when multiple items are selected
+            // THIRD PASS: Draw the group selection outline (if multiple nodes are selected)
+            // =========================================================================
             if selected_node_ids.len() > 1 {
                 // Calculate the axis-aligned bounding box (AABB) that contains all selected elements
                 let mut min_x = f32::MAX;
@@ -1039,16 +1130,13 @@ impl CanvasElement {
                     if selected_node_ids.contains(&node_info.node_id) {
                         min_x = min_x.min(node_info.bounds.origin.x.0);
                         min_y = min_y.min(node_info.bounds.origin.y.0);
-                        max_x =
-                            max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
-                        max_y =
-                            max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
+                        max_x = max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
+                        max_y = max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
                     }
                 }
 
                 // Only draw if we found valid bounds
-                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN
-                {
+                if min_x != f32::MAX && min_y != f32::MAX && max_x != f32::MIN && max_y != f32::MIN {
                     // Create the group selection bounds with some padding
                     let group_selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -1061,7 +1149,7 @@ impl CanvasElement {
                         ),
                     };
 
-                    // Draw the group selection rectangle
+                    // Draw the group selection rectangle last, so it's on top of everything
                     window.paint_quad(gpui::outline(
                         group_selection_bounds,
                         theme.tokens.active_border,
