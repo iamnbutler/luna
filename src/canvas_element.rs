@@ -1,9 +1,9 @@
 #![allow(unused, dead_code)]
 use crate::interactivity::{ResizeHandle, ResizeOperation};
 use gpui::{
-    hsla, prelude::*, px, relative, App, ContentMask, DispatchPhase, ElementId, Entity, Focusable,
-    Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
-    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
+    hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
+    Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, size, Bounds, Point, Size};
 use std::collections::HashSet;
@@ -808,7 +808,11 @@ impl CanvasElement {
             };
 
             window.paint_quad(gpui::fill(rect_bounds, theme.tokens.overlay2.opacity(0.25)));
-            window.paint_quad(gpui::outline(rect_bounds, theme.tokens.active_border));
+            window.paint_quad(gpui::outline(
+                rect_bounds,
+                theme.tokens.active_border,
+                BorderStyle::Solid,
+            ));
             window.request_animation_frame();
         });
     }
@@ -850,7 +854,11 @@ impl CanvasElement {
         let app_state = app_state_entity.read(cx);
 
         window.paint_quad(gpui::fill(rect_bounds, app_state.current_background_color));
-        window.paint_quad(gpui::outline(rect_bounds, app_state.current_border_color));
+        window.paint_quad(gpui::outline(
+            rect_bounds,
+            app_state.current_border_color,
+            BorderStyle::Solid,
+        ));
         window.request_animation_frame();
     }
 
@@ -993,6 +1001,7 @@ impl CanvasElement {
                         background: fill_color.into(),
                         border_widths: (0.).into(),
                         border_color: gpui::transparent_black().into(),
+                        border_style: BorderStyle::Solid,
                     });
                 }
 
@@ -1004,6 +1013,7 @@ impl CanvasElement {
                         background: gpui::transparent_black().into(),
                         border_widths: (node_info.border_width).into(),
                         border_color: border_color.into(),
+                        border_style: BorderStyle::Solid,
                     });
                 }
 
@@ -1024,7 +1034,7 @@ impl CanvasElement {
                     };
 
                     let hover_color = theme.tokens.active_border.opacity(0.6);
-                    window.paint_quad(gpui::outline(hover_bounds, hover_color));
+                    window.paint_quad(gpui::outline(hover_bounds, hover_color, BorderStyle::Solid));
                 }
             }
 
@@ -1053,7 +1063,11 @@ impl CanvasElement {
                         theme.tokens.active_border
                     };
 
-                    window.paint_quad(gpui::outline(selection_bounds, selection_color));
+                    window.paint_quad(gpui::outline(
+                        selection_bounds,
+                        selection_color,
+                        BorderStyle::Solid,
+                    ));
 
                     // Only draw resize handles if this is the only selected node
                     if selected_node_ids.len() == 1 {
@@ -1101,7 +1115,11 @@ impl CanvasElement {
                                 handle_bounds,
                                 gpui::hsla(0.0, 0.0, 1.0, 1.0),
                             ));
-                            window.paint_quad(gpui::outline(handle_bounds, selection_color));
+                            window.paint_quad(gpui::outline(
+                                handle_bounds,
+                                selection_color,
+                                BorderStyle::Solid,
+                            ));
                         }
                     }
                 }
@@ -1145,6 +1163,7 @@ impl CanvasElement {
                     window.paint_quad(gpui::outline(
                         group_selection_bounds,
                         theme.tokens.active_border,
+                        BorderStyle::Solid,
                     ));
                 }
             }
