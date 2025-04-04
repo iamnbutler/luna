@@ -1,0 +1,9 @@
+[
+  {
+    "label": "Luna (LLDB)",
+    "adapter": "LLDB",
+    "program": "/Users/natebutler/code/luna/target/debug/luna",
+    "request": "launch",
+    "cwd": "/Users/natebutler/code/luna/"
+  }
+]
