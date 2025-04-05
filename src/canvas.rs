@@ -172,6 +172,10 @@ impl LunaCanvas {
                 if index == 1 {
                     node_to_select = Some(node_id);
                 }
+
+                // Make sure our next_id is higher than any loaded ID to prevent collisions
+                // NodeId stores an internal usize, so we access it with .0
+                canvas.next_id = canvas.next_id.max(node_id.0 + 1);
             }
         } else {
             // Fallback to creating a single default rectangle if CSS loading fails
@@ -180,6 +184,10 @@ impl LunaCanvas {
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
             let node_id = canvas.add_node(rect, cx);
+            
+            // Make sure our next_id is higher than the ID we just used
+            canvas.next_id = canvas.next_id.max(node_id.0 + 1);
+            
             node_to_select = Some(node_id);
         }
 
@@ -197,6 +205,7 @@ impl LunaCanvas {
     pub fn generate_id(&mut self) -> NodeId {
         let id = NodeId::new(self.next_id);
         self.next_id += 1;
+        println!("Generated new node ID: {}", id); // Debug logging
         id
     }
 
