@@ -51,6 +51,7 @@ mod util;
 actions!(
     luna,
     [
+        Cancel,
         Copy,
         Cut,
         Delete,
@@ -192,6 +193,7 @@ impl Luna {
         cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
         cx.notify();
     }
+
     fn activate_rectangle_tool(
         &mut self,
         _: &RectangleTool,
@@ -201,6 +203,7 @@ impl Luna {
         cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
         cx.notify();
     }
+
     fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, cx| {
             canvas.select_all_nodes();
@@ -208,7 +211,6 @@ impl Luna {
         cx.notify();
     }
 
-    // Handler for the Delete action
     fn delete_selected_nodes(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, cx| {
             let selected_nodes = canvas
@@ -222,6 +224,19 @@ impl Luna {
             }
             canvas.mark_dirty(cx);
         });
+    }
+
+    fn handle_cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
+        let active_tool = *cx.active_tool().clone();
+
+        if active_tool == Tool::Selection {
+            self.canvas.update(cx, |canvas, cx| {
+                canvas.deselect_all_nodes(cx);
+                canvas.mark_dirty(cx);
+            });
+        } else {
+            cx.dispatch_action(&SelectionTool);
+        }
     }
 }
 
@@ -247,6 +262,9 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
+            .on_key_down(|event, _, _| {
+                dbg!(event.keystroke.clone());
+            })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
                 Tool::Frame | Tool::Rectangle | Tool::Line | Tool::TextCursor => {
@@ -259,6 +277,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .on_action(cx.listener(Self::select_all_nodes))
             .on_action(cx.listener(Self::delete_selected_nodes))
+            .on_action(cx.listener(Self::handle_cancel))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
@@ -298,6 +317,7 @@ fn main() {
                 KeyBinding::new("h", HandTool, None),
                 KeyBinding::new("a", SelectionTool, None),
                 KeyBinding::new("r", RectangleTool, None),
+                KeyBinding::new("escape", Cancel, None),
                 KeyBinding::new("delete", Delete, None),
                 KeyBinding::new("backspace", Delete, None),
                 KeyBinding::new("cmd-a", SelectAll, None),

@@ -676,6 +676,11 @@ impl LunaCanvas {
         key_context.set("canvas", "Canvas");
         key_context
     }
+
+    pub fn deselect_all_nodes(&mut self, cx: &mut Context<Self>) {
+        self.selected_nodes.clear();
+        self.mark_dirty(cx);
+    }
 }
 
 /// Tests for AABB intersection between two bounds
