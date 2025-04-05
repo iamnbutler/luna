@@ -372,7 +372,10 @@ impl CanvasElement {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
-                    canvas.set_active_drag(ActiveDrag::new_selection(position));
+                    // Only start a selection drag if using the Selection tool
+                    if *active_tool == Tool::Selection {
+                        canvas.set_active_drag(ActiveDrag::new_selection(position));
+                    }
                     canvas.mark_dirty(cx);
                 }
             }
@@ -488,6 +491,13 @@ impl CanvasElement {
                 drag_type: active_drag.drag_type.clone(),
             };
             canvas.set_active_drag(new_drag.clone());
+
+            // For any non-Selection tool, only allow specific drag types
+            if active_tool != Tool::Selection && matches!(new_drag.drag_type, DragType::Selection) {
+                // If using a non-Selection tool but having a Selection drag, cancel it
+                canvas.clear_active_drag();
+                return;
+            }
 
             match new_drag.drag_type {
                 DragType::Selection => {

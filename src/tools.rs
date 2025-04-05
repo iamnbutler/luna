@@ -180,10 +180,12 @@ impl RenderOnce for ToolButton {
             .when(!self.disabled, |div| {
                 div.hover(|div| div.bg(theme.tokens.surface1)) // Use surface1 for hover background
             })
-            // .on_click(move |_, _, cx| {
-            //     let tool_kind = tool_kind.clone();
-            //     GlobalState::update_global(cx, |state, _| state.active_tool = tool_kind.clone())
-            // })
+            .when(!self.disabled, |div| {
+                let tool = tool_kind.clone();
+                div.on_click(move |_event, _phase, cx2| {
+                    cx2.set_global(GlobalTool(Arc::new(tool.clone())));
+                })
+            })
             .child(
                 svg()
                     .path(self.tool_kind.src())
