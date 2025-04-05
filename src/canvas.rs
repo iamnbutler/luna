@@ -5,7 +5,7 @@ use crate::{
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     scene_graph::{SceneGraph, SceneNodeId},
     theme::Theme,
-    AppState, ToolKind,
+    AppState, Tool,
 };
 use gpui::{
     actions, canvas as gpui_canvas, div, hsla, point, prelude::*, px, size, Action, App, Bounds,
@@ -64,7 +64,7 @@ pub struct LunaCanvas {
 
     /// Currently selected nodes
     pub selected_nodes: HashSet<NodeId>,
-    
+
     /// Currently hovered node (for hover effects)
     pub hovered_node: Option<NodeId>,
 
@@ -89,16 +89,16 @@ pub struct LunaCanvas {
     focus_handle: FocusHandle,
     pub actions:
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
-    pub active_tool: ToolKind,
+    pub active_tool: Tool,
     pub active_drag: Option<ActiveDrag>,
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
     pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
-    
+
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
     pub element_initial_positions: HashMap<NodeId, Point<f32>>,
-    
+
     pub theme: Theme,
 }
 
@@ -139,7 +139,7 @@ impl LunaCanvas {
             dirty: true,
             focus_handle: cx.focus_handle(),
             actions: Rc::default(),
-            active_tool: ToolKind::default(),
+            active_tool: Tool::default(),
             active_drag: None,
             active_element_draw: None,
             element_initial_positions: HashMap::new(),
@@ -151,24 +151,25 @@ impl LunaCanvas {
         let app_state_read = app_state.read(cx);
         let current_background_color = app_state_read.current_background_color;
         let current_border_color = app_state_read.current_border_color;
-        
+
         // Try to load the CSS file from assets
         let mut node_to_select = None;
-        
+
         if let Ok(css_content) = std::fs::read_to_string("assets/css/sample_nodes.css") {
             // Use our CSS parser to create rectangle nodes
             let mut factory = crate::node::NodeFactory::default();
-            let rectangles = crate::css_parser::parse_rectangles_from_css_file(&css_content, &mut factory);
-            
+            let rectangles =
+                crate::css_parser::parse_rectangles_from_css_file(&css_content, &mut factory);
+
             // Add all rectangles to the canvas
             for (index, mut rect) in rectangles.into_iter().enumerate() {
                 // Override the colors with the current theme colors if needed
                 rect.set_fill(Some(current_background_color));
                 rect.set_border(Some(current_border_color), rect.border_width());
-                
+
                 // Add the node and capture the ID
                 let node_id = canvas.add_node(rect, cx);
-                
+
                 // Select the second node (index 1) if it exists
                 if index == 1 {
                     node_to_select = Some(node_id);
@@ -183,7 +184,7 @@ impl LunaCanvas {
             let node_id = canvas.add_node(rect, cx);
             node_to_select = Some(node_id);
         }
-        
+
         // Select a node if we have one
         if let Some(node_id) = node_to_select {
             canvas.select_node(node_id);
@@ -219,11 +220,11 @@ impl LunaCanvas {
         Point::new(window_x, window_y)
     }
 
-    pub fn active_tool(&self) -> &ToolKind {
+    pub fn active_tool(&self) -> &Tool {
         &self.active_tool
     }
 
-    pub fn set_active_tool(&mut self, tool: ToolKind) {
+    pub fn set_active_tool(&mut self, tool: Tool) {
         self.active_tool = tool;
     }
 
@@ -467,32 +468,30 @@ impl LunaCanvas {
 
         self.dirty = true;
     }
-    
+
     /// Captures initial coordinates of all selected nodes in element_initial_positions
-    /// 
+    ///
     /// This method should be called at the start of an element drag operation to establish
     /// a reference point for relative transformations. The stored positions are used by
     /// move_selected_nodes_with_drag to preserve element relationships during movement.
     pub fn save_selected_nodes_positions(&mut self) {
         self.element_initial_positions.clear();
-        
+
         for node in &self.nodes {
             if self.selected_nodes.contains(&node.id()) {
                 let layout = node.layout();
-                self.element_initial_positions.insert(
-                    node.id(),
-                    Point::new(layout.x, layout.y)
-                );
+                self.element_initial_positions
+                    .insert(node.id(), Point::new(layout.x, layout.y));
             }
         }
     }
-    
+
     /// Transforms selected elements by applying the provided delta to their initial positions
-    /// 
+    ///
     /// This method operates on the captured initial positions, ensuring that multiple elements
     /// maintain their relative spatial relationships during dragging. It also updates the
     /// scene graph to reflect the visual changes.
-    /// 
+    ///
     /// # Arguments
     /// * `delta` - The transformation vector to apply to all selected elements
     /// * `cx` - Context used for scene graph updates
@@ -500,31 +499,32 @@ impl LunaCanvas {
         for node in &mut self.nodes {
             // Get the node ID first before any mutable borrows
             let node_id = node.id();
-            
+
             if self.selected_nodes.contains(&node_id) {
                 if let Some(initial_pos) = self.element_initial_positions.get(&node_id) {
                     // First, update the layout
                     let layout = node.layout_mut();
                     layout.x = initial_pos.x + delta.x;
                     layout.y = initial_pos.y + delta.y;
-                    
+
                     // Store values we need before releasing the mutable borrow
                     let new_x = layout.x;
                     let new_y = layout.y;
                     let width = layout.width;
                     let height = layout.height;
-                    
+
                     // Update the scene graph bounds
-                    if let Some(scene_node_id) = self.scene_graph.update(cx, |sg, _cx| {
-                        sg.get_scene_node_id(node_id)
-                    }) {
+                    if let Some(scene_node_id) = self
+                        .scene_graph
+                        .update(cx, |sg, _cx| sg.get_scene_node_id(node_id))
+                    {
                         self.scene_graph.update(cx, |sg, _cx| {
                             sg.set_local_bounds(
                                 scene_node_id,
                                 Bounds {
                                     origin: Point::new(new_x, new_y),
                                     size: Size::new(width, height),
-                                }
+                                },
                             );
                         });
                     }

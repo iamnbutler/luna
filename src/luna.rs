@@ -31,7 +31,7 @@ use scene_graph::SceneGraph;
 use std::{fs, path::PathBuf, sync::Arc};
 use strum::Display;
 use theme::{ActiveTheme, GlobalTheme, Theme};
-use tools::ToolKind;
+use tools::{ActiveTool, GlobalTool, Tool};
 use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
 use util::keystroke_builder;
 
@@ -125,8 +125,6 @@ impl Global for GlobalState {}
 /// This state includes the currently active tool and the current element styling
 /// properties that will be applied to newly created elements.
 pub struct AppState {
-    /// The currently active tool determining interaction behavior
-    pub active_tool: ToolKind,
     /// Current border color for new elements
     pub current_border_color: Hsla,
     /// Current background color for new elements
@@ -154,12 +152,12 @@ struct Luna {
     scene_graph: Entity<SceneGraph>,
     /// Inspector panel for element properties and tools
     inspector: Entity<Inspector>,
+    sidebar: Entity<Sidebar>,
 }
 
 impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let app_state = cx.new(|cx| AppState {
-            active_tool: ToolKind::Selection,
             current_border_color: cx.theme().tokens.overlay0,
             current_background_color: cx.theme().tokens.surface0,
         });
@@ -168,6 +166,7 @@ impl Luna {
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
+        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone()));
 
         Luna {
             app_state,
@@ -175,12 +174,12 @@ impl Luna {
             scene_graph,
             focus_handle,
             inspector,
+            sidebar,
         }
     }
 
     fn activate_hand_tool(&mut self, _: &HandTool, _window: &mut Window, cx: &mut Context<Self>) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Hand);
+        cx.set_global(GlobalTool(Arc::new(Tool::Hand)));
         cx.notify();
     }
 
@@ -190,8 +189,7 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Selection);
+        cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
         cx.notify();
     }
     fn activate_rectangle_tool(
@@ -200,8 +198,7 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Rectangle);
+        cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
         cx.notify();
     }
 }
@@ -228,9 +225,9 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
-            .map(|div| match self.app_state.read(cx).active_tool {
-                ToolKind::Hand => div.cursor_grab(),
-                ToolKind::Frame | ToolKind::Rectangle | ToolKind::Line | ToolKind::TextCursor => {
+            .map(|div| match *cx.active_tool().clone() {
+                Tool::Hand => div.cursor_grab(),
+                Tool::Frame | Tool::Rectangle | Tool::Line | Tool::TextCursor => {
                     div.cursor_crosshair()
                 }
                 _ => div.cursor_default(),
@@ -240,6 +237,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
+            .child(self.sidebar.clone())
     }
 }
 
@@ -251,6 +249,7 @@ impl Focusable for Luna {
 
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
+    cx.set_global(GlobalTool(Arc::new(Tool::default())));
     cx.set_global(GlobalState::new());
 }
 

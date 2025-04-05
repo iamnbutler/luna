@@ -179,7 +179,7 @@ use crate::{
     interactivity::{ActiveDrag, DragType},
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
-    GlobalState, ToolKind,
+    GlobalState, Tool,
 };
 
 #[derive(Clone)]
@@ -295,7 +295,7 @@ impl CanvasElement {
         let canvas_point = point(position.x.0, position.y.0);
 
         match canvas.active_tool {
-            ToolKind::Selection => {
+            Tool::Selection => {
                 // First, check if we've clicked on a resize handle when only a single node is selected
                 if canvas.selected_nodes.len() == 1 {
                     // Get the bounds of the selected node
@@ -373,7 +373,7 @@ impl CanvasElement {
                     canvas.mark_dirty(cx);
                 }
             }
-            ToolKind::Rectangle => {
+            Tool::Rectangle => {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
@@ -406,7 +406,7 @@ impl CanvasElement {
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
             match (node_type, &canvas.active_tool) {
-                (NodeType::Rectangle, ToolKind::Rectangle) => {
+                (NodeType::Rectangle, Tool::Rectangle) => {
                     // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
@@ -487,7 +487,7 @@ impl CanvasElement {
             match new_drag.drag_type {
                 DragType::Selection => {
                     // Handle selection rectangle
-                    if canvas.active_tool == ToolKind::Selection {
+                    if canvas.active_tool == Tool::Selection {
                         // Calculate the selection rectangle in canvas coordinates
                         let start_pos = active_drag.start_position;
                         let min_x = start_pos.x.0.min(position.x.0);
@@ -733,7 +733,7 @@ impl CanvasElement {
         // Handle rectangle drawing
         if let Some(active_draw) = canvas.active_element_draw.take() {
             match canvas.active_tool {
-                ToolKind::Rectangle => {
+                Tool::Rectangle => {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
                         current_position: position,
@@ -1292,7 +1292,7 @@ impl Element for CanvasElement {
                 // Paint rectangle preview if drawing with rectangle tool
                 if let Some((node_id, node_type, drag)) = active_element_draw {
                     match active_tool {
-                        ToolKind::Rectangle => {
+                        Tool::Rectangle => {
                             self.paint_draw_rectangle(node_id, &drag, layout, window, cx);
                         }
                         _ => {}
