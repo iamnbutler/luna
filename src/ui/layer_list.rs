@@ -92,7 +92,7 @@ impl RenderOnce for LayerList {
         let canvas = self.canvas.read(cx);
 
         // Add all nodes to the layer list
-        for node in &canvas.nodes {
+        for node in canvas.nodes() {
             let kind = NodeType::Rectangle; // We only have rectangle nodes now
 
             let name = format!("Node {}", node.id.0);

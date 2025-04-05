@@ -1,6 +1,7 @@
 #![allow(unused, dead_code)]
 
 use crate::{
+    clipboard::{GlobalClipboard, NodeProperties},
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     scene_graph::{SceneGraph, SceneNodeId},
@@ -60,13 +61,13 @@ pub struct LunaCanvas {
     canvas_node: SceneNodeId,
 
     /// Flat list of nodes (the data model)
-    pub nodes: Vec<RectangleNode>,
+    nodes: Vec<RectangleNode>,
 
     /// Currently selected nodes
-    pub selected_nodes: HashSet<NodeId>,
+    selected_nodes: HashSet<NodeId>,
 
     /// Currently hovered node (for hover effects)
-    pub hovered_node: Option<NodeId>,
+    hovered_node: Option<NodeId>,
 
     /// The visible viewport of the canvas in canvas coordinates
     viewport: Bounds<f32>,
@@ -89,17 +90,16 @@ pub struct LunaCanvas {
     focus_handle: FocusHandle,
     pub actions:
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
-    pub active_tool: Tool,
-    pub active_drag: Option<ActiveDrag>,
+    active_drag: Option<ActiveDrag>,
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
-    pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
+    active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
 
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
-    pub element_initial_positions: HashMap<NodeId, Point<f32>>,
+    element_initial_positions: HashMap<NodeId, Point<f32>>,
 
-    pub theme: Theme,
+    theme: Theme,
 }
 
 impl LunaCanvas {
@@ -139,7 +139,6 @@ impl LunaCanvas {
             dirty: true,
             focus_handle: cx.focus_handle(),
             actions: Rc::default(),
-            active_tool: Tool::default(),
             active_drag: None,
             active_element_draw: None,
             element_initial_positions: HashMap::new(),
@@ -202,8 +201,63 @@ impl LunaCanvas {
         id
     }
 
+    pub fn nodes(&self) -> &Vec<RectangleNode> {
+        &self.nodes
+    }
+
+    pub fn selected_nodes(&self) -> &HashSet<NodeId> {
+        &self.selected_nodes
+    }
+
     pub fn app_state(&self) -> &Entity<AppState> {
         &self.app_state
+    }
+
+    pub fn active_drag(&self) -> Option<ActiveDrag> {
+        self.active_drag.clone()
+    }
+
+    pub fn set_active_drag(&mut self, active_drag: ActiveDrag) {
+        self.active_drag = Some(active_drag);
+    }
+
+    pub fn clear_active_drag(&mut self) {
+        self.active_drag = None;
+    }
+
+    pub fn active_element_draw(&self) -> Option<(NodeId, NodeType, ActiveDrag)> {
+        self.active_element_draw.clone()
+    }
+
+    pub fn set_active_element_draw(&mut self, active_element_draw: (NodeId, NodeType, ActiveDrag)) {
+        self.active_element_draw = Some(active_element_draw);
+    }
+
+    pub fn clear_active_element_draw(&mut self) {
+        self.active_element_draw = None;
+    }
+
+    pub fn element_initial_positions(&self) -> &HashMap<NodeId, Point<f32>> {
+        &self.element_initial_positions
+    }
+    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, Point<f32>> {
+        &mut self.element_initial_positions
+    }
+
+    pub fn hovered_node(&self) -> Option<NodeId> {
+        self.hovered_node
+    }
+
+    pub fn set_hovered_node(&mut self, hovered_node: Option<NodeId>) {
+        self.hovered_node = hovered_node;
+    }
+
+    pub fn get_node(&self, node_id: NodeId) -> Option<&RectangleNode> {
+        self.nodes.iter().find(|n| n.id() == node_id)
+    }
+
+    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut RectangleNode> {
+        self.nodes.iter_mut().find(|n| n.id() == node_id)
     }
 
     /// Convert a window-relative point to canvas-relative point
@@ -218,14 +272,6 @@ impl LunaCanvas {
         let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
         let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
         Point::new(window_x, window_y)
-    }
-
-    pub fn active_tool(&self) -> &Tool {
-        &self.active_tool
-    }
-
-    pub fn set_active_tool(&mut self, tool: Tool) {
-        self.active_tool = tool;
     }
 
     pub fn scene_graph(&self) -> &Entity<SceneGraph> {
@@ -258,9 +304,20 @@ impl LunaCanvas {
     }
 
     /// Remove a node from the canvas
-    pub fn remove_node(&mut self, node_id: NodeId) -> Option<RectangleNode> {
+    pub fn remove_node(
+        &mut self,
+        node_id: NodeId,
+        cx: &mut Context<Self>,
+    ) -> Option<RectangleNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
+
+        // Remove from scene graph if it exists there
+        self.scene_graph.update(cx, |sg, _cx| {
+            if let Some(scene_node_id) = sg.get_scene_node_id(node_id) {
+                sg.remove_node(scene_node_id);
+            }
+        });
 
         // Find and remove the node from our vector
         let position = self.nodes.iter().position(|node| node.id() == node_id);
@@ -323,6 +380,82 @@ impl LunaCanvas {
         self.selected_nodes
             .extend(self.nodes.iter().map(|node| node.id()));
         self.dirty = true;
+    }
+
+    /// Copy selected nodes to clipboard (stores only properties, not identities)
+    pub fn copy_selected_nodes(&mut self, cx: &mut Context<Self>) {
+        // Get selected nodes' properties
+        let node_properties: Vec<NodeProperties> = self
+            .nodes
+            .iter()
+            .filter(|node| self.selected_nodes.contains(&node.id()))
+            .map(|node| NodeProperties::from_rectangle(node))
+            .collect();
+
+        // If we have node properties to copy, put them in the clipboard
+        if !node_properties.is_empty() {
+            if let Ok(mut clipboard) = cx.global::<GlobalClipboard>().0.lock() {
+                clipboard.store_node_properties(node_properties);
+            }
+        }
+    }
+
+    /// Cut selected nodes (copy their properties to clipboard and remove from canvas)
+    pub fn cut_selected_nodes(&mut self, cx: &mut Context<Self>) {
+        // First copy the selected nodes' properties to clipboard
+        self.copy_selected_nodes(cx);
+
+        // Then remove the selected nodes from the canvas
+        let selected_nodes: Vec<_> = self.selected_nodes.iter().cloned().collect();
+        for node_id in selected_nodes {
+            self.remove_node(node_id, cx);
+        }
+
+        // Mark the canvas as dirty to trigger a redraw
+        self.mark_dirty(cx);
+    }
+
+    /// Paste nodes from clipboard with new IDs
+    pub fn paste_nodes(&mut self, cx: &mut Context<Self>) {
+        // Try to get node properties from clipboard
+        let node_properties = if let Ok(clipboard) = cx.global::<GlobalClipboard>().0.lock() {
+            if !clipboard.has_node_properties() {
+                return;
+            }
+            clipboard.get_node_properties().to_vec()
+        } else {
+            return;
+        };
+
+        // Clear current selection
+        self.selected_nodes.clear();
+
+        // Create each node with a slight offset
+        let offset = 20.0; // Offset each paste by 20px
+        for properties in node_properties {
+            // Create a new node with a new ID
+            let new_id = self.generate_id();
+            let mut new_node = RectangleNode::new(new_id);
+
+            // Apply the properties to the new node
+            let mut modified_properties = properties.clone();
+
+            // Apply offset to layout
+            modified_properties.layout.x += offset;
+            modified_properties.layout.y += offset;
+
+            // Apply properties to the new node
+            modified_properties.apply_to(&mut new_node);
+
+            // Add the node to the canvas
+            let node_id = self.add_node(new_node, cx);
+
+            // Select the newly created node
+            self.select_node(node_id);
+        }
+
+        // Mark canvas as dirty
+        self.mark_dirty(cx);
     }
 
     /// Update the layout for the entire canvas

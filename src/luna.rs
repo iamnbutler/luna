@@ -20,13 +20,14 @@ use anyhow::Result;
 use assets::Assets;
 use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
+use clipboard::GlobalClipboard;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, KeyBinding, Keystroke,
     Menu, MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
     WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
 };
-use node::NodeCommon;
+use node::{NodeCommon, NodeId};
 use scene_graph::SceneGraph;
 use std::{fs, path::PathBuf, sync::Arc};
 use strum::Display;
@@ -38,6 +39,7 @@ use util::keystroke_builder;
 mod assets;
 mod canvas;
 mod canvas_element;
+mod clipboard;
 mod css_parser;
 mod interactivity;
 mod node;
@@ -207,6 +209,48 @@ impl Luna {
         });
         cx.notify();
     }
+    
+    // Handler for the Copy action
+    fn copy_selected_nodes(&mut self, _: &Copy, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.copy_selected_nodes(cx);
+        });
+        cx.notify();
+    }
+    
+    // Handler for the Cut action
+    fn cut_selected_nodes(&mut self, _: &Cut, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.cut_selected_nodes(cx);
+        });
+        cx.notify();
+    }
+    
+    // Handler for the Paste action
+    fn paste_nodes(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.paste_nodes(cx);
+        });
+        cx.notify();
+    }
+    
+    // Handler for the Delete action
+    fn delete_selected_nodes(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            // Get selected nodes and remove them
+            // We're using methods rather than accessing private fields directly
+            let selected_nodes = canvas.get_root_nodes()
+                .into_iter()
+                .filter(|&node_id| canvas.is_node_selected(node_id))
+                .collect::<Vec<_>>();
+                
+            for node_id in selected_nodes {
+                canvas.remove_node(node_id, cx);
+            }
+            canvas.mark_dirty(cx);
+        });
+        cx.notify();
+    }
 }
 
 impl Render for Luna {
@@ -242,6 +286,10 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .on_action(cx.listener(Self::select_all_nodes))
+            .on_action(cx.listener(Self::copy_selected_nodes))
+            .on_action(cx.listener(Self::cut_selected_nodes))
+            .on_action(cx.listener(Self::paste_nodes))
+            .on_action(cx.listener(Self::delete_selected_nodes))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
@@ -258,6 +306,7 @@ fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalTool(Arc::new(Tool::default())));
     cx.set_global(GlobalState::new());
+    cx.set_global(GlobalClipboard::default());
 }
 
 /// Application entry point
