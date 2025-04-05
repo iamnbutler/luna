@@ -1,7 +1,6 @@
 #![allow(unused, dead_code)]
 
 use crate::{
-    clipboard::{GlobalClipboard, NodeProperties},
     interactivity::ActiveDrag,
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     scene_graph::{SceneGraph, SceneNodeId},
@@ -303,21 +302,24 @@ impl LunaCanvas {
         node_id
     }
 
-    /// Remove a node from the canvas
+    /// Remove a node from the canvas and update the scene graph
     pub fn remove_node(
         &mut self,
         node_id: NodeId,
         cx: &mut Context<Self>,
-    ) -> Option<RectangleNode> {
+    ) -> Option<crate::node::RectangleNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
 
         // Remove from scene graph if it exists there
-        self.scene_graph.update(cx, |sg, _cx| {
-            if let Some(scene_node_id) = sg.get_scene_node_id(node_id) {
+        let scene_node_id = self
+            .scene_graph
+            .update(cx, |sg, _cx| sg.get_scene_node_id(node_id));
+        if let Some(scene_node_id) = scene_node_id {
+            self.scene_graph.update(cx, |sg, _cx| {
                 sg.remove_node(scene_node_id);
-            }
-        });
+            });
+        }
 
         // Find and remove the node from our vector
         let position = self.nodes.iter().position(|node| node.id() == node_id);
@@ -380,82 +382,6 @@ impl LunaCanvas {
         self.selected_nodes
             .extend(self.nodes.iter().map(|node| node.id()));
         self.dirty = true;
-    }
-
-    /// Copy selected nodes to clipboard (stores only properties, not identities)
-    pub fn copy_selected_nodes(&mut self, cx: &mut Context<Self>) {
-        // Get selected nodes' properties
-        let node_properties: Vec<NodeProperties> = self
-            .nodes
-            .iter()
-            .filter(|node| self.selected_nodes.contains(&node.id()))
-            .map(|node| NodeProperties::from_rectangle(node))
-            .collect();
-
-        // If we have node properties to copy, put them in the clipboard
-        if !node_properties.is_empty() {
-            if let Ok(mut clipboard) = cx.global::<GlobalClipboard>().0.lock() {
-                clipboard.store_node_properties(node_properties);
-            }
-        }
-    }
-
-    /// Cut selected nodes (copy their properties to clipboard and remove from canvas)
-    pub fn cut_selected_nodes(&mut self, cx: &mut Context<Self>) {
-        // First copy the selected nodes' properties to clipboard
-        self.copy_selected_nodes(cx);
-
-        // Then remove the selected nodes from the canvas
-        let selected_nodes: Vec<_> = self.selected_nodes.iter().cloned().collect();
-        for node_id in selected_nodes {
-            self.remove_node(node_id, cx);
-        }
-
-        // Mark the canvas as dirty to trigger a redraw
-        self.mark_dirty(cx);
-    }
-
-    /// Paste nodes from clipboard with new IDs
-    pub fn paste_nodes(&mut self, cx: &mut Context<Self>) {
-        // Try to get node properties from clipboard
-        let node_properties = if let Ok(clipboard) = cx.global::<GlobalClipboard>().0.lock() {
-            if !clipboard.has_node_properties() {
-                return;
-            }
-            clipboard.get_node_properties().to_vec()
-        } else {
-            return;
-        };
-
-        // Clear current selection
-        self.selected_nodes.clear();
-
-        // Create each node with a slight offset
-        let offset = 20.0; // Offset each paste by 20px
-        for properties in node_properties {
-            // Create a new node with a new ID
-            let new_id = self.generate_id();
-            let mut new_node = RectangleNode::new(new_id);
-
-            // Apply the properties to the new node
-            let mut modified_properties = properties.clone();
-
-            // Apply offset to layout
-            modified_properties.layout.x += offset;
-            modified_properties.layout.y += offset;
-
-            // Apply properties to the new node
-            modified_properties.apply_to(&mut new_node);
-
-            // Add the node to the canvas
-            let node_id = self.add_node(new_node, cx);
-
-            // Select the newly created node
-            self.select_node(node_id);
-        }
-
-        // Mark canvas as dirty
-        self.mark_dirty(cx);
     }
 
     /// Update the layout for the entire canvas
