@@ -22,9 +22,9 @@ use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
-    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
-    Window, WindowBackgroundAppearance, WindowOptions,
+    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, KeyBinding, Keystroke,
+    Menu, MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
+    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
 };
 use node::NodeCommon;
 use scene_graph::SceneGraph;
@@ -51,13 +51,18 @@ mod util;
 actions!(
     luna,
     [
-        Quit,
-        ToggleUI,
+        Copy,
+        Cut,
+        Delete,
         HandTool,
-        SelectionTool,
+        Paste,
+        Quit,
+        RectangleTool,
         ResetCurrentColors,
+        SelectAll,
+        SelectionTool,
         SwapCurrentColors,
-        RectangleTool
+        ToggleUI,
     ]
 );
 
@@ -165,10 +170,10 @@ impl Luna {
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
 
         Luna {
-            focus_handle,
-            canvas,
             app_state,
+            canvas,
             scene_graph,
+            focus_handle,
             inspector,
         }
     }
@@ -260,28 +265,55 @@ fn main() {
             base: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"),
         })
         .run(|cx: &mut App| {
-            cx.activate(true);
             cx.on_action(quit);
             cx.set_menus(vec![Menu {
                 name: "Luna".into(),
                 items: vec![MenuItem::action("Quit", Quit)],
             }]);
 
+            cx.bind_keys([
+                KeyBinding::new("h", HandTool, None),
+                KeyBinding::new("a", SelectionTool, None),
+                KeyBinding::new("r", RectangleTool, None),
+                KeyBinding::new("delete", Delete, None),
+                KeyBinding::new("cmd-a", SelectAll, None),
+                KeyBinding::new("cmd-v", Paste, None),
+                KeyBinding::new("cmd-c", Copy, None),
+                KeyBinding::new("cmd-x", Cut, None),
+            ]);
+
             init_globals(cx);
 
-            cx.open_window(
-                WindowOptions {
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Luna".into()),
-                        appears_transparent: true,
-                        traffic_light_position: Some(point(px(8.0), px(8.0))),
-                    }),
-                    window_background: WindowBackgroundAppearance::Transparent,
-                    ..Default::default()
-                },
-                |window, cx| cx.new(|cx| Luna::new(window, cx)),
-            )
-            .unwrap();
+            let window = cx
+                .open_window(
+                    WindowOptions {
+                        titlebar: Some(TitlebarOptions {
+                            title: Some("Luna".into()),
+                            appears_transparent: true,
+                            traffic_light_position: Some(point(px(8.0), px(8.0))),
+                        }),
+                        window_background: WindowBackgroundAppearance::Transparent,
+                        ..Default::default()
+                    },
+                    |window, cx| cx.new(|cx| Luna::new(window, cx)),
+                )
+                .unwrap();
+
+            let view = window.update(cx, |_, _, cx| cx.entity()).unwrap();
+
+            cx.on_keyboard_layout_change({
+                move |cx| {
+                    window.update(cx, |_, _, cx| cx.notify()).ok();
+                }
+            })
+            .detach();
+
+            window
+                .update(cx, |view, window, cx| {
+                    window.focus(&view.focus_handle(cx));
+                    cx.activate(true);
+                })
+                .unwrap();
         });
 }
 
