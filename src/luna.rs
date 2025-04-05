@@ -201,6 +201,12 @@ impl Luna {
         cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
         cx.notify();
     }
+    fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.select_all_nodes();
+        });
+        cx.notify();
+    }
 }
 
 impl Render for Luna {
@@ -235,6 +241,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
+            .on_action(cx.listener(Self::select_all_nodes))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())

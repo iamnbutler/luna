@@ -312,6 +312,19 @@ impl LunaCanvas {
         self.selected_nodes.contains(&node_id)
     }
 
+    /// Select all root nodes in the canvas
+    pub fn select_all_nodes(&mut self) {
+        // Check if all nodes are already selected to avoid unnecessary work
+        if self.selected_nodes.len() == self.nodes.len() && !self.nodes.is_empty() {
+            return;
+        }
+
+        self.selected_nodes.clear();
+        self.selected_nodes
+            .extend(self.nodes.iter().map(|node| node.id()));
+        self.dirty = true;
+    }
+
     /// Update the layout for the entire canvas
     pub fn update_layout(&mut self) {
         if !self.dirty {
