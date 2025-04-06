@@ -469,6 +469,9 @@ impl CanvasElement {
             }
         }
 
+        canvas.clear_active_drag();
+        canvas.clear_active_element_draw();
+
         cx.stop_propagation();
     }
 
