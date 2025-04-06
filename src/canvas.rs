@@ -153,7 +153,7 @@ impl LunaCanvas {
         // Try to load the CSS file from assets
         let mut node_to_select = None;
 
-        if let Ok(css_content) = std::fs::read_to_string("assets/css/sample_nodes.css") {
+        if let Ok(css_content) = std::fs::read_to_string("assets/css/buttons.css") {
             // Use our CSS parser to create rectangle nodes
             let mut factory = crate::node::NodeFactory::default();
             let rectangles =
@@ -184,10 +184,10 @@ impl LunaCanvas {
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
             let node_id = canvas.add_node(rect, cx);
-            
+
             // Make sure our next_id is higher than the ID we just used
             canvas.next_id = canvas.next_id.max(node_id.0 + 1);
-            
+
             node_to_select = Some(node_id);
         }
 

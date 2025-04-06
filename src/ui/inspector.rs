@@ -18,7 +18,7 @@ use crate::{
     AppState,
 };
 
-use super::property::property_input;
+use super::property::float_input;
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
@@ -278,12 +278,12 @@ impl Render for Inspector {
                     .gap(px(8.))
                     .border_color(theme.tokens.inactive_border)
                     .border_b_1()
-                    .child(property_input(x, "X"))
-                    .child(property_input(y, "Y"))
-                    .child(property_input(width, "W"))
-                    .child(property_input(height, "H"))
-                    .child(property_input(border_width, "B"))
-                    .child(property_input(corner_radius, "R")),
+                    .child(float_input(x, "X"))
+                    .child(float_input(y, "Y"))
+                    .child(float_input(width, "W"))
+                    .child(float_input(height, "H"))
+                    .child(float_input(border_width, "B"))
+                    .child(float_input(corner_radius, "R")),
             );
 
         div()
