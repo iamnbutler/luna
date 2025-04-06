@@ -117,45 +117,10 @@ fn parse_length(value: &str) -> Option<f32> {
 /// Supports:
 /// - Hex colors (#RGB, #RRGGBB)
 /// - RGB/RGBA format (rgb(r,g,b), rgba(r,g,b,a))
+/// - HSLA format (hsla(h,s%,l%,a))
 /// - Named colors (red, green, blue, transparent, etc.)
 fn parse_color(value: &str) -> Option<Hsla> {
-    let value = value.trim().to_lowercase();
-    
-    // Handle transparent special case
-    if value == "transparent" {
-        return Some(Hsla { h: 0.0, s: 0.0, l: 0.0, a: 0.0 });
-    }
-    
-    // Handle hex colors
-    if value.starts_with('#') {
-        return parse_hex_color(&value);
-    }
-    
-    // Handle rgba() format
-    if value.starts_with("rgba(") && value.ends_with(')') {
-        let rgba = &value[5..value.len()-1];
-        return parse_rgba_components(rgba);
-    }
-    
-    // Handle rgb() format
-    if value.starts_with("rgb(") && value.ends_with(')') {
-        let rgb = &value[4..value.len()-1];
-        return parse_rgba_components(rgb);
-    }
-    
-    // Handle named colors
-    match value.as_str() {
-        "black" => Some(Hsla { h: 0.0, s: 0.0, l: 0.0, a: 1.0 }),
-        "white" => Some(Hsla { h: 0.0, s: 0.0, l: 1.0, a: 1.0 }),
-        "red" => Some(Hsla { h: 0.0, s: 1.0, l: 0.5, a: 1.0 }),
-        "green" => Some(Hsla { h: 0.33, s: 1.0, l: 0.5, a: 1.0 }),
-        "blue" => Some(Hsla { h: 0.67, s: 1.0, l: 0.5, a: 1.0 }),
-        "yellow" => Some(Hsla { h: 0.17, s: 1.0, l: 0.5, a: 1.0 }),
-        "cyan" => Some(Hsla { h: 0.5, s: 1.0, l: 0.5, a: 1.0 }),
-        "magenta" => Some(Hsla { h: 0.83, s: 1.0, l: 0.5, a: 1.0 }),
-        "gray" | "grey" => Some(Hsla { h: 0.0, s: 0.0, l: 0.5, a: 1.0 }),
-        _ => None,
-    }
+    crate::color::parse_color(value)
 }
 
 /// Parse RGB or RGBA components from a string

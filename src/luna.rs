@@ -38,6 +38,7 @@ use util::keystroke_builder;
 mod assets;
 mod canvas;
 mod canvas_element;
+mod color;
 mod css_parser;
 mod interactivity;
 mod node;

@@ -105,72 +105,10 @@ impl ColorInput {
 
     pub fn parse_color(&self) -> Option<Hsla> {
         if let Some(color_str) = &self.value {
-            // First try using the built-in TryFrom<&str> implementation for Rgba
-            // which handles hex formats (3, 4, 6, 8 digits with or without #)
-            if let Ok(rgba) = Rgba::try_from(color_str.as_ref()) {
-                let hsla_color: Hsla = rgba.into();
-                return Some(hsla_color);
-            }
-            
-            // If not a hex color, try parsing as rgb/rgba format
-            if color_str.starts_with("rgb") {
-                // Parse rgb(r, g, b) or rgba(r, g, b, a) format
-                let stripped = color_str.trim();
-                let rgba_parts: Vec<&str> = if stripped.starts_with("rgba") {
-                    // Format: rgba(r, g, b, a)
-                    if let Some(content) = stripped.strip_prefix("rgba(").and_then(|s| s.strip_suffix(")")) {
-                        content.split(',').collect()
-                    } else {
-                        return None;
-                    }
-                } else if stripped.starts_with("rgb") {
-                    // Format: rgb(r, g, b)
-                    if let Some(content) = stripped.strip_prefix("rgb(").and_then(|s| s.strip_suffix(")")) {
-                        content.split(',').collect()
-                    } else {
-                        return None;
-                    }
-                } else {
-                    return None;
-                };
-
-                // Parse rgb values (0-255) and alpha (0.0-1.0)
-                if rgba_parts.len() >= 3 {
-                    if let (Ok(r), Ok(g), Ok(b)) = (
-                        rgba_parts[0].trim().parse::<u8>(),
-                        rgba_parts[1].trim().parse::<u8>(),
-                        rgba_parts[2].trim().parse::<u8>(),
-                    ) {
-                        let a = if rgba_parts.len() >= 4 {
-                            rgba_parts[3].trim().parse::<f32>().unwrap_or(1.0)
-                        } else {
-                            1.0
-                        };
-
-                        let rgba = Rgba {
-                            r: r as f32 / 255.0,
-                            g: g as f32 / 255.0,
-                            b: b as f32 / 255.0,
-                            a: a.clamp(0.0, 1.0),
-                        };
-                        let hsla_color: Hsla = rgba.into();
-                        return Some(hsla_color);
-                    }
-                }
-            }
-
-            // Add a hex color handler for when the # is missing
-            if !color_str.starts_with('#') && !color_str.starts_with("rgb") {
-                // Try prefixing with # and parsing again
-                let with_hash = format!("#{}", color_str);
-                if let Ok(rgba) = Rgba::try_from(with_hash.as_ref()) {
-                    let hsla_color: Hsla = rgba.into();
-                    return Some(hsla_color);
-                }
-            }
+            crate::color::parse_color(color_str)
+        } else {
+            None
         }
-        
-        None
     }
 }
 
@@ -197,15 +135,19 @@ impl RenderOnce for ColorInput {
                 .text_color(theme.tokens.text)
                 .text_size(px(11.))
                 .when_some(parsed_color, |this, color| {
-                    div()
-                        .size(px(9.))
-                        .border_color(cx.theme().tokens.inactive_border)
-                        .border_1()
-                        .bg(color)
+                    this.child(
+                        div()
+                            .size(px(9.))
+                            .border_color(cx.theme().tokens.inactive_border)
+                            .border_1()
+                            .rounded(px(2.))
+                            .bg(color),
+                    )
                 })
-                .when(display_value.is_empty(), |this| {
-                    this.child(div().flex_1().child(display_value))
+                .when(!display_value.is_empty(), |this| {
+                    this.child(div().flex_1().ml(px(4.)).child(display_value))
                 })
+                .child(div().flex_1())
                 .child(
                     div()
                         .flex()
