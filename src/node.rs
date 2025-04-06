@@ -137,7 +137,7 @@ pub trait NodeCommon: std::fmt::Debug {
 /// As the fundamental building block in the canvas system, rectangles
 /// serve as the basis for many other visual elements and are optimized
 /// for efficient rendering and manipulation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RectangleNode {
     pub id: NodeId,
     pub layout: NodeLayout,

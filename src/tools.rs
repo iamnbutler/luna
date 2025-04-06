@@ -24,11 +24,13 @@ use gpui::{
     MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
     Window, WindowBackgroundAppearance, WindowOptions,
 };
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::{fs, path::PathBuf};
 use strum::Display;
 
-#[derive(Default, Debug, Display, Clone, PartialEq)]
-pub enum ToolKind {
+#[derive(Default, Debug, Display, Clone, Copy, PartialEq)]
+pub enum Tool {
     /// Standard selection tool for clicking, dragging, and manipulating elements
     #[default]
     Selection,
@@ -63,29 +65,58 @@ pub enum ToolKind {
     ZoomOut,
 }
 
-impl ToolKind {
+impl Tool {
     pub fn src(self) -> SharedString {
         match self {
-            ToolKind::Selection => "svg/arrow_pointer.svg".into(),
-            ToolKind::Arrow => "svg/arrow_tool.svg".into(),
-            ToolKind::Frame => "svg/frame.svg".into(),
-            ToolKind::Hand => "svg/hand.svg".into(),
-            ToolKind::Image => "svg/image.svg".into(),
-            ToolKind::Line => "svg/line_tool.svg".into(),
-            ToolKind::Pen => "svg/pen_tool.svg".into(),
-            ToolKind::Pencil => "svg/pencil.svg".into(),
-            ToolKind::Prompt => "svg/prompt.svg".into(),
-            ToolKind::ElementLibrary => "svg/shapes.svg".into(),
-            ToolKind::Rectangle => "svg/square.svg".into(),
-            ToolKind::TextCursor => "svg/text_cursor.svg".into(),
-            ToolKind::ZoomIn => "svg/zoom_in.svg".into(),
-            ToolKind::ZoomOut => "svg/zoom_out.svg".into(),
+            Tool::Selection => "svg/arrow_pointer.svg".into(),
+            Tool::Arrow => "svg/arrow_tool.svg".into(),
+            Tool::Frame => "svg/frame.svg".into(),
+            Tool::Hand => "svg/hand.svg".into(),
+            Tool::Image => "svg/image.svg".into(),
+            Tool::Line => "svg/line_tool.svg".into(),
+            Tool::Pen => "svg/pen_tool.svg".into(),
+            Tool::Pencil => "svg/pencil.svg".into(),
+            Tool::Prompt => "svg/prompt.svg".into(),
+            Tool::ElementLibrary => "svg/shapes.svg".into(),
+            Tool::Rectangle => "svg/square.svg".into(),
+            Tool::TextCursor => "svg/text_cursor.svg".into(),
+            Tool::ZoomIn => "svg/zoom_in.svg".into(),
+            Tool::ZoomOut => "svg/zoom_out.svg".into(),
         }
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct GlobalTool(pub Arc<Tool>);
+
+impl Deref for GlobalTool {
+    type Target = Arc<Tool>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for GlobalTool {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Global for GlobalTool {}
+
+pub trait ActiveTool {
+    fn active_tool(&self) -> &Arc<Tool>;
+}
+
+impl ActiveTool for App {
+    fn active_tool(&self) -> &Arc<Tool> {
+        &self.global::<GlobalTool>().0
+    }
+}
+
 /// Returns a [ToolButton]
-pub fn tool_button(tool: ToolKind) -> ToolButton {
+pub fn tool_button(tool: Tool) -> ToolButton {
     ToolButton::new(tool)
 }
 
@@ -102,13 +133,13 @@ pub fn tool_button(tool: ToolKind) -> ToolButton {
 #[derive(IntoElement)]
 pub struct ToolButton {
     /// The tool this button represents
-    tool_kind: ToolKind,
+    tool_kind: Tool,
     /// Whether this tool is currently unavailable
     disabled: bool,
 }
 
 impl ToolButton {
-    pub fn new(tool: ToolKind) -> Self {
+    pub fn new(tool: Tool) -> Self {
         ToolButton {
             tool_kind: tool,
             disabled: false,
@@ -125,15 +156,16 @@ impl RenderOnce for ToolButton {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
         let state = GlobalState::get(cx);
+        let active_tool = cx.active_tool().clone();
 
         let tool_kind = self.tool_kind.clone();
-        let selected = false;
+        let selected = *active_tool == tool_kind;
 
         let icon_color = match (selected, self.disabled) {
             (true, true) => theme.tokens.active_border.alpha(0.5), // Use active_border for selected but disabled
             (true, false) => theme.tokens.active_border, // Use active_border for selected tools
-            (false, true) => theme.tokens.overlay1, // Use overlay1 for disabled tools
-            (false, false) => theme.tokens.subtext0, // Use subtext0 for normal tools
+            (false, true) => theme.tokens.overlay1,      // Use overlay1 for disabled tools
+            (false, false) => theme.tokens.subtext0,     // Use subtext0 for normal tools
         };
 
         div()
@@ -148,10 +180,12 @@ impl RenderOnce for ToolButton {
             .when(!self.disabled, |div| {
                 div.hover(|div| div.bg(theme.tokens.surface1)) // Use surface1 for hover background
             })
-            // .on_click(move |_, _, cx| {
-            //     let tool_kind = tool_kind.clone();
-            //     GlobalState::update_global(cx, |state, _| state.active_tool = tool_kind.clone())
-            // })
+            .when(!self.disabled, |div| {
+                let tool = tool_kind.clone();
+                div.on_click(move |_event, _phase, cx2| {
+                    cx2.set_global(GlobalTool(Arc::new(tool.clone())));
+                })
+            })
             .child(
                 svg()
                     .path(self.tool_kind.src())
@@ -234,7 +268,7 @@ impl RenderOnce for ToolButton {
 ///
 /// ToolStrip creates a vertical strip of tool buttons, logically grouped with dividers
 /// to create a cohesive and organized tool selection UI. It implements:
-/// 
+///
 /// - Visual categorization of related tools (selection, drawing, shapes, etc.)
 /// - Consistent spacing and alignment of tool buttons
 /// - Theme-appropriate styling for the toolbar container
@@ -286,23 +320,23 @@ impl RenderOnce for ToolStrip {
                     .flex_col()
                     .items_center()
                     .gap(px(9.))
-                    .child(tool_button(ToolKind::Selection))
-                    .child(tool_button(ToolKind::Hand))
+                    .child(tool_button(Tool::Selection))
+                    .child(tool_button(Tool::Hand))
                     .child(tool_divider())
-                    .child(tool_button(ToolKind::Prompt).disabled(true))
+                    .child(tool_button(Tool::Prompt).disabled(true))
                     .child(tool_divider())
-                    .child(tool_button(ToolKind::Pencil).disabled(true))
-                    .child(tool_button(ToolKind::Pen).disabled(true))
-                    .child(tool_button(ToolKind::TextCursor).disabled(true))
+                    .child(tool_button(Tool::Pencil).disabled(true))
+                    .child(tool_button(Tool::Pen).disabled(true))
+                    .child(tool_button(Tool::TextCursor).disabled(true))
                     .child(tool_divider())
-                    .child(tool_button(ToolKind::Frame).disabled(true))
-                    .child(tool_button(ToolKind::Rectangle))
-                    .child(tool_button(ToolKind::Line).disabled(true))
+                    .child(tool_button(Tool::Frame).disabled(true))
+                    .child(tool_button(Tool::Rectangle))
+                    .child(tool_button(Tool::Line).disabled(true))
                     .child(tool_divider())
-                    .child(tool_button(ToolKind::Image).disabled(true))
-                    .child(tool_button(ToolKind::ElementLibrary).disabled(true))
+                    .child(tool_button(Tool::Image).disabled(true))
+                    .child(tool_button(Tool::ElementLibrary).disabled(true))
                     .child(tool_divider())
-                    .child(tool_button(ToolKind::Arrow).disabled(true)),
+                    .child(tool_button(Tool::Arrow).disabled(true)),
             )
             .child(
                 div().w_full().flex().flex_col().items_center(), // .child(CurrentColorTool::new()),

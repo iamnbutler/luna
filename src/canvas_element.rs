@@ -1,5 +1,6 @@
 #![allow(unused, dead_code)]
 use crate::interactivity::{ResizeHandle, ResizeOperation};
+use crate::tools::ActiveTool;
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
     Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -172,14 +173,14 @@ fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Optio
 }
 
 use crate::scene_graph::SceneGraph;
-use crate::theme::Theme;
+use crate::theme::{ActiveTheme, Theme};
 use crate::AppState;
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::{ActiveDrag, DragType},
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     util::{round_to_pixel, rounded_point},
-    GlobalState, ToolKind,
+    GlobalState, Tool,
 };
 
 #[derive(Clone)]
@@ -271,7 +272,7 @@ impl CanvasElement {
 
         // Test each node to see if it contains this point
         // Iterate in reverse order to match the painting order (last node is visually on top)
-        for node in canvas.nodes.iter().rev() {
+        for node in canvas.nodes().iter().rev() {
             let node_bounds = node.bounds();
             if node_bounds.contains(&canvas_point) {
                 return Some(node.id());
@@ -294,13 +295,15 @@ impl CanvasElement {
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
 
-        match canvas.active_tool {
-            ToolKind::Selection => {
+        let active_tool = cx.active_tool().clone();
+
+        match *active_tool {
+            Tool::Selection => {
                 // First, check if we've clicked on a resize handle when only a single node is selected
-                if canvas.selected_nodes.len() == 1 {
+                if canvas.selected_nodes().len() == 1 {
                     // Get the bounds of the selected node
-                    let selected_node_id = *canvas.selected_nodes.iter().next().unwrap();
-                    if let Some(node) = canvas.nodes.iter().find(|n| n.id() == selected_node_id) {
+                    let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
+                    if let Some(node) = canvas.nodes().iter().find(|n| n.id() == selected_node_id) {
                         let node_layout = node.layout();
 
                         // Create node bounds to check for resize handle hits
@@ -324,7 +327,7 @@ impl CanvasElement {
                             );
 
                             // Start a resize drag operation
-                            canvas.active_drag = Some(ActiveDrag::new_resize(position, resize_op));
+                            canvas.set_active_drag(ActiveDrag::new_resize(position, resize_op));
                             canvas.mark_dirty(cx);
                             cx.stop_propagation();
                             return;
@@ -358,7 +361,7 @@ impl CanvasElement {
                         canvas.save_selected_nodes_positions();
 
                         // Start a move elements drag operation
-                        canvas.active_drag = Some(ActiveDrag::new_move_elements(position));
+                        canvas.set_active_drag(ActiveDrag::new_move_elements(position));
                     }
 
                     canvas.mark_dirty(cx);
@@ -369,16 +372,19 @@ impl CanvasElement {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
-                    canvas.active_drag = Some(ActiveDrag::new_selection(position));
+                    // Only start a selection drag if using the Selection tool
+                    if *active_tool == Tool::Selection {
+                        canvas.set_active_drag(ActiveDrag::new_selection(position));
+                    }
                     canvas.mark_dirty(cx);
                 }
             }
-            ToolKind::Rectangle => {
+            Tool::Rectangle => {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
                 let active_drag = ActiveDrag::new_create_element(position);
-                canvas.active_element_draw = Some((new_node_id, NodeType::Rectangle, active_drag));
+                canvas.set_active_element_draw((new_node_id, NodeType::Rectangle, active_drag));
                 canvas.mark_dirty(cx);
             }
             _ => {}
@@ -402,11 +408,12 @@ impl CanvasElement {
         let app_state = canvas.app_state().clone().read(cx);
         let current_background_color = app_state.current_background_color.clone();
         let current_border_color = app_state.current_border_color.clone();
+        let active_tool = *cx.active_tool().clone();
 
         // Check if we have an active element draw operation
-        if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw.take() {
-            match (node_type, &canvas.active_tool) {
-                (NodeType::Rectangle, ToolKind::Rectangle) => {
+        if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw().take() {
+            match (node_type, active_tool) {
+                (NodeType::Rectangle, Tool::Rectangle) => {
                     // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
@@ -443,11 +450,11 @@ impl CanvasElement {
         }
 
         // Handle ending drag operations
-        if let Some(active_drag) = canvas.active_drag.take() {
+        if let Some(active_drag) = canvas.active_drag().take() {
             match active_drag.drag_type {
                 DragType::MoveElements => {
                     // Finalize the move by clearing initial positions
-                    canvas.element_initial_positions.clear();
+                    canvas.element_initial_positions_mut().clear();
                 }
                 DragType::Selection => {
                     // Selection handling is already done in the drag handler
@@ -473,21 +480,29 @@ impl CanvasElement {
     ) {
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
+        let active_tool = *cx.active_tool().clone();
 
         // Handle active drag operations
-        if let Some(active_drag) = canvas.active_drag.take() {
+        if let Some(active_drag) = canvas.active_drag().take() {
             // Update the drag with new position
             let new_drag = ActiveDrag {
                 start_position: active_drag.start_position,
                 current_position: position,
                 drag_type: active_drag.drag_type.clone(),
             };
-            canvas.active_drag = Some(new_drag.clone());
+            canvas.set_active_drag(new_drag.clone());
+
+            // For any non-Selection tool, only allow specific drag types
+            if active_tool != Tool::Selection && matches!(new_drag.drag_type, DragType::Selection) {
+                // If using a non-Selection tool but having a Selection drag, cancel it
+                canvas.clear_active_drag();
+                return;
+            }
 
             match new_drag.drag_type {
                 DragType::Selection => {
                     // Handle selection rectangle
-                    if canvas.active_tool == ToolKind::Selection {
+                    if active_tool == Tool::Selection {
                         // Calculate the selection rectangle in canvas coordinates
                         let start_pos = active_drag.start_position;
                         let min_x = start_pos.x.0.min(position.x.0);
@@ -507,7 +522,7 @@ impl CanvasElement {
 
                         // Pre-calculate all nodes that intersect with selection
                         let nodes_in_selection: HashSet<NodeId> = canvas
-                            .nodes
+                            .nodes()
                             .iter()
                             .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
                             .map(|node| node.id())
@@ -522,7 +537,7 @@ impl CanvasElement {
                             }
                         } else {
                             // Replace selection
-                            if nodes_in_selection != canvas.selected_nodes {
+                            if nodes_in_selection != canvas.selected_nodes().clone() {
                                 canvas.clear_selection(&ClearSelection, window, cx);
                                 for node_id in nodes_in_selection {
                                     canvas.select_node(node_id);
@@ -533,7 +548,7 @@ impl CanvasElement {
                 }
                 DragType::MoveElements => {
                     // Move selected elements based on drag delta
-                    if !canvas.selected_nodes.is_empty() {
+                    if !canvas.selected_nodes().is_empty() {
                         // Calculate the drag delta in canvas coordinates
                         let delta = new_drag.delta();
 
@@ -546,15 +561,13 @@ impl CanvasElement {
                 }
                 DragType::Resize(mut resize_op) => {
                     // Handle resize operation
-                    if canvas.selected_nodes.len() == 1 {
+                    if canvas.selected_nodes().len() == 1 {
                         // Get the zoom value before any mutable borrows
                         let zoom = canvas.zoom();
 
                         // Get the selected node
-                        let selected_node_id = *canvas.selected_nodes.iter().next().unwrap();
-                        if let Some(node) =
-                            canvas.nodes.iter_mut().find(|n| n.id() == selected_node_id)
-                        {
+                        let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
+                        if let Some(node) = canvas.get_node_mut(selected_node_id) {
                             // Convert window delta to canvas delta
                             let delta = Point::new(
                                 (position.x.0 - active_drag.start_position.x.0) / zoom,
@@ -721,7 +734,7 @@ impl CanvasElement {
                                 current_position: position,
                                 drag_type: DragType::Resize(resize_op),
                             };
-                            canvas.active_drag = Some(updated_drag);
+                            canvas.set_active_drag(updated_drag);
                         }
                     }
                 }
@@ -731,15 +744,15 @@ impl CanvasElement {
         }
 
         // Handle rectangle drawing
-        if let Some(active_draw) = canvas.active_element_draw.take() {
-            match canvas.active_tool {
-                ToolKind::Rectangle => {
+        if let Some(active_draw) = canvas.active_element_draw().take() {
+            match *cx.active_tool().clone() {
+                Tool::Rectangle => {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
                         current_position: position,
                         drag_type: DragType::CreateElement,
                     };
-                    canvas.active_element_draw = Some((active_draw.0, active_draw.1, new_drag));
+                    canvas.set_active_element_draw((active_draw.0, active_draw.1, new_drag));
                     canvas.mark_dirty(cx);
                 }
                 _ => {}
@@ -760,8 +773,8 @@ impl CanvasElement {
         let hovered = Self::find_top_node_at_point(canvas, canvas_point, cx);
 
         // Only update and redraw if hover state changed
-        if canvas.hovered_node != hovered {
-            canvas.hovered_node = hovered;
+        if canvas.hovered_node() != hovered {
+            canvas.set_hovered_node(hovered);
             canvas.mark_dirty(cx);
         }
     }
@@ -937,6 +950,7 @@ impl CanvasElement {
 
     fn paint_nodes(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         let canvas = self.canvas.clone();
+        let theme = cx.theme().clone();
 
         // Collect ALL data we need up front to avoid any borrow issues
         struct NodeRenderInfo {
@@ -949,45 +963,44 @@ impl CanvasElement {
         }
 
         // Get all the data we need in one place
-        let (nodes_to_render, theme, selected_node_ids, hovered_node) =
-            canvas.update(cx, |canvas, cx| {
-                let visible_nodes = canvas.visible_nodes(cx);
-                let scene_graph = canvas.scene_graph().read(cx);
-                let selected_nodes = canvas.selected_nodes.clone();
-                let theme = canvas.theme.clone();
-                let hovered_node = canvas.hovered_node.clone();
+        let (nodes_to_render, selected_node_ids, hovered_node) = canvas.update(cx, |canvas, cx| {
+            let visible_nodes = canvas.visible_nodes(cx);
+            let scene_graph = canvas.scene_graph().read(cx);
+            let selected_nodes = canvas.selected_nodes().clone();
+            let theme = cx.theme().clone();
+            let hovered_node = canvas.hovered_node().clone();
 
-                // Collect all node rendering information into owned structures
-                let mut nodes_to_render = Vec::new();
+            // Collect all node rendering information into owned structures
+            let mut nodes_to_render = Vec::new();
 
-                for node in visible_nodes {
-                    let node_id = node.id();
+            for node in visible_nodes {
+                let node_id = node.id();
 
-                    if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
-                        if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
-                            nodes_to_render.push(NodeRenderInfo {
-                                node_id,
-                                bounds: gpui::Bounds {
-                                    origin: gpui::Point::new(
-                                        gpui::Pixels(world_bounds.origin.x),
-                                        gpui::Pixels(world_bounds.origin.y),
-                                    ),
-                                    size: gpui::Size::new(
-                                        gpui::Pixels(world_bounds.size.width),
-                                        gpui::Pixels(world_bounds.size.height),
-                                    ),
-                                },
-                                fill_color: node.fill(),
-                                border_color: node.border_color(),
-                                border_width: node.border_width(),
-                                corner_radius: node.corner_radius(),
-                            });
-                        }
+                if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
+                    if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
+                        nodes_to_render.push(NodeRenderInfo {
+                            node_id,
+                            bounds: gpui::Bounds {
+                                origin: gpui::Point::new(
+                                    gpui::Pixels(world_bounds.origin.x),
+                                    gpui::Pixels(world_bounds.origin.y),
+                                ),
+                                size: gpui::Size::new(
+                                    gpui::Pixels(world_bounds.size.width),
+                                    gpui::Pixels(world_bounds.size.height),
+                                ),
+                            },
+                            fill_color: node.fill(),
+                            border_color: node.border_color(),
+                            border_width: node.border_width(),
+                            corner_radius: node.corner_radius(),
+                        });
                     }
                 }
+            }
 
-                (nodes_to_render, theme, selected_nodes, hovered_node)
-            });
+            (nodes_to_render, selected_nodes, hovered_node)
+        });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // FIRST PASS: Paint all nodes and hover effects
@@ -1233,7 +1246,7 @@ impl Element for CanvasElement {
                 // Check for active drags in the canvas itself
                 let has_active_drag = {
                     let canvas = self.canvas.read(cx);
-                    canvas.active_drag.is_some()
+                    canvas.active_drag().is_some()
                 };
 
                 if !has_active_drag {
@@ -1256,6 +1269,8 @@ impl Element for CanvasElement {
         cx: &mut gpui::App,
     ) {
         let canvas = self.canvas.clone();
+        let active_tool = *cx.active_tool().clone();
+        let theme = cx.theme().clone();
         // let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
         // window.set_key_context(key_context);
@@ -1279,20 +1294,18 @@ impl Element for CanvasElement {
 
                 // Read canvas once to get all needed data
                 let canvas_read = canvas_clone.read(cx);
-                let active_drag = canvas_read.active_drag.clone();
-                let active_element_draw = canvas_read.active_element_draw.clone();
-                let active_tool = canvas_read.active_tool.clone();
-                let theme = &canvas_read.theme;
+                let active_drag = canvas_read.active_drag().clone();
+                let active_element_draw = canvas_read.active_element_draw().clone();
 
                 // Paint selection rectangle if dragging with selection tool
                 if let Some(active_drag) = active_drag {
-                    self.paint_selection(&active_drag, layout, window, theme);
+                    self.paint_selection(&active_drag, layout, window, &theme.clone());
                 }
 
                 // Paint rectangle preview if drawing with rectangle tool
                 if let Some((node_id, node_type, drag)) = active_element_draw {
                     match active_tool {
-                        ToolKind::Rectangle => {
+                        Tool::Rectangle => {
                             self.paint_draw_rectangle(node_id, &drag, layout, window, cx);
                         }
                         _ => {}

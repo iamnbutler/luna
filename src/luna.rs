@@ -22,16 +22,16 @@ use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
-    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
-    MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
-    Window, WindowBackgroundAppearance, WindowOptions,
+    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, KeyBinding, Keystroke,
+    Menu, MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
+    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
 };
-use node::NodeCommon;
+use node::{NodeCommon, NodeId};
 use scene_graph::SceneGraph;
 use std::{fs, path::PathBuf, sync::Arc};
 use strum::Display;
 use theme::{ActiveTheme, GlobalTheme, Theme};
-use tools::ToolKind;
+use tools::{ActiveTool, GlobalTool, Tool};
 use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
 use util::keystroke_builder;
 
@@ -51,13 +51,19 @@ mod util;
 actions!(
     luna,
     [
-        Quit,
-        ToggleUI,
+        Cancel,
+        Copy,
+        Cut,
+        Delete,
         HandTool,
-        SelectionTool,
+        Paste,
+        Quit,
+        RectangleTool,
         ResetCurrentColors,
+        SelectAll,
+        SelectionTool,
         SwapCurrentColors,
-        RectangleTool
+        ToggleUI,
     ]
 );
 
@@ -120,8 +126,6 @@ impl Global for GlobalState {}
 /// This state includes the currently active tool and the current element styling
 /// properties that will be applied to newly created elements.
 pub struct AppState {
-    /// The currently active tool determining interaction behavior
-    pub active_tool: ToolKind,
     /// Current border color for new elements
     pub current_border_color: Hsla,
     /// Current background color for new elements
@@ -149,12 +153,12 @@ struct Luna {
     scene_graph: Entity<SceneGraph>,
     /// Inspector panel for element properties and tools
     inspector: Entity<Inspector>,
+    sidebar: Entity<Sidebar>,
 }
 
 impl Luna {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let app_state = cx.new(|cx| AppState {
-            active_tool: ToolKind::Selection,
             current_border_color: cx.theme().tokens.overlay0,
             current_background_color: cx.theme().tokens.surface0,
         });
@@ -163,19 +167,20 @@ impl Luna {
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
+        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone()));
 
         Luna {
-            focus_handle,
-            canvas,
             app_state,
+            canvas,
             scene_graph,
+            focus_handle,
             inspector,
+            sidebar,
         }
     }
 
     fn activate_hand_tool(&mut self, _: &HandTool, _window: &mut Window, cx: &mut Context<Self>) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Hand);
+        cx.set_global(GlobalTool(Arc::new(Tool::Hand)));
         cx.notify();
     }
 
@@ -185,19 +190,53 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Selection);
+        cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
         cx.notify();
     }
+
     fn activate_rectangle_tool(
         &mut self,
         _: &RectangleTool,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.app_state
-            .update(cx, |state, _| state.active_tool = ToolKind::Rectangle);
+        cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
         cx.notify();
+    }
+
+    fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.select_all_nodes();
+        });
+        cx.notify();
+    }
+
+    fn delete_selected_nodes(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            let selected_nodes = canvas
+                .get_root_nodes()
+                .into_iter()
+                .filter(|&node_id| canvas.is_node_selected(node_id))
+                .collect::<Vec<_>>();
+
+            for node_id in selected_nodes {
+                canvas.remove_node(node_id, cx);
+            }
+            canvas.mark_dirty(cx);
+        });
+    }
+
+    fn handle_cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
+        let active_tool = *cx.active_tool().clone();
+
+        if active_tool == Tool::Selection {
+            self.canvas.update(cx, |canvas, cx| {
+                canvas.deselect_all_nodes(cx);
+                canvas.mark_dirty(cx);
+            });
+        } else {
+            cx.dispatch_action(&SelectionTool);
+        }
     }
 }
 
@@ -223,9 +262,12 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
-            .map(|div| match self.app_state.read(cx).active_tool {
-                ToolKind::Hand => div.cursor_grab(),
-                ToolKind::Frame | ToolKind::Rectangle | ToolKind::Line | ToolKind::TextCursor => {
+            .on_key_down(|event, _, _| {
+                dbg!(event.keystroke.clone());
+            })
+            .map(|div| match *cx.active_tool().clone() {
+                Tool::Hand => div.cursor_grab(),
+                Tool::Frame | Tool::Rectangle | Tool::Line | Tool::TextCursor => {
                     div.cursor_crosshair()
                 }
                 _ => div.cursor_default(),
@@ -233,8 +275,12 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
+            .on_action(cx.listener(Self::select_all_nodes))
+            .on_action(cx.listener(Self::delete_selected_nodes))
+            .on_action(cx.listener(Self::handle_cancel))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
+            .child(self.sidebar.clone())
     }
 }
 
@@ -246,6 +292,7 @@ impl Focusable for Luna {
 
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
+    cx.set_global(GlobalTool(Arc::new(Tool::default())));
     cx.set_global(GlobalState::new());
 }
 
@@ -260,28 +307,57 @@ fn main() {
             base: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"),
         })
         .run(|cx: &mut App| {
-            cx.activate(true);
             cx.on_action(quit);
             cx.set_menus(vec![Menu {
                 name: "Luna".into(),
                 items: vec![MenuItem::action("Quit", Quit)],
             }]);
 
+            cx.bind_keys([
+                KeyBinding::new("h", HandTool, None),
+                KeyBinding::new("a", SelectionTool, None),
+                KeyBinding::new("r", RectangleTool, None),
+                KeyBinding::new("escape", Cancel, None),
+                KeyBinding::new("delete", Delete, None),
+                KeyBinding::new("backspace", Delete, None),
+                KeyBinding::new("cmd-a", SelectAll, None),
+                KeyBinding::new("cmd-v", Paste, None),
+                KeyBinding::new("cmd-c", Copy, None),
+                KeyBinding::new("cmd-x", Cut, None),
+            ]);
+
             init_globals(cx);
 
-            cx.open_window(
-                WindowOptions {
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Luna".into()),
-                        appears_transparent: true,
-                        traffic_light_position: Some(point(px(8.0), px(8.0))),
-                    }),
-                    window_background: WindowBackgroundAppearance::Transparent,
-                    ..Default::default()
-                },
-                |window, cx| cx.new(|cx| Luna::new(window, cx)),
-            )
-            .unwrap();
+            let window = cx
+                .open_window(
+                    WindowOptions {
+                        titlebar: Some(TitlebarOptions {
+                            title: Some("Luna".into()),
+                            appears_transparent: true,
+                            traffic_light_position: Some(point(px(8.0), px(8.0))),
+                        }),
+                        window_background: WindowBackgroundAppearance::Transparent,
+                        ..Default::default()
+                    },
+                    |window, cx| cx.new(|cx| Luna::new(window, cx)),
+                )
+                .unwrap();
+
+            let view = window.update(cx, |_, _, cx| cx.entity()).unwrap();
+
+            cx.on_keyboard_layout_change({
+                move |cx| {
+                    window.update(cx, |_, _, cx| cx.notify()).ok();
+                }
+            })
+            .detach();
+
+            window
+                .update(cx, |view, window, cx| {
+                    window.focus(&view.focus_handle(cx));
+                    cx.activate(true);
+                })
+                .unwrap();
         });
 }
 

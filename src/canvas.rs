@@ -5,7 +5,7 @@ use crate::{
     node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
     scene_graph::{SceneGraph, SceneNodeId},
     theme::Theme,
-    AppState, ToolKind,
+    AppState, Tool,
 };
 use gpui::{
     actions, canvas as gpui_canvas, div, hsla, point, prelude::*, px, size, Action, App, Bounds,
@@ -60,13 +60,13 @@ pub struct LunaCanvas {
     canvas_node: SceneNodeId,
 
     /// Flat list of nodes (the data model)
-    pub nodes: Vec<RectangleNode>,
+    nodes: Vec<RectangleNode>,
 
     /// Currently selected nodes
-    pub selected_nodes: HashSet<NodeId>,
-    
+    selected_nodes: HashSet<NodeId>,
+
     /// Currently hovered node (for hover effects)
-    pub hovered_node: Option<NodeId>,
+    hovered_node: Option<NodeId>,
 
     /// The visible viewport of the canvas in canvas coordinates
     viewport: Bounds<f32>,
@@ -89,17 +89,16 @@ pub struct LunaCanvas {
     focus_handle: FocusHandle,
     pub actions:
         Rc<RefCell<BTreeMap<CanvasActionId, Box<dyn Fn(&mut Window, &mut Context<Self>)>>>>,
-    pub active_tool: ToolKind,
-    pub active_drag: Option<ActiveDrag>,
+    active_drag: Option<ActiveDrag>,
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
-    pub active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
-    
+    active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
+
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
-    pub element_initial_positions: HashMap<NodeId, Point<f32>>,
-    
-    pub theme: Theme,
+    element_initial_positions: HashMap<NodeId, Point<f32>>,
+
+    theme: Theme,
 }
 
 impl LunaCanvas {
@@ -139,7 +138,6 @@ impl LunaCanvas {
             dirty: true,
             focus_handle: cx.focus_handle(),
             actions: Rc::default(),
-            active_tool: ToolKind::default(),
             active_drag: None,
             active_element_draw: None,
             element_initial_positions: HashMap::new(),
@@ -151,28 +149,33 @@ impl LunaCanvas {
         let app_state_read = app_state.read(cx);
         let current_background_color = app_state_read.current_background_color;
         let current_border_color = app_state_read.current_border_color;
-        
+
         // Try to load the CSS file from assets
         let mut node_to_select = None;
-        
+
         if let Ok(css_content) = std::fs::read_to_string("assets/css/sample_nodes.css") {
             // Use our CSS parser to create rectangle nodes
             let mut factory = crate::node::NodeFactory::default();
-            let rectangles = crate::css_parser::parse_rectangles_from_css_file(&css_content, &mut factory);
-            
+            let rectangles =
+                crate::css_parser::parse_rectangles_from_css_file(&css_content, &mut factory);
+
             // Add all rectangles to the canvas
             for (index, mut rect) in rectangles.into_iter().enumerate() {
                 // Override the colors with the current theme colors if needed
                 rect.set_fill(Some(current_background_color));
                 rect.set_border(Some(current_border_color), rect.border_width());
-                
+
                 // Add the node and capture the ID
                 let node_id = canvas.add_node(rect, cx);
-                
+
                 // Select the second node (index 1) if it exists
                 if index == 1 {
                     node_to_select = Some(node_id);
                 }
+
+                // Make sure our next_id is higher than any loaded ID to prevent collisions
+                // NodeId stores an internal usize, so we access it with .0
+                canvas.next_id = canvas.next_id.max(node_id.0 + 1);
             }
         } else {
             // Fallback to creating a single default rectangle if CSS loading fails
@@ -181,9 +184,13 @@ impl LunaCanvas {
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
             let node_id = canvas.add_node(rect, cx);
+            
+            // Make sure our next_id is higher than the ID we just used
+            canvas.next_id = canvas.next_id.max(node_id.0 + 1);
+            
             node_to_select = Some(node_id);
         }
-        
+
         // Select a node if we have one
         if let Some(node_id) = node_to_select {
             canvas.select_node(node_id);
@@ -198,11 +205,67 @@ impl LunaCanvas {
     pub fn generate_id(&mut self) -> NodeId {
         let id = NodeId::new(self.next_id);
         self.next_id += 1;
+        println!("Generated new node ID: {}", id); // Debug logging
         id
+    }
+
+    pub fn nodes(&self) -> &Vec<RectangleNode> {
+        &self.nodes
+    }
+
+    pub fn selected_nodes(&self) -> &HashSet<NodeId> {
+        &self.selected_nodes
     }
 
     pub fn app_state(&self) -> &Entity<AppState> {
         &self.app_state
+    }
+
+    pub fn active_drag(&self) -> Option<ActiveDrag> {
+        self.active_drag.clone()
+    }
+
+    pub fn set_active_drag(&mut self, active_drag: ActiveDrag) {
+        self.active_drag = Some(active_drag);
+    }
+
+    pub fn clear_active_drag(&mut self) {
+        self.active_drag = None;
+    }
+
+    pub fn active_element_draw(&self) -> Option<(NodeId, NodeType, ActiveDrag)> {
+        self.active_element_draw.clone()
+    }
+
+    pub fn set_active_element_draw(&mut self, active_element_draw: (NodeId, NodeType, ActiveDrag)) {
+        self.active_element_draw = Some(active_element_draw);
+    }
+
+    pub fn clear_active_element_draw(&mut self) {
+        self.active_element_draw = None;
+    }
+
+    pub fn element_initial_positions(&self) -> &HashMap<NodeId, Point<f32>> {
+        &self.element_initial_positions
+    }
+    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, Point<f32>> {
+        &mut self.element_initial_positions
+    }
+
+    pub fn hovered_node(&self) -> Option<NodeId> {
+        self.hovered_node
+    }
+
+    pub fn set_hovered_node(&mut self, hovered_node: Option<NodeId>) {
+        self.hovered_node = hovered_node;
+    }
+
+    pub fn get_node(&self, node_id: NodeId) -> Option<&RectangleNode> {
+        self.nodes.iter().find(|n| n.id() == node_id)
+    }
+
+    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut RectangleNode> {
+        self.nodes.iter_mut().find(|n| n.id() == node_id)
     }
 
     /// Convert a window-relative point to canvas-relative point
@@ -217,14 +280,6 @@ impl LunaCanvas {
         let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
         let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
         Point::new(window_x, window_y)
-    }
-
-    pub fn active_tool(&self) -> &ToolKind {
-        &self.active_tool
-    }
-
-    pub fn set_active_tool(&mut self, tool: ToolKind) {
-        self.active_tool = tool;
     }
 
     pub fn scene_graph(&self) -> &Entity<SceneGraph> {
@@ -256,10 +311,24 @@ impl LunaCanvas {
         node_id
     }
 
-    /// Remove a node from the canvas
-    pub fn remove_node(&mut self, node_id: NodeId) -> Option<RectangleNode> {
+    /// Remove a node from the canvas and update the scene graph
+    pub fn remove_node(
+        &mut self,
+        node_id: NodeId,
+        cx: &mut Context<Self>,
+    ) -> Option<crate::node::RectangleNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
+
+        // Remove from scene graph if it exists there
+        let scene_node_id = self
+            .scene_graph
+            .update(cx, |sg, _cx| sg.get_scene_node_id(node_id));
+        if let Some(scene_node_id) = scene_node_id {
+            self.scene_graph.update(cx, |sg, _cx| {
+                sg.remove_node(scene_node_id);
+            });
+        }
 
         // Find and remove the node from our vector
         let position = self.nodes.iter().position(|node| node.id() == node_id);
@@ -309,6 +378,19 @@ impl LunaCanvas {
     /// Check if a node is selected
     pub fn is_node_selected(&self, node_id: NodeId) -> bool {
         self.selected_nodes.contains(&node_id)
+    }
+
+    /// Select all root nodes in the canvas
+    pub fn select_all_nodes(&mut self) {
+        // Check if all nodes are already selected to avoid unnecessary work
+        if self.selected_nodes.len() == self.nodes.len() && !self.nodes.is_empty() {
+            return;
+        }
+
+        self.selected_nodes.clear();
+        self.selected_nodes
+            .extend(self.nodes.iter().map(|node| node.id()));
+        self.dirty = true;
     }
 
     /// Update the layout for the entire canvas
@@ -467,32 +549,30 @@ impl LunaCanvas {
 
         self.dirty = true;
     }
-    
+
     /// Captures initial coordinates of all selected nodes in element_initial_positions
-    /// 
+    ///
     /// This method should be called at the start of an element drag operation to establish
     /// a reference point for relative transformations. The stored positions are used by
     /// move_selected_nodes_with_drag to preserve element relationships during movement.
     pub fn save_selected_nodes_positions(&mut self) {
         self.element_initial_positions.clear();
-        
+
         for node in &self.nodes {
             if self.selected_nodes.contains(&node.id()) {
                 let layout = node.layout();
-                self.element_initial_positions.insert(
-                    node.id(),
-                    Point::new(layout.x, layout.y)
-                );
+                self.element_initial_positions
+                    .insert(node.id(), Point::new(layout.x, layout.y));
             }
         }
     }
-    
+
     /// Transforms selected elements by applying the provided delta to their initial positions
-    /// 
+    ///
     /// This method operates on the captured initial positions, ensuring that multiple elements
     /// maintain their relative spatial relationships during dragging. It also updates the
     /// scene graph to reflect the visual changes.
-    /// 
+    ///
     /// # Arguments
     /// * `delta` - The transformation vector to apply to all selected elements
     /// * `cx` - Context used for scene graph updates
@@ -500,31 +580,32 @@ impl LunaCanvas {
         for node in &mut self.nodes {
             // Get the node ID first before any mutable borrows
             let node_id = node.id();
-            
+
             if self.selected_nodes.contains(&node_id) {
                 if let Some(initial_pos) = self.element_initial_positions.get(&node_id) {
                     // First, update the layout
                     let layout = node.layout_mut();
                     layout.x = initial_pos.x + delta.x;
                     layout.y = initial_pos.y + delta.y;
-                    
+
                     // Store values we need before releasing the mutable borrow
                     let new_x = layout.x;
                     let new_y = layout.y;
                     let width = layout.width;
                     let height = layout.height;
-                    
+
                     // Update the scene graph bounds
-                    if let Some(scene_node_id) = self.scene_graph.update(cx, |sg, _cx| {
-                        sg.get_scene_node_id(node_id)
-                    }) {
+                    if let Some(scene_node_id) = self
+                        .scene_graph
+                        .update(cx, |sg, _cx| sg.get_scene_node_id(node_id))
+                    {
                         self.scene_graph.update(cx, |sg, _cx| {
                             sg.set_local_bounds(
                                 scene_node_id,
                                 Bounds {
                                     origin: Point::new(new_x, new_y),
                                     size: Size::new(width, height),
-                                }
+                                },
                             );
                         });
                     }
@@ -603,6 +684,11 @@ impl LunaCanvas {
         let mut key_context = KeyContext::new_with_defaults();
         key_context.set("canvas", "Canvas");
         key_context
+    }
+
+    pub fn deselect_all_nodes(&mut self, cx: &mut Context<Self>) {
+        self.selected_nodes.clear();
+        self.mark_dirty(cx);
     }
 }
 

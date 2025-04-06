@@ -22,8 +22,7 @@ pub struct Sidebar {
 }
 
 impl Sidebar {
-    pub fn new(weak_canvas: WeakEntity<LunaCanvas>) -> Self {
-        let canvas = weak_canvas.upgrade().expect("Canvas should be alive");
+    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
         Self { canvas }
     }
 }
