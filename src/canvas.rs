@@ -97,6 +97,10 @@ pub struct LunaCanvas {
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
     element_initial_positions: HashMap<NodeId, Point<f32>>,
+    
+    /// Tracks a potential parent frame when dragging elements
+    /// Used to highlight frames that can become parents when dropping elements
+    potential_parent_frame: Option<NodeId>,
 
     theme: Theme,
 }
@@ -141,6 +145,7 @@ impl LunaCanvas {
             active_drag: None,
             active_element_draw: None,
             element_initial_positions: HashMap::new(),
+            potential_parent_frame: None,
             theme: theme.clone(),
             hovered_node: None,
         };
@@ -246,6 +251,14 @@ impl LunaCanvas {
     }
     pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, Point<f32>> {
         &mut self.element_initial_positions
+    }
+    
+    pub fn potential_parent_frame(&self) -> Option<NodeId> {
+        self.potential_parent_frame
+    }
+    
+    pub fn set_potential_parent_frame(&mut self, frame_id: Option<NodeId>) {
+        self.potential_parent_frame = frame_id;
     }
 
     pub fn hovered_node(&self) -> Option<NodeId> {

@@ -524,6 +524,8 @@ impl CanvasElement {
             }
         }
 
+        // Reset the potential parent frame when drag ends
+        canvas.set_potential_parent_frame(None);
         canvas.clear_active_drag();
         canvas.clear_active_element_draw();
 
@@ -609,6 +611,23 @@ impl CanvasElement {
                     if !canvas.selected_nodes().is_empty() {
                         // Calculate the drag delta in canvas coordinates
                         let delta = new_drag.delta();
+                        
+                        // Get current canvas point to check for potential parent frames
+                        let canvas_point = canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                        
+                        // Get all the selected node IDs
+                        let selected_ids: Vec<NodeId> = canvas.selected_nodes().iter().cloned().collect();
+                        
+                        // Find potential parent frame at the current position
+                        let potential_parent = canvas.nodes()
+                            .iter()
+                            .rev() // Reverse to get top-to-bottom z-order
+                            .filter(|node| !selected_ids.contains(&node.id()))
+                            .find(|node| node.contains_point(&canvas_point))
+                            .map(|node| node.id());
+                        
+                        // Update the potential parent frame
+                        canvas.set_potential_parent_frame(potential_parent);
 
                         // Move all selected nodes with the drag delta
                         canvas.move_selected_nodes_with_drag(delta, cx);
@@ -1055,7 +1074,7 @@ impl CanvasElement {
         }
         
         // Get all the data we need in one place
-        let (nodes_to_render, selected_node_ids, hovered_node) = canvas.update(cx, |canvas, cx| {
+        let (nodes_to_render, selected_node_ids, hovered_node, potential_parent_frame, active_drag) = canvas.update(cx, |canvas, cx| {
             let visible_nodes = canvas.visible_nodes(cx);
             let scene_graph = canvas.scene_graph().read(cx);
             let selected_nodes = canvas.selected_nodes().clone();
@@ -1092,7 +1111,7 @@ impl CanvasElement {
                 }
             }
 
-            (nodes_to_render, selected_nodes, hovered_node)
+            (nodes_to_render, selected_nodes, hovered_node, canvas.potential_parent_frame(), canvas.active_drag())
         });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
@@ -1105,6 +1124,8 @@ impl CanvasElement {
                 children_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
                 selected_node_ids: &HashSet<NodeId>,
                 hovered_node: &Option<NodeId>,
+                potential_parent_frame: &Option<NodeId>,
+                has_active_drag: bool,
                 theme: &Theme,
                 window: &mut gpui::Window,
             ) {
@@ -1153,18 +1174,53 @@ impl CanvasElement {
                     window.paint_quad(gpui::outline(hover_bounds, hover_color, BorderStyle::Solid));
                 }
                 
+                // Show yellow border for potential parent frames during drag operations
+                if has_active_drag && potential_parent_frame.as_ref() == Some(&node_info.node_id) {
+                    // Create a slightly larger bounds for the parent indicator
+                    let parent_indicator_bounds = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(3.0),
+                            node_info.bounds.origin.y - gpui::Pixels(3.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(6.0),
+                            node_info.bounds.size.height + gpui::Pixels(6.0),
+                        ),
+                    };
+                    
+                    // Use a bright yellow color for the parent indicator
+                    let yellow_highlight = gpui::hsla(60.0, 1.0, 0.5, 0.8); // Bright yellow with 80% opacity
+                    window.paint_quad(gpui::outline(parent_indicator_bounds, yellow_highlight, BorderStyle::Solid));
+                    
+                    // Make the border thicker for more emphasis
+                    let inner_border = gpui::Bounds {
+                        origin: gpui::Point::new(
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                        ),
+                        size: gpui::Size::new(
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                        ),
+                    };
+                    window.paint_quad(gpui::outline(inner_border, yellow_highlight, BorderStyle::Solid));
+                }
+                
                 // Paint all children (if any)
                 if let Some(children) = children_map.get(&node_info.node_id) {
                     for child in children {
-                        paint_node_recursively(child, children_map, selected_node_ids, hovered_node, theme, window);
+                        paint_node_recursively(child, children_map, selected_node_ids, hovered_node, potential_parent_frame, has_active_drag, theme, window);
                     }
                 }
             }
             
+            // Check if we have an active drag operation
+            let has_active_drag = active_drag.is_some() && matches!(active_drag.as_ref().map(|d| &d.drag_type), Some(DragType::MoveElements));
+            
             // FIRST PASS: Paint all root nodes and their children recursively
             // =================================================================
             for node_info in &root_nodes {
-                paint_node_recursively(node_info, &children_map, &selected_node_ids, &hovered_node, &theme, window);
+                paint_node_recursively(node_info, &children_map, &selected_node_ids, &hovered_node, &potential_parent_frame, has_active_drag, &theme, window);
             }
 
             // SECOND PASS: Paint all selection outlines and resize handles
