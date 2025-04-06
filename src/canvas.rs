@@ -161,10 +161,6 @@ impl LunaCanvas {
 
             // Add all rectangles to the canvas
             for (index, mut rect) in rectangles.into_iter().enumerate() {
-                // Override the colors with the current theme colors if needed
-                rect.set_fill(Some(current_background_color));
-                rect.set_border(Some(current_border_color), rect.border_width());
-
                 // Add the node and capture the ID
                 let node_id = canvas.add_node(rect, cx);
 
