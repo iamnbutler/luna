@@ -441,7 +441,7 @@ impl CanvasElement {
                         rect.set_border(Some(current_border_color), 1.0);
 
                         // Add the node to the canvas
-                        canvas.add_node(rect, cx);
+                        canvas.add_node(rect, None, cx);
                         canvas.mark_dirty(cx);
                     }
                 }
@@ -1126,14 +1126,45 @@ impl CanvasElement {
                 hovered_node: &Option<NodeId>,
                 potential_parent_frame: &Option<NodeId>,
                 has_active_drag: bool,
+                parent_transform: Option<TransformationMatrix>,
                 theme: &Theme,
                 window: &mut gpui::Window,
             ) {
+                // Get coordinates in parent space
+                let (frame_x, frame_y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
+                let (frame_width, frame_height) = (node_info.bounds.size.width.0, node_info.bounds.size.height.0);
+                
+                // Apply parent's transform if available, or use node's bounds directly
+                let transformed_bounds = if let Some(transform) = parent_transform {
+                    // Convert to gpui Points and apply the transformation
+                    let top_left = transform.apply(gpui::Point::new(
+                        gpui::Pixels(frame_x),
+                        gpui::Pixels(frame_y)
+                    ));
+                    
+                    let bottom_right = transform.apply(gpui::Point::new(
+                        gpui::Pixels(frame_x + frame_width),
+                        gpui::Pixels(frame_y + frame_height)
+                    ));
+                    
+                    // Create bounds from transformed points
+                    gpui::Bounds {
+                        origin: top_left,
+                        size: gpui::Size::new(
+                            gpui::Pixels(bottom_right.x.0 - top_left.x.0),
+                            gpui::Pixels(bottom_right.y.0 - top_left.y.0)
+                        ),
+                    }
+                } else {
+                    // No parent transform, use bounds directly
+                    node_info.bounds
+                };
+                
                 // Paint the node itself
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
                     window.paint_quad(gpui::PaintQuad {
-                        bounds: node_info.bounds,
+                        bounds: transformed_bounds,
                         corner_radii: (node_info.corner_radius).into(),
                         background: fill_color.into(),
                         border_widths: (0.).into(),
@@ -1145,7 +1176,7 @@ impl CanvasElement {
                 // Paint the border if it exists
                 if let Some(border_color) = node_info.border_color {
                     window.paint_quad(gpui::PaintQuad {
-                        bounds: node_info.bounds,
+                        bounds: transformed_bounds,
                         corner_radii: (node_info.corner_radius).into(),
                         background: gpui::transparent_black().into(),
                         border_widths: (node_info.border_width).into(),
@@ -1161,12 +1192,12 @@ impl CanvasElement {
                     // Create a slightly larger bounds for hover indicator
                     let hover_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                            transformed_bounds.origin.x - gpui::Pixels(2.0),
+                            transformed_bounds.origin.y - gpui::Pixels(2.0),
                         ),
                         size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                            transformed_bounds.size.width + gpui::Pixels(4.0),
+                            transformed_bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
 
@@ -1179,12 +1210,12 @@ impl CanvasElement {
                     // Create a slightly larger bounds for the parent indicator
                     let parent_indicator_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(3.0),
-                            node_info.bounds.origin.y - gpui::Pixels(3.0),
+                            transformed_bounds.origin.x - gpui::Pixels(3.0),
+                            transformed_bounds.origin.y - gpui::Pixels(3.0),
                         ),
                         size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(6.0),
-                            node_info.bounds.size.height + gpui::Pixels(6.0),
+                            transformed_bounds.size.width + gpui::Pixels(6.0),
+                            transformed_bounds.size.height + gpui::Pixels(6.0),
                         ),
                     };
                     
@@ -1195,22 +1226,44 @@ impl CanvasElement {
                     // Make the border thicker for more emphasis
                     let inner_border = gpui::Bounds {
                         origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                            transformed_bounds.origin.x - gpui::Pixels(2.0),
+                            transformed_bounds.origin.y - gpui::Pixels(2.0),
                         ),
                         size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                            transformed_bounds.size.width + gpui::Pixels(4.0),
+                            transformed_bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
                     window.paint_quad(gpui::outline(inner_border, yellow_highlight, BorderStyle::Solid));
                 }
                 
-                // Paint all children (if any)
+                // Create a transformation matrix for children
+                // This creates a new coordinate system relative to this frame
+                let child_transform = TransformationMatrix::unit()
+                    .compose(parent_transform.unwrap_or_else(TransformationMatrix::unit))
+                    .translate(point(
+                        gpui::Pixels(frame_x).scale(1.0),
+                        gpui::Pixels(frame_y).scale(1.0)
+                    ));
+                
+                // Paint all children (if any) with clipping and proper transformation
                 if let Some(children) = children_map.get(&node_info.node_id) {
-                    for child in children {
-                        paint_node_recursively(child, children_map, selected_node_ids, hovered_node, potential_parent_frame, has_active_drag, theme, window);
-                    }
+                    // Create a mask for children to clip them to the frame bounds
+                    window.with_content_mask(Some(ContentMask { bounds: transformed_bounds }), |window| {
+                        for child in children {
+                            paint_node_recursively(
+                                child,
+                                children_map,
+                                selected_node_ids,
+                                hovered_node,
+                                potential_parent_frame,
+                                has_active_drag,
+                                Some(child_transform),
+                                theme,
+                                window
+                            );
+                        }
+                    });
                 }
             }
             
@@ -1220,7 +1273,17 @@ impl CanvasElement {
             // FIRST PASS: Paint all root nodes and their children recursively
             // =================================================================
             for node_info in &root_nodes {
-                paint_node_recursively(node_info, &children_map, &selected_node_ids, &hovered_node, &potential_parent_frame, has_active_drag, &theme, window);
+                paint_node_recursively(
+                    node_info,
+                    &children_map,
+                    &selected_node_ids,
+                    &hovered_node,
+                    &potential_parent_frame,
+                    has_active_drag,
+                    None, // No parent transform for root nodes
+                    &theme,
+                    window
+                );
             }
 
             // SECOND PASS: Paint all selection outlines and resize handles

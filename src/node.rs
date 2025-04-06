@@ -171,13 +171,29 @@ impl FrameNode {
     }
     
     /// Add a child node to this frame
-    pub fn add_child(&mut self, child_id: NodeId) {
-        self.children.push(child_id);
+    /// 
+    /// Returns true if the child was added (it wasn't already a child)
+    pub fn add_child(&mut self, child_id: NodeId) -> bool {
+        if !self.children.contains(&child_id) {
+            self.children.push(child_id);
+            true
+        } else {
+            false
+        }
     }
     
     /// Remove a child node from this frame
-    pub fn remove_child(&mut self, child_id: NodeId) {
+    /// 
+    /// Returns true if the child was removed (it was present)
+    pub fn remove_child(&mut self, child_id: NodeId) -> bool {
+        let len_before = self.children.len();
         self.children.retain(|id| *id != child_id);
+        len_before != self.children.len()
+    }
+    
+    /// Check if this frame contains a specific child
+    pub fn has_child(&self, child_id: NodeId) -> bool {
+        self.children.contains(&child_id)
     }
     
     /// Get a reference to the children of this frame
