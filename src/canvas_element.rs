@@ -7,7 +7,7 @@ use gpui::{
     Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, size, Bounds, Point, Size};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Defines z-ordering for rendering layers with reserved index ranges
 ///
@@ -178,7 +178,7 @@ use crate::AppState;
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::{ActiveDrag, DragType},
-    node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
+    node::{NodeCommon, NodeId, NodeLayout, NodeType, FrameNode},
     util::{round_to_pixel, rounded_point},
     GlobalState, Tool,
 };
@@ -384,7 +384,7 @@ impl CanvasElement {
                 let new_node_id = canvas.generate_id();
 
                 let active_drag = ActiveDrag::new_create_element(position);
-                canvas.set_active_element_draw((new_node_id, NodeType::Rectangle, active_drag));
+                canvas.set_active_element_draw((new_node_id, NodeType::Frame, active_drag));
                 canvas.mark_dirty(cx);
             }
             _ => {}
@@ -413,7 +413,7 @@ impl CanvasElement {
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw().take() {
             match (node_type, active_tool) {
-                (NodeType::Rectangle, Tool::Rectangle) => {
+                (NodeType::Frame, Tool::Rectangle) => {
                     // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
@@ -431,7 +431,7 @@ impl CanvasElement {
                         let rel_y = canvas_point.y;
 
                         // Create a new rectangle node
-                        let mut rect = RectangleNode::new(node_id);
+                        let mut rect = FrameNode::new(node_id);
 
                         // Set position and size
                         *rect.layout_mut() = NodeLayout::new(rel_x, rel_y, width, height);
@@ -453,6 +453,61 @@ impl CanvasElement {
         if let Some(active_drag) = canvas.active_drag().take() {
             match active_drag.drag_type {
                 DragType::MoveElements => {
+                    // Check if the selected nodes are being dropped on a frame
+                    // by getting the topmost frame at the current mouse position, excluding selected frames
+                    let drop_point = canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                    
+                    // Get all the selected node IDs
+                    let selected_ids: Vec<NodeId> = canvas.selected_nodes().iter().cloned().collect();
+                    
+                    // Structure to hold all the information we need from the parent frame
+                    struct ParentFrameInfo {
+                        id: NodeId,
+                        children: Vec<NodeId>,
+                        x: f32,
+                        y: f32,
+                    }
+                    
+                    // Get all the information we need from the potential parent before borrowing canvas mutably
+                    let parent_info = canvas.nodes()
+                        .iter()
+                        .rev() // Reverse to get top-to-bottom z-order
+                        .filter(|node| !selected_ids.contains(&node.id()))
+                        .find(|node| node.contains_point(&drop_point))
+                        .map(|parent_frame| {
+                            ParentFrameInfo {
+                                id: parent_frame.id(),
+                                children: parent_frame.children().clone(),
+                                x: parent_frame.layout().x,
+                                y: parent_frame.layout().y,
+                            }
+                        });
+                    
+                    // Process if we found a potential parent
+                    if let Some(parent_info) = parent_info {
+                        // For each selected node, add it as a child to the parent frame
+                        for &node_id in &selected_ids {
+                            // First, ensure the node isn't already a child of this frame
+                            if !parent_info.children.contains(&node_id) {
+                                // First update the parent to add the child
+                                if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
+                                    parent_node.add_child(node_id);
+                                }
+                                
+                                // Then update the child position in a separate borrow
+                                if let Some(child_node) = canvas.get_node_mut(node_id) {
+                                    let child_layout = child_node.layout_mut();
+                                    
+                                    // Adjust position to be relative to parent
+                                    child_layout.x -= parent_info.x;
+                                    child_layout.y -= parent_info.y;
+                                }
+                            }
+                        }
+                        canvas.mark_dirty(cx);
+                    }
+                    
+                    
                     // Finalize the move by clearing initial positions
                     canvas.element_initial_positions_mut().clear();
                 }
@@ -956,6 +1011,7 @@ impl CanvasElement {
         let theme = cx.theme().clone();
 
         // Collect ALL data we need up front to avoid any borrow issues
+        #[derive(Clone)]
         struct NodeRenderInfo {
             node_id: NodeId,
             bounds: gpui::Bounds<Pixels>,
@@ -963,8 +1019,41 @@ impl CanvasElement {
             border_color: Option<Hsla>,
             border_width: f32,
             corner_radius: f32,
+            children: Vec<NodeId>,
         }
 
+        // Helper function to organize nodes into a hierarchy
+        fn organize_nodes_hierarchically(all_nodes: &[NodeRenderInfo]) -> (Vec<NodeRenderInfo>, HashMap<NodeId, Vec<NodeRenderInfo>>) {
+            let mut root_nodes = Vec::new();
+            let mut children_map: HashMap<NodeId, Vec<NodeRenderInfo>> = HashMap::new();
+            
+            // First, create a mapping of parent NodeId to child nodes
+            for node in all_nodes {
+                let node_id = node.node_id;
+                
+                // For each child ID in the node's children list
+                for &child_id in &node.children {
+                    // Find the corresponding NodeRenderInfo for this child
+                    if let Some(child_node) = all_nodes.iter().find(|n| n.node_id == child_id) {
+                        children_map.entry(node_id).or_default().push(child_node.clone());
+                    }
+                }
+            }
+            
+            // Identify root nodes (not children of any other node)
+            let all_children: HashSet<NodeId> = children_map.values()
+                .flat_map(|nodes| nodes.iter().map(|n| n.node_id))
+                .collect();
+                
+            for node in all_nodes {
+                if !all_children.contains(&node.node_id) {
+                    root_nodes.push(node.clone());
+                }
+            }
+            
+            (root_nodes, children_map)
+        }
+        
         // Get all the data we need in one place
         let (nodes_to_render, selected_node_ids, hovered_node) = canvas.update(cx, |canvas, cx| {
             let visible_nodes = canvas.visible_nodes(cx);
@@ -997,6 +1086,7 @@ impl CanvasElement {
                             border_color: node.border_color(),
                             border_width: node.border_width(),
                             corner_radius: node.corner_radius(),
+                            children: node.children().clone(),
                         });
                     }
                 }
@@ -1006,9 +1096,19 @@ impl CanvasElement {
         });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
-            // FIRST PASS: Paint all nodes and hover effects
-            // ==============================================
-            for node_info in &nodes_to_render {
+            // Organize nodes into a hierarchy
+            let (root_nodes, children_map) = organize_nodes_hierarchically(&nodes_to_render);
+            
+            // Recursive function to paint a node and its children
+            fn paint_node_recursively(
+                node_info: &NodeRenderInfo,
+                children_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
+                selected_node_ids: &HashSet<NodeId>,
+                hovered_node: &Option<NodeId>,
+                theme: &Theme,
+                window: &mut gpui::Window,
+            ) {
+                // Paint the node itself
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
                     window.paint_quad(gpui::PaintQuad {
@@ -1052,6 +1152,19 @@ impl CanvasElement {
                     let hover_color = theme.tokens.active_border.opacity(0.6);
                     window.paint_quad(gpui::outline(hover_bounds, hover_color, BorderStyle::Solid));
                 }
+                
+                // Paint all children (if any)
+                if let Some(children) = children_map.get(&node_info.node_id) {
+                    for child in children {
+                        paint_node_recursively(child, children_map, selected_node_ids, hovered_node, theme, window);
+                    }
+                }
+            }
+            
+            // FIRST PASS: Paint all root nodes and their children recursively
+            // =================================================================
+            for node_info in &root_nodes {
+                paint_node_recursively(node_info, &children_map, &selected_node_ids, &hovered_node, &theme, window);
             }
 
             // SECOND PASS: Paint all selection outlines and resize handles

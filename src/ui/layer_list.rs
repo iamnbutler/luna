@@ -73,19 +73,18 @@ impl RenderOnce for LayerListItem {
 ///
 /// Renders a scrollable list of [`LayerListItem`]s representing the elements
 /// in the canvas, with their current selection state.
-#[derive(IntoElement)]
-struct LayerList {
+pub struct LayerList {
     canvas: Entity<LunaCanvas>,
 }
 
 impl LayerList {
-    fn new(canvas: Entity<LunaCanvas>) -> Self {
+    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
         Self { canvas }
     }
 }
 
-impl RenderOnce for LayerList {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Render for LayerList {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let mut layers = div().flex().flex_col().flex_1().pt_1();
 
         // Get all nodes from Canvas
@@ -93,7 +92,7 @@ impl RenderOnce for LayerList {
 
         // Add all nodes to the layer list
         for node in canvas.nodes() {
-            let kind = NodeType::Rectangle; // We only have rectangle nodes now
+            let kind = NodeType::Frame; // We only have frame nodes now
 
             let name = format!("Node {}", node.id.0);
             let selected = canvas.is_node_selected(node.id);

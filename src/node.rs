@@ -37,8 +37,8 @@ impl std::fmt::Display for NodeId {
 /// Types of nodes that can be rendered on the canvas
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
-    /// A rectangle shape
-    Rectangle,
+    /// A frame that can contain other nodes
+    Frame,
 }
 
 /// Layout information for a node
@@ -126,28 +126,31 @@ pub trait NodeCommon: std::fmt::Debug {
     }
 }
 
-/// Concrete implementation of a rectangle visual element
+/// Concrete implementation of a frame visual element
 ///
-/// RectangleNode represents a rectangular element with configurable:
+/// FrameNode represents a rectangular element that can contain children nodes with configurable:
 /// - Position and dimensions via NodeLayout
 /// - Fill color (optional)
 /// - Border properties (color and width)
 /// - Corner radius for rounded rectangles
+/// - Children nodes that are displayed inside and clipped to the frame bounds
 ///
-/// As the fundamental building block in the canvas system, rectangles
+/// As the fundamental building block in the canvas system, frames
 /// serve as the basis for many other visual elements and are optimized
-/// for efficient rendering and manipulation.
+/// for efficient rendering and manipulation. Frames can contain other nodes as children,
+/// creating a hierarchy of elements.
 #[derive(Debug, Clone)]
-pub struct RectangleNode {
+pub struct FrameNode {
     pub id: NodeId,
     pub layout: NodeLayout,
     pub fill: Option<Hsla>,
     pub border_color: Option<Hsla>,
     pub border_width: f32,
     pub corner_radius: f32,
+    pub children: Vec<NodeId>,
 }
 
-impl RectangleNode {
+impl FrameNode {
     pub fn new(id: NodeId) -> Self {
         Self {
             id,
@@ -156,24 +159,40 @@ impl RectangleNode {
             border_color: Some(Hsla::black()),
             border_width: 1.0,
             corner_radius: 0.0,
+            children: Vec::new(),
         }
     }
 
-    /// Create a rectangle with specific dimensions and position
+    /// Create a frame with specific dimensions and position
     pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
         let mut node = Self::new(id);
         node.layout = NodeLayout::new(x, y, width, height);
         node
     }
+    
+    /// Add a child node to this frame
+    pub fn add_child(&mut self, child_id: NodeId) {
+        self.children.push(child_id);
+    }
+    
+    /// Remove a child node from this frame
+    pub fn remove_child(&mut self, child_id: NodeId) {
+        self.children.retain(|id| *id != child_id);
+    }
+    
+    /// Get a reference to the children of this frame
+    pub fn children(&self) -> &Vec<NodeId> {
+        &self.children
+    }
 }
 
-impl NodeCommon for RectangleNode {
+impl NodeCommon for FrameNode {
     fn id(&self) -> NodeId {
         self.id
     }
 
     fn node_type(&self) -> NodeType {
-        NodeType::Rectangle
+        NodeType::Frame
     }
 
     fn layout(&self) -> &NodeLayout {
@@ -247,9 +266,9 @@ impl NodeFactory {
         id
     }
 
-    /// Create a new rectangle node
-    pub fn create_rectangle(&mut self) -> RectangleNode {
-        RectangleNode::new(self.next_id())
+    /// Create a new frame node
+    pub fn create_frame(&mut self) -> FrameNode {
+        FrameNode::new(self.next_id())
     }
 }
 
@@ -258,25 +277,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rectangle_node() {
+    fn test_frame_node() {
         let id = NodeId::new(2);
-        let rect = RectangleNode::new(id);
+        let frame = FrameNode::new(id);
 
-        assert_eq!(rect.node_type(), NodeType::Rectangle);
-        assert_eq!(rect.id(), id);
-        assert_eq!(rect.corner_radius(), 0.0);
+        assert_eq!(frame.node_type(), NodeType::Frame);
+        assert_eq!(frame.id(), id);
+        assert_eq!(frame.corner_radius(), 0.0);
+        assert!(frame.children().is_empty());
     }
 
     #[test]
     fn test_contains_point() {
         let id = NodeId::new(1);
-        let rect = RectangleNode::with_rect(id, 10.0, 10.0, 100.0, 100.0);
+        let frame = FrameNode::with_rect(id, 10.0, 10.0, 100.0, 100.0);
 
         // Test points inside and outside
         let point_inside = Point::new(50.0, 50.0);
         let point_outside = Point::new(200.0, 200.0);
 
-        assert!(rect.contains_point(&point_inside));
-        assert!(!rect.contains_point(&point_outside));
+        assert!(frame.contains_point(&point_inside));
+        assert!(!frame.contains_point(&point_outside));
+    }
+    
+    #[test]
+    fn test_frame_children() {
+        let parent_id = NodeId::new(1);
+        let child_id = NodeId::new(2);
+        
+        let mut frame = FrameNode::new(parent_id);
+        
+        // Initially no children
+        assert_eq!(frame.children().len(), 0);
+        
+        // Add a child
+        frame.add_child(child_id);
+        assert_eq!(frame.children().len(), 1);
+        assert_eq!(frame.children()[0], child_id);
+        
+        // Remove the child
+        frame.remove_child(child_id);
+        assert_eq!(frame.children().len(), 0);
     }
 }

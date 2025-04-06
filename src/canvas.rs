@@ -2,7 +2,7 @@
 
 use crate::{
     interactivity::ActiveDrag,
-    node::{NodeCommon, NodeId, NodeLayout, NodeType, RectangleNode},
+    node::{NodeCommon, NodeId, NodeLayout, NodeType, FrameNode},
     scene_graph::{SceneGraph, SceneNodeId},
     theme::Theme,
     AppState, Tool,
@@ -60,7 +60,7 @@ pub struct LunaCanvas {
     canvas_node: SceneNodeId,
 
     /// Flat list of nodes (the data model)
-    nodes: Vec<RectangleNode>,
+    nodes: Vec<FrameNode>,
 
     /// Currently selected nodes
     selected_nodes: HashSet<NodeId>,
@@ -176,7 +176,7 @@ impl LunaCanvas {
         } else {
             // Fallback to creating a single default rectangle if CSS loading fails
             let node_id = canvas.generate_id();
-            let mut rect = RectangleNode::with_rect(node_id, 100.0, 100.0, 200.0, 150.0);
+            let mut rect = FrameNode::with_rect(node_id, 100.0, 100.0, 200.0, 150.0);
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
             let node_id = canvas.add_node(rect, cx);
@@ -205,7 +205,7 @@ impl LunaCanvas {
         id
     }
 
-    pub fn nodes(&self) -> &Vec<RectangleNode> {
+    pub fn nodes(&self) -> &Vec<FrameNode> {
         &self.nodes
     }
 
@@ -256,11 +256,11 @@ impl LunaCanvas {
         self.hovered_node = hovered_node;
     }
 
-    pub fn get_node(&self, node_id: NodeId) -> Option<&RectangleNode> {
+    pub fn get_node(&self, node_id: NodeId) -> Option<&FrameNode> {
         self.nodes.iter().find(|n| n.id() == node_id)
     }
 
-    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut RectangleNode> {
+    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut FrameNode> {
         self.nodes.iter_mut().find(|n| n.id() == node_id)
     }
 
@@ -283,7 +283,7 @@ impl LunaCanvas {
     }
 
     /// Add a node to the canvas
-    pub fn add_node(&mut self, node: RectangleNode, cx: &mut Context<Self>) -> NodeId {
+    pub fn add_node(&mut self, node: FrameNode, cx: &mut Context<Self>) -> NodeId {
         let node_id = node.id();
 
         self.nodes.push(node);
@@ -312,7 +312,7 @@ impl LunaCanvas {
         &mut self,
         node_id: NodeId,
         cx: &mut Context<Self>,
-    ) -> Option<crate::node::RectangleNode> {
+    ) -> Option<crate::node::FrameNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
 
@@ -427,7 +427,7 @@ impl LunaCanvas {
     }
 
     /// Get nodes that are visible in the current viewport
-    pub fn visible_nodes(&self, cx: &mut App) -> Vec<&RectangleNode> {
+    pub fn visible_nodes(&self, cx: &mut App) -> Vec<&FrameNode> {
         // Create viewport bounds in window coordinates
         let viewport = Bounds {
             origin: Point::new(0.0, 0.0),
@@ -527,7 +527,7 @@ impl LunaCanvas {
         let id = self.generate_id();
 
         // Create a rectangle node at the specified position
-        let mut rect = RectangleNode::new(id);
+        let mut rect = FrameNode::new(id);
         *rect.layout_mut() = NodeLayout::new(position.x, position.y, 100.0, 100.0);
 
         self.add_node(rect, cx)

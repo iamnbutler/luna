@@ -1,8 +1,8 @@
-use crate::node::{NodeCommon, NodeFactory, RectangleNode};
+use crate::node::{NodeCommon, NodeFactory, FrameNode};
 use gpui::Hsla;
 use std::collections::HashMap;
 
-/// Parses a CSS string and creates a RectangleNode with the properties defined in the CSS.
+/// Parses a CSS string and creates a FrameNode with the properties defined in the CSS.
 ///
 /// # Arguments
 ///
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 ///
 /// # Returns
 ///
-/// * `Some(RectangleNode)` if parsing was successful
+/// * `Some(FrameNode)` if parsing was successful
 /// * `None` if there was a critical error during parsing
 ///
 /// # Example
@@ -31,8 +31,8 @@ use std::collections::HashMap;
 /// let mut factory = NodeFactory::default();
 /// let rect = parse_rectangle_from_css(css, &mut factory).unwrap();
 /// ```
-pub fn parse_rectangle_from_css(css: &str, factory: &mut NodeFactory) -> Option<RectangleNode> {
-    let mut rect = RectangleNode::new(factory.next_id());
+pub fn parse_rectangle_from_css(css: &str, factory: &mut NodeFactory) -> Option<FrameNode> {
+    let mut rect = FrameNode::new(factory.next_id());
     let properties = parse_css_declarations(css);
     
     // Apply properties to the rectangle
@@ -234,10 +234,10 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
     None
 }
 
-/// Parse a CSS file and extract multiple rectangle nodes
+/// Parse a CSS file and extract multiple frame nodes
 ///
-/// Each CSS rule with a selector will create a separate RectangleNode
-pub fn parse_rectangles_from_css_file(css: &str, factory: &mut NodeFactory) -> Vec<RectangleNode> {
+/// Each CSS rule with a selector will create a separate FrameNode
+pub fn parse_rectangles_from_css_file(css: &str, factory: &mut NodeFactory) -> Vec<FrameNode> {
     let mut result = Vec::new();
     
     // Simple parsing - split by rule blocks
