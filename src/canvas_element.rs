@@ -4,7 +4,7 @@ use crate::{
     node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType},
     scene_graph::SceneGraph,
     theme::{ActiveTheme, Theme},
-    tools::ActiveTool,
+    tools::{ActiveTool, GlobalTool},
     util::{round_to_pixel, rounded_point},
     AppState, GlobalState, Tool,
 };
@@ -14,7 +14,10 @@ use gpui::{
     Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, size, Bounds, Point, Size};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 /// Defines z-ordering for rendering layers with reserved index ranges
 ///
@@ -437,7 +440,16 @@ impl CanvasElement {
                         rect.set_border(Some(current_border_color), 1.0);
 
                         // Add the node to the canvas
-                        canvas.add_node(rect, None, cx);
+                        let new_node_id = canvas.add_node(rect, None, cx);
+
+                        // Clear any existing selection
+                        canvas.deselect_all_nodes(cx);
+
+                        // Select only the newly created element
+                        canvas.select_node(new_node_id);
+
+                        cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
+
                         canvas.mark_dirty(cx);
                     }
                 }
