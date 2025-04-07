@@ -61,6 +61,10 @@ impl Render for Sidebar {
 
         div()
             .id("sidebar")
+            .key_context("Sidebar")
+            .on_click(|_e, _, cx| {
+                cx.stop_propagation();
+            })
             .absolute()
             .top_0()
             .left_0()

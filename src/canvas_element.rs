@@ -1667,12 +1667,9 @@ impl Element for CanvasElement {
         let canvas = self.canvas.clone();
         let active_tool = *cx.active_tool().clone();
         let theme = cx.theme().clone();
-        // let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
+        let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
-        // window.set_key_context(key_context);
-
-        // register_actions
-        // register_key_listeners
+        window.set_key_context(key_context);
 
         let text_style = TextStyleRefinement {
             font_size: Some(self.style.text.font_size),

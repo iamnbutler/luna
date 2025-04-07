@@ -19,10 +19,11 @@ use assets::Assets;
 use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
-    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Global,
-    Hsla, IntoElement, KeyBinding, Menu, MenuItem, Pixels, Point, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowOptions,
+    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
+    IntoElement, KeyBinding, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
+    WindowOptions,
 };
+use keymap::init_keymap;
 use scene_graph::SceneGraph;
 use std::{path::PathBuf, sync::Arc};
 use theme::{ActiveTheme, GlobalTheme, Theme};
@@ -35,6 +36,7 @@ mod canvas_element;
 mod color;
 mod css_parser;
 mod interactivity;
+mod keymap;
 mod node;
 mod scene_graph;
 mod scene_node;
@@ -262,20 +264,7 @@ fn main() {
                 items: vec![MenuItem::action("Quit", Quit)],
             }]);
 
-            cx.bind_keys([
-                KeyBinding::new("h", HandTool, None),
-                KeyBinding::new("a", SelectionTool, None),
-                KeyBinding::new("r", RectangleTool, None),
-                KeyBinding::new("f", FrameTool, None),
-                KeyBinding::new("escape", Cancel, None),
-                KeyBinding::new("delete", Delete, None),
-                KeyBinding::new("backspace", Delete, None),
-                KeyBinding::new("cmd-a", SelectAll, None),
-                KeyBinding::new("cmd-v", Paste, None),
-                KeyBinding::new("cmd-c", Copy, None),
-                KeyBinding::new("cmd-x", Cut, None),
-            ]);
-
+            init_keymap(cx);
             init_globals(cx);
 
             let window = cx
