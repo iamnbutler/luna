@@ -3,13 +3,15 @@
 //! Provides a hierarchical view of elements in the canvas,
 //! showing their selection state and allowing interaction.
 
-use gpui::{
-    div, prelude::*, px, ElementId, Entity, Hsla, IntoElement, SharedString, Window, App,
-};
+use gpui::{div, prelude::*, px, App, ElementId, Entity, Hsla, IntoElement, SharedString, Window};
 
 use std::collections::HashSet;
 
-use crate::{canvas::LunaCanvas, node::{NodeType, NodeId, frame::FrameNode, NodeCommon}, theme::Theme};
+use crate::{
+    canvas::LunaCanvas,
+    node::{frame::FrameNode, NodeCommon, NodeId, NodeType},
+    theme::Theme,
+};
 
 /// Individual item in the layer list representing a canvas element
 #[derive(IntoElement)]
@@ -34,7 +36,7 @@ impl LayerListItem {
         self.selected = selected;
         self
     }
-    
+
     pub fn nesting_level(mut self, level: usize) -> Self {
         self.nesting_level = level;
         self
@@ -50,10 +52,10 @@ impl RenderOnce for LayerListItem {
         } else {
             theme.tokens.subtext0 // Use subtext0 for unselected items
         };
-        
+
         // Calculate indentation based on nesting level
         let indentation = px(10.0 + (self.nesting_level as f32 * 20.0));
-        
+
         div()
             .id(ElementId::Name(format!("layer-{}", self.name).into()))
             .pl(indentation)
@@ -66,9 +68,7 @@ impl RenderOnce for LayerListItem {
             .text_color(text_color)
             .gap(px(10.))
             .child(
-                div()
-                    .text_color(text_color.alpha(0.8))
-                    .child("□") // Simple frame icon
+                div().text_color(text_color.alpha(0.8)).child("□"), // Simple frame icon
             )
             .child(self.name)
     }
@@ -80,10 +80,10 @@ pub struct LayerList {
 }
 
 impl LayerList {
-    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
+    pub fn new(canvas: Entity<LunaCanvas>, cx: &mut Context<Self>) -> Self {
         Self { canvas }
     }
-    
+
     // Helper method to find the parent of a node
     fn find_parent(&self, nodes: &[FrameNode], node_id: NodeId) -> Option<NodeId> {
         for node in nodes {
@@ -93,55 +93,53 @@ impl LayerList {
         }
         None
     }
-    
+
     // Build the layer list items with hierarchy
     fn build_items(
         &self,
         nodes: &[FrameNode],
         parent_id: Option<NodeId>,
         nesting_level: usize,
-        selected_nodes: &HashSet<NodeId>
+        selected_nodes: &HashSet<NodeId>,
     ) -> Vec<LayerListItem> {
         let mut items = Vec::new();
-        
+
         // Find nodes that are children of the given parent (or root nodes if parent_id is None)
         let children = if let Some(parent) = parent_id {
             // Get children of the specified parent
-            nodes.iter()
+            nodes
+                .iter()
                 .filter(|node| self.find_parent(nodes, node.id()) == Some(parent))
                 .collect::<Vec<_>>()
         } else {
             // Get root nodes (those without parents)
-            nodes.iter()
+            nodes
+                .iter()
                 .filter(|node| self.find_parent(nodes, node.id()).is_none())
                 .collect::<Vec<_>>()
         };
-        
+
         // Create items for these nodes and their children
         for node in children {
             let node_id = node.id();
             let name = format!("Frame {}", node_id.0);
             let selected = selected_nodes.contains(&node_id);
-            
+
             // Add this node
             items.push(
                 LayerListItem::new(NodeType::Frame, name)
                     .selected(selected)
-                    .nesting_level(nesting_level)
+                    .nesting_level(nesting_level),
             );
-            
+
             // Add children recursively with increased nesting level
             if !node.children().is_empty() {
-                let child_items = self.build_items(
-                    nodes, 
-                    Some(node_id),
-                    nesting_level + 1,
-                    selected_nodes
-                );
+                let child_items =
+                    self.build_items(nodes, Some(node_id), nesting_level + 1, selected_nodes);
                 items.extend(child_items);
             }
         }
-        
+
         items
     }
 }
@@ -157,7 +155,7 @@ impl Render for LayerList {
 
         // Build hierarchical layer items
         let items = self.build_items(&nodes, None, 0, &selected_nodes);
-        
+
         // Add all items to the layer list
         for item in items {
             layers = layers.child(item);

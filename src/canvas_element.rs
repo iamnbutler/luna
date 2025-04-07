@@ -843,6 +843,9 @@ impl CanvasElement {
                                             },
                                         );
                                     });
+                                    
+                                    // Update child node layouts to reflect parent's resize
+                                    canvas.update_child_layouts_after_parent_resize(selected_node_id, cx);
                                 }
                             }
 

@@ -157,8 +157,6 @@ struct Luna {
     inspector: Entity<Inspector>,
     /// Sidebar for additional tools and controls
     sidebar: Entity<Sidebar>,
-    /// Layer list showing all elements in the canvas
-    layer_list: Entity<ui::layer_list::LayerList>,
 }
 
 impl Luna {
@@ -172,8 +170,7 @@ impl Luna {
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
-        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone()));
-        let layer_list = cx.new(|cx| ui::layer_list::LayerList::new(canvas.clone()));
+        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
 
         Luna {
             app_state,
@@ -182,7 +179,6 @@ impl Luna {
             focus_handle,
             inspector,
             sidebar,
-            layer_list,
         }
     }
 
@@ -292,7 +288,6 @@ impl Render for Luna {
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
-            .child(self.layer_list.clone())
     }
 }
 

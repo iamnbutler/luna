@@ -302,8 +302,8 @@ impl SceneGraph {
     /// 4. Updates the node's world_bounds property
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
         // First collect the data we need
-        let (transform, local_bounds) = match self.nodes.get(node_id) {
-            Some(node) => (node.world_transform, node.local_bounds),
+        let (transform, local_bounds, children) = match self.nodes.get(node_id) {
+            Some(node) => (node.world_transform, node.local_bounds, node.children.clone()),
             None => return,
         };
 
@@ -363,6 +363,11 @@ impl SceneGraph {
                 origin: Point::new(min_x, min_y),
                 size: Size::new(max_x - min_x, max_y - min_y),
             };
+        }
+        
+        // Recursively update all children's world bounds
+        for child_id in children {
+            self.update_world_bounds(child_id);
         }
     }
 

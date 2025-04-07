@@ -11,7 +11,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-use super::TITLEBAR_HEIGHT;
+use super::{layer_list::LayerList, TITLEBAR_HEIGHT};
 
 /// Container for tool selection and other canvas controls
 ///
@@ -19,11 +19,13 @@ use super::TITLEBAR_HEIGHT;
 /// hosting the [`ToolStrip`] and other controls for canvas interaction.
 pub struct Sidebar {
     canvas: Entity<LunaCanvas>,
+    layer_list: Entity<LayerList>,
 }
 
 impl Sidebar {
-    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
-        Self { canvas }
+    pub fn new(canvas: Entity<LunaCanvas>, cx: &mut Context<Self>) -> Self {
+        let layer_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
+        Self { canvas, layer_list }
     }
 }
 
@@ -39,7 +41,14 @@ impl Render for Sidebar {
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
             .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
-            .child(div().flex().flex_1().w_full().child(ToolStrip::new()));
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .w_full()
+                    .child(ToolStrip::new())
+                    .child(self.layer_list.clone()),
+            );
 
         div()
             .id("titlebar")

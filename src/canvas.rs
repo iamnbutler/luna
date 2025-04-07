@@ -936,6 +936,76 @@ impl LunaCanvas {
         self.selected_nodes.clear();
         self.mark_dirty(cx);
     }
+    
+    /// Updates the layouts of all child nodes after a parent node has been resized
+    /// 
+    /// This ensures that when a parent frame is resized, the relative positions of its
+    /// children are maintained in the node data structure, keeping it in sync with 
+    /// the scene graph transformations.
+    /// 
+    /// # Arguments
+    /// * `parent_id` - The ID of the parent node that was resized
+    /// * `cx` - The context for scene graph updates
+    pub fn update_child_layouts_after_parent_resize(&mut self, parent_id: NodeId, cx: &mut Context<Self>) {
+        // First get the parent node to access its children
+        let parent = match self.get_node(parent_id) {
+            Some(node) => node,
+            None => return,
+        };
+        
+        // Only frame nodes can have children
+        if parent.node_type() != NodeType::Frame {
+            return;
+        }
+        
+        // Find all children of this parent by looking for nodes whose parent is this node
+        // We need to do this since we can't directly cast to FrameNode
+        let children: Vec<NodeId> = self.nodes.iter()
+            .filter(|n| {
+                // A node is a child if this parent is its parent
+                self.find_parent(n.id()) == Some(parent_id)
+            })
+            .map(|n| n.id())
+            .collect();
+        
+        // Get parent's layout information
+        let parent_layout = parent.layout();
+        let parent_x = parent_layout.x;
+        let parent_y = parent_layout.y;
+        
+        // Process each child
+        for &child_id in &children {
+            // Get child's scene graph node and its world bounds
+            let child_scene_id = match self.scene_graph.update(cx, |sg, _cx| {
+                sg.get_scene_node_id(child_id)
+            }) {
+                Some(id) => id,
+                None => continue,
+            };
+            
+            // Get world bounds from scene graph
+            let world_bounds = match self.scene_graph.update(cx, |sg, _cx| {
+                sg.get_world_bounds(child_scene_id)
+            }) {
+                Some(bounds) => bounds,
+                None => continue,
+            };
+            
+            // Update the child's layout to maintain its position relative to parent
+            if let Some(child_node) = self.get_node_mut(child_id) {
+                let child_layout = child_node.layout_mut();
+                
+                // Convert from world coordinates to coordinates relative to parent
+                child_layout.x = world_bounds.origin.x - parent_x;
+                child_layout.y = world_bounds.origin.y - parent_y;
+                
+                // Recursively update this child's children
+                self.update_child_layouts_after_parent_resize(child_id, cx);
+            }
+        }
+        
+        self.mark_dirty(cx);
+    }
 }
 
 /// Tests for AABB intersection between two bounds
