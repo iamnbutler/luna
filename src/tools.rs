@@ -16,7 +16,6 @@
 
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
-use crate::GlobalState;
 use crate::{canvas::LunaCanvas, theme::Theme};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
@@ -155,7 +154,6 @@ impl ToolButton {
 impl RenderOnce for ToolButton {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
         let active_tool = cx.active_tool().clone();
 
         let tool_kind = self.tool_kind.clone();

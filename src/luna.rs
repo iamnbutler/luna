@@ -15,25 +15,19 @@
 //! The application uses a combination of immediate and retained UI patterns, with a scene graph
 //! for efficient spatial operations and a component-based architecture for the UI.
 
-#![allow(unused, dead_code)]
-use anyhow::Result;
 use assets::Assets;
 use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
-    actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
-    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, KeyBinding, Keystroke,
-    Menu, MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
-    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
+    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Global,
+    Hsla, IntoElement, KeyBinding, Menu, MenuItem, Pixels, Point, TitlebarOptions, Window,
+    WindowBackgroundAppearance, WindowOptions,
 };
-use node::{NodeCommon, NodeId};
 use scene_graph::SceneGraph;
-use std::{fs, path::PathBuf, sync::Arc};
-use strum::Display;
+use std::{path::PathBuf, sync::Arc};
 use theme::{ActiveTheme, GlobalTheme, Theme};
 use tools::{ActiveTool, GlobalTool, Tool};
-use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
-use util::keystroke_builder;
+use ui::{inspector::Inspector, sidebar::Sidebar};
 
 mod assets;
 mod canvas;
@@ -68,56 +62,6 @@ actions!(
         ToggleUI,
     ]
 );
-
-/// Application-wide state accessible from any context
-///
-/// GlobalState provides access to application-level state that applies across
-/// the entire application. It utilizes GPUI's global mechanism to make this
-/// state available throughout the component hierarchy without explicit passing.
-///
-/// This includes UI configuration like sidebar state, canvas navigation state,
-/// and input tracking. In a multi-window implementation, this would need to be
-/// refactored to per-window state.
-struct GlobalState {
-    hide_sidebar: bool,
-    sidebar_width: Pixels,
-
-    // For panning the canvas with Hand tool
-    drag_start_position: Option<Point<Pixels>>,
-    scroll_start_position: Option<Point<f32>>,
-
-    // For tracking mouse movement
-    last_mouse_position: Option<Point<Pixels>>,
-}
-
-impl GlobalState {
-    // Helper function to adjust a position for sidebar offset
-    fn adjust_position(&self, position: Point<Pixels>) -> Point<Pixels> {
-        let mut adjusted = position;
-        if !self.hide_sidebar {
-            adjusted.x -= self.sidebar_width;
-        }
-        adjusted
-    }
-}
-
-impl GlobalState {
-    pub fn new() -> Self {
-        Self {
-            hide_sidebar: false,
-            sidebar_width: px(260.0),
-            drag_start_position: None,
-            scroll_start_position: None,
-            last_mouse_position: None,
-        }
-    }
-
-    pub fn get(cx: &App) -> &GlobalState {
-        cx.global::<GlobalState>()
-    }
-}
-
-impl Global for GlobalState {}
 
 /// Core application state shared between components
 ///
@@ -251,7 +195,6 @@ impl Luna {
 impl Render for Luna {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
 
         div()
             .id("Luna")
@@ -300,7 +243,6 @@ impl Focusable for Luna {
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalTool(Arc::new(Tool::default())));
-    cx.set_global(GlobalState::new());
 }
 
 /// Application entry point
