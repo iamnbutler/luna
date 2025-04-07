@@ -11,7 +11,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-use super::{layer_list::LayerList, TITLEBAR_HEIGHT};
+use super::{layer_list::LayerList, Titlebar};
 
 /// Container for tool selection and other canvas controls
 ///
@@ -29,18 +29,27 @@ impl Sidebar {
     }
 }
 
+impl Sidebar {
+    pub const INITIAL_WIDTH: f32 = 220.;
+}
+
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = Theme::get_global(cx);
+        let token = &Theme::get_global(cx).tokens;
 
         let inner = div()
+            .id("sidebar-inner")
+            .debug_below()
             .flex()
             .flex_col()
             .h_full()
-            .w(px(35.))
+            .w(px(Self::INITIAL_WIDTH))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
+            .on_click(|event, _, _| {
+                dbg!(event.down.clone());
+            })
+            .child(div().w_full().h(px(Titlebar::HEIGHT)))
             .child(
                 div()
                     .flex()
@@ -51,12 +60,15 @@ impl Render for Sidebar {
             );
 
         div()
-            .id("titlebar")
+            .id("sidebar")
             .absolute()
             .top_0()
             .left_0()
             .h_full()
-            .w(px(36.))
+            .w(px(Self::INITIAL_WIDTH + 1.))
+            .bg(token.background_secondary)
+            .border_r_1()
+            .border_color(token.inactive_border)
             .cursor_default()
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))

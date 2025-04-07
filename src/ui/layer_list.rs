@@ -50,11 +50,10 @@ impl RenderOnce for LayerListItem {
         let text_color = if self.selected {
             theme.tokens.text
         } else {
-            theme.tokens.subtext0 // Use subtext0 for unselected items
+            theme.tokens.subtext0
         };
 
-        // Calculate indentation based on nesting level
-        let indentation = px(10.0 + (self.nesting_level as f32 * 20.0));
+        let indentation = px(10.0 + (self.nesting_level as f32 * 10.0));
 
         div()
             .id(ElementId::Name(format!("layer-{}", self.name).into()))
@@ -67,9 +66,8 @@ impl RenderOnce for LayerListItem {
             .active(|div| div.bg(theme.tokens.surface2.opacity(0.7)))
             .text_color(text_color)
             .gap(px(10.))
-            .child(
-                div().text_color(text_color.alpha(0.8)).child("□"), // Simple frame icon
-            )
+            .on_click(|e, _, _| {})
+            .child(div().text_color(text_color.alpha(0.8)).child("□"))
             .child(self.name)
     }
 }
@@ -146,7 +144,13 @@ impl LayerList {
 
 impl Render for LayerList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut layers = div().flex().flex_col().flex_1().pt_1();
+        let mut layers = div()
+            .id("layer-list")
+            .key_context("LayerList")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .pt_1();
 
         // Get all nodes from Canvas
         let canvas = self.canvas.read(cx);
