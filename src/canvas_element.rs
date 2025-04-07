@@ -503,14 +503,44 @@ impl CanvasElement {
                                     parent_node.add_child(node_id);
                                 }
 
+                                // Store absolute position of child before adjustment
+                                let (absolute_x, absolute_y) = if let Some(child_node) = canvas.get_node(node_id) {
+                                    let child_layout = child_node.layout();
+                                    (child_layout.x, child_layout.y)
+                                } else {
+                                    continue;
+                                };
+
                                 // Then update the child position in a separate borrow
                                 if let Some(child_node) = canvas.get_node_mut(node_id) {
                                     let child_layout = child_node.layout_mut();
 
                                     // Adjust position to be relative to parent
-                                    child_layout.x -= parent_info.x;
-                                    child_layout.y -= parent_info.y;
+                                    child_layout.x = absolute_x - parent_info.x;
+                                    child_layout.y = absolute_y - parent_info.y;
                                 }
+
+                                // Update the scene graph to reflect the new parent-child relationship
+                                canvas.scene_graph().update(cx, |sg, _cx| {
+                                    // Get scene node IDs for parent and child
+                                    if let (Some(parent_scene_id), Some(child_scene_id)) = (
+                                        sg.get_scene_node_id(parent_info.id),
+                                        sg.get_scene_node_id(node_id)
+                                    ) {
+                                        // Update child bounds to be parent-relative
+                                        if let Some(child_node) = canvas.get_node(node_id) {
+                                            let layout = child_node.layout();
+                                            let bounds = Bounds {
+                                                origin: Point::new(layout.x, layout.y),
+                                                size: Size::new(layout.width, layout.height),
+                                            };
+                                            sg.set_local_bounds(child_scene_id, bounds);
+                                        }
+                                        
+                                        // Make child a child of parent in scene graph
+                                        sg.add_child(parent_scene_id, child_scene_id);
+                                    }
+                                });
                             }
                         }
                         canvas.mark_dirty(cx);
@@ -1187,7 +1217,16 @@ impl CanvasElement {
                     node_info.bounds
                 };
 
-                // Paint the node itself
+                // Create a transformation matrix for children
+                // This creates a new coordinate system relative to this frame
+                let child_transform = TransformationMatrix::unit()
+                    .compose(parent_transform.unwrap_or_else(TransformationMatrix::unit))
+                    .translate(point(
+                        gpui::Pixels(frame_x).scale(1.0),
+                        gpui::Pixels(frame_y).scale(1.0),
+                    ));
+
+                // FIRST: Paint the node itself (background and frame)
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
                     window.paint_quad(gpui::PaintQuad {
@@ -1200,7 +1239,34 @@ impl CanvasElement {
                     });
                 }
 
-                // Paint the border if it exists
+                // SECOND: Paint all children (if any) with clipping and proper transformation
+                // We paint children AFTER the parent's fill but BEFORE the parent's border
+                // This ensures children appear on top of the parent's background
+                if let Some(children) = children_map.get(&node_info.node_id) {
+                    // Create a mask for children to clip them to the frame bounds
+                    window.with_content_mask(
+                        Some(ContentMask {
+                            bounds: transformed_bounds,
+                        }),
+                        |window| {
+                            for child in children {
+                                paint_node_recursively(
+                                    child,
+                                    children_map,
+                                    selected_node_ids,
+                                    hovered_node,
+                                    potential_parent_frame,
+                                    has_active_drag,
+                                    Some(child_transform),
+                                    theme,
+                                    window,
+                                );
+                            }
+                        },
+                    );
+                }
+
+                // THIRD: Paint the border if it exists (after children, so it's on top)
                 if let Some(border_color) = node_info.border_color {
                     window.paint_quad(gpui::PaintQuad {
                         bounds: transformed_bounds,
@@ -1271,40 +1337,6 @@ impl CanvasElement {
                         BorderStyle::Solid,
                     ));
                 }
-
-                // Create a transformation matrix for children
-                // This creates a new coordinate system relative to this frame
-                let child_transform = TransformationMatrix::unit()
-                    .compose(parent_transform.unwrap_or_else(TransformationMatrix::unit))
-                    .translate(point(
-                        gpui::Pixels(frame_x).scale(1.0),
-                        gpui::Pixels(frame_y).scale(1.0),
-                    ));
-
-                // Paint all children (if any) with clipping and proper transformation
-                if let Some(children) = children_map.get(&node_info.node_id) {
-                    // Create a mask for children to clip them to the frame bounds
-                    window.with_content_mask(
-                        Some(ContentMask {
-                            bounds: transformed_bounds,
-                        }),
-                        |window| {
-                            for child in children {
-                                paint_node_recursively(
-                                    child,
-                                    children_map,
-                                    selected_node_ids,
-                                    hovered_node,
-                                    potential_parent_frame,
-                                    has_active_drag,
-                                    Some(child_transform),
-                                    theme,
-                                    window,
-                                );
-                            }
-                        },
-                    );
-                }
             }
 
             // Check if we have an active drag operation
@@ -1333,18 +1365,93 @@ impl CanvasElement {
             // SECOND PASS: Paint all selection outlines and resize handles
             // ===========================================================
 
+            // Build a map of node ID to parent transform
+            let mut node_transforms: HashMap<NodeId, TransformationMatrix> = HashMap::new();
+            
+            // Helper function to compute the absolute transform for a node
+            fn compute_node_transform(
+                node_id: NodeId, 
+                node_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
+                transforms: &mut HashMap<NodeId, TransformationMatrix>,
+                all_nodes: &[NodeRenderInfo]
+            ) -> TransformationMatrix {
+                // If we've already computed this node's transform, return it
+                if let Some(transform) = transforms.get(&node_id) {
+                    return *transform;
+                }
+                
+                // Find this node's information
+                if let Some(node_info) = all_nodes.iter().find(|n| n.node_id == node_id) {
+                    // Find this node's parent (if any)
+                    let mut parent_id = None;
+                    for (pid, children) in node_map {
+                        if children.iter().any(|c| c.node_id == node_id) {
+                            parent_id = Some(*pid);
+                            break;
+                        }
+                    }
+                    
+                    // Get the parent's transform if it exists
+                    let parent_transform = if let Some(pid) = parent_id {
+                        compute_node_transform(pid, node_map, transforms, all_nodes)
+                    } else {
+                        TransformationMatrix::unit()
+                    };
+                    
+                    // Apply this node's local transform to the parent's transform
+                    let (x, y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
+                    let transform = parent_transform.compose(TransformationMatrix::unit().translate(
+                        point(gpui::Pixels(x).scale(1.0), gpui::Pixels(y).scale(1.0))
+                    ));
+                    
+                    // Cache and return the combined transform
+                    transforms.insert(node_id, transform);
+                    transform
+                } else {
+                    // If node not found, return identity transform
+                    TransformationMatrix::unit()
+                }
+            }
+            
+            // Compute transforms for all selected nodes
+            for node_id in selected_node_ids.iter() {
+                compute_node_transform(*node_id, &children_map, &mut node_transforms, &nodes_to_render);
+            }
+
             // First draw individual selection outlines
             for node_info in &nodes_to_render {
                 if selected_node_ids.contains(&node_info.node_id) {
-                    // Create a slightly larger bounds for selection indicator
+                    // Get the absolute transform for this node
+                    let transform = node_transforms.get(&node_info.node_id)
+                        .cloned()
+                        .unwrap_or_else(TransformationMatrix::unit);
+                    
+                    // Get the bounds in local space (no parent translation)
+                    let (width, height) = (
+                        node_info.bounds.size.width.0,
+                        node_info.bounds.size.height.0,
+                    );
+                    
+                    // Transform the corners to get absolute position
+                    let top_left = transform.apply(gpui::Point::new(
+                        gpui::Pixels(0.0),
+                        gpui::Pixels(0.0),
+                    ));
+                    
+                    let bottom_right = transform.apply(gpui::Point::new(
+                        gpui::Pixels(width),
+                        gpui::Pixels(height),
+                    ));
+                    
+                    // Create selection bounds from transformed corners
                     let selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                            top_left.x - gpui::Pixels(2.0),
+                            top_left.y - gpui::Pixels(2.0),
                         ),
                         size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                            gpui::Pixels(bottom_right.x.0 - top_left.x.0) + gpui::Pixels(4.0),
+                            gpui::Pixels(bottom_right.y.0 - top_left.y.0) + gpui::Pixels(4.0),
                         ),
                     };
 
