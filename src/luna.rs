@@ -110,10 +110,10 @@ impl Luna {
             current_background_color: cx.theme().tokens.surface0,
         });
         let focus_handle = cx.focus_handle();
-        let scene_graph = cx.new(|cx| SceneGraph::new());
+        let scene_graph = cx.new(|_| SceneGraph::new());
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
-        let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
+        let inspector = cx.new(|_| Inspector::new(app_state.clone(), canvas.clone()));
         let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
 
         Luna {
@@ -157,7 +157,7 @@ impl Luna {
     }
 
     fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
-        self.canvas.update(cx, |canvas, cx| {
+        self.canvas.update(cx, |canvas, _| {
             canvas.select_all_nodes();
         });
         cx.notify();
@@ -193,7 +193,7 @@ impl Luna {
 }
 
 impl Render for Luna {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
 
         div()
@@ -218,7 +218,7 @@ impl Render for Luna {
             })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
-                Tool::Frame | Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
+                Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::activate_hand_tool))
@@ -292,8 +292,6 @@ fn main() {
                     |window, cx| cx.new(|cx| Luna::new(window, cx)),
                 )
                 .unwrap();
-
-            let view = window.update(cx, |_, _, cx| cx.entity()).unwrap();
 
             cx.on_keyboard_layout_change({
                 move |cx| {
