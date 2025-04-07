@@ -207,16 +207,11 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
+        cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
         cx.notify();
     }
-    
-    fn activate_frame_tool(
-        &mut self,
-        _: &FrameTool,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+
+    fn activate_frame_tool(&mut self, _: &FrameTool, _window: &mut Window, cx: &mut Context<Self>) {
         cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
         cx.notify();
     }
@@ -284,9 +279,7 @@ impl Render for Luna {
             })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
-                Tool::Frame | Tool::Rectangle | Tool::Line | Tool::TextCursor => {
-                    div.cursor_crosshair()
-                }
+                Tool::Frame | Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::activate_hand_tool))

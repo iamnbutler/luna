@@ -1,6 +1,13 @@
-#![allow(unused, dead_code)]
-use crate::interactivity::{ResizeHandle, ResizeOperation};
-use crate::tools::ActiveTool;
+use crate::{
+    canvas::{register_canvas_action, ClearSelection, LunaCanvas},
+    interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
+    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType},
+    scene_graph::SceneGraph,
+    theme::{ActiveTheme, Theme},
+    tools::ActiveTool,
+    util::{round_to_pixel, rounded_point},
+    AppState, GlobalState, Tool,
+};
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
     Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -171,17 +178,6 @@ fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Optio
 
     None
 }
-
-use crate::scene_graph::SceneGraph;
-use crate::theme::{ActiveTheme, Theme};
-use crate::AppState;
-use crate::{
-    canvas::{register_canvas_action, ClearSelection, LunaCanvas},
-    interactivity::{ActiveDrag, DragType},
-    node::{NodeCommon, NodeId, NodeLayout, NodeType, FrameNode},
-    util::{round_to_pixel, rounded_point},
-    GlobalState, Tool,
-};
 
 #[derive(Clone)]
 pub struct CanvasStyle {
@@ -379,7 +375,7 @@ impl CanvasElement {
                     canvas.mark_dirty(cx);
                 }
             }
-            Tool::Rectangle => {
+            Tool::Frame => {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
@@ -413,7 +409,7 @@ impl CanvasElement {
         // Check if we have an active element draw operation
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw().take() {
             match (node_type, active_tool) {
-                (NodeType::Frame, Tool::Rectangle) => {
+                (NodeType::Frame, Tool::Frame) => {
                     // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
@@ -455,11 +451,13 @@ impl CanvasElement {
                 DragType::MoveElements => {
                     // Check if the selected nodes are being dropped on a frame
                     // by getting the topmost frame at the current mouse position, excluding selected frames
-                    let drop_point = canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
-                    
+                    let drop_point =
+                        canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+
                     // Get all the selected node IDs
-                    let selected_ids: Vec<NodeId> = canvas.selected_nodes().iter().cloned().collect();
-                    
+                    let selected_ids: Vec<NodeId> =
+                        canvas.selected_nodes().iter().cloned().collect();
+
                     // Structure to hold all the information we need from the parent frame
                     struct ParentFrameInfo {
                         id: NodeId,
@@ -467,22 +465,21 @@ impl CanvasElement {
                         x: f32,
                         y: f32,
                     }
-                    
+
                     // Get all the information we need from the potential parent before borrowing canvas mutably
-                    let parent_info = canvas.nodes()
+                    let parent_info = canvas
+                        .nodes()
                         .iter()
                         .rev() // Reverse to get top-to-bottom z-order
                         .filter(|node| !selected_ids.contains(&node.id()))
                         .find(|node| node.contains_point(&drop_point))
-                        .map(|parent_frame| {
-                            ParentFrameInfo {
-                                id: parent_frame.id(),
-                                children: parent_frame.children().clone(),
-                                x: parent_frame.layout().x,
-                                y: parent_frame.layout().y,
-                            }
+                        .map(|parent_frame| ParentFrameInfo {
+                            id: parent_frame.id(),
+                            children: parent_frame.children().clone(),
+                            x: parent_frame.layout().x,
+                            y: parent_frame.layout().y,
                         });
-                    
+
                     // Process if we found a potential parent
                     if let Some(parent_info) = parent_info {
                         // For each selected node, add it as a child to the parent frame
@@ -493,11 +490,11 @@ impl CanvasElement {
                                 if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
                                     parent_node.add_child(node_id);
                                 }
-                                
+
                                 // Then update the child position in a separate borrow
                                 if let Some(child_node) = canvas.get_node_mut(node_id) {
                                     let child_layout = child_node.layout_mut();
-                                    
+
                                     // Adjust position to be relative to parent
                                     child_layout.x -= parent_info.x;
                                     child_layout.y -= parent_info.y;
@@ -506,8 +503,7 @@ impl CanvasElement {
                         }
                         canvas.mark_dirty(cx);
                     }
-                    
-                    
+
                     // Finalize the move by clearing initial positions
                     canvas.element_initial_positions_mut().clear();
                 }
@@ -611,21 +607,24 @@ impl CanvasElement {
                     if !canvas.selected_nodes().is_empty() {
                         // Calculate the drag delta in canvas coordinates
                         let delta = new_drag.delta();
-                        
+
                         // Get current canvas point to check for potential parent frames
-                        let canvas_point = canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
-                        
+                        let canvas_point =
+                            canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+
                         // Get all the selected node IDs
-                        let selected_ids: Vec<NodeId> = canvas.selected_nodes().iter().cloned().collect();
-                        
+                        let selected_ids: Vec<NodeId> =
+                            canvas.selected_nodes().iter().cloned().collect();
+
                         // Find potential parent frame at the current position
-                        let potential_parent = canvas.nodes()
+                        let potential_parent = canvas
+                            .nodes()
                             .iter()
                             .rev() // Reverse to get top-to-bottom z-order
                             .filter(|node| !selected_ids.contains(&node.id()))
                             .find(|node| node.contains_point(&canvas_point))
                             .map(|node| node.id());
-                        
+
                         // Update the potential parent frame
                         canvas.set_potential_parent_frame(potential_parent);
 
@@ -823,7 +822,7 @@ impl CanvasElement {
         // Handle rectangle drawing
         if let Some(active_draw) = canvas.active_element_draw().take() {
             match *cx.active_tool().clone() {
-                Tool::Rectangle => {
+                Tool::Frame => {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
                         current_position: position,
@@ -1042,82 +1041,95 @@ impl CanvasElement {
         }
 
         // Helper function to organize nodes into a hierarchy
-        fn organize_nodes_hierarchically(all_nodes: &[NodeRenderInfo]) -> (Vec<NodeRenderInfo>, HashMap<NodeId, Vec<NodeRenderInfo>>) {
+        fn organize_nodes_hierarchically(
+            all_nodes: &[NodeRenderInfo],
+        ) -> (Vec<NodeRenderInfo>, HashMap<NodeId, Vec<NodeRenderInfo>>) {
             let mut root_nodes = Vec::new();
             let mut children_map: HashMap<NodeId, Vec<NodeRenderInfo>> = HashMap::new();
-            
+
             // First, create a mapping of parent NodeId to child nodes
             for node in all_nodes {
                 let node_id = node.node_id;
-                
+
                 // For each child ID in the node's children list
                 for &child_id in &node.children {
                     // Find the corresponding NodeRenderInfo for this child
                     if let Some(child_node) = all_nodes.iter().find(|n| n.node_id == child_id) {
-                        children_map.entry(node_id).or_default().push(child_node.clone());
+                        children_map
+                            .entry(node_id)
+                            .or_default()
+                            .push(child_node.clone());
                     }
                 }
             }
-            
+
             // Identify root nodes (not children of any other node)
-            let all_children: HashSet<NodeId> = children_map.values()
+            let all_children: HashSet<NodeId> = children_map
+                .values()
                 .flat_map(|nodes| nodes.iter().map(|n| n.node_id))
                 .collect();
-                
+
             for node in all_nodes {
                 if !all_children.contains(&node.node_id) {
                     root_nodes.push(node.clone());
                 }
             }
-            
+
             (root_nodes, children_map)
         }
-        
+
         // Get all the data we need in one place
-        let (nodes_to_render, selected_node_ids, hovered_node, potential_parent_frame, active_drag) = canvas.update(cx, |canvas, cx| {
-            let visible_nodes = canvas.visible_nodes(cx);
-            let scene_graph = canvas.scene_graph().read(cx);
-            let selected_nodes = canvas.selected_nodes().clone();
-            let theme = cx.theme().clone();
-            let hovered_node = canvas.hovered_node().clone();
+        let (nodes_to_render, selected_node_ids, hovered_node, potential_parent_frame, active_drag) =
+            canvas.update(cx, |canvas, cx| {
+                let visible_nodes = canvas.visible_nodes(cx);
+                let scene_graph = canvas.scene_graph().read(cx);
+                let selected_nodes = canvas.selected_nodes().clone();
+                let theme = cx.theme().clone();
+                let hovered_node = canvas.hovered_node().clone();
 
-            // Collect all node rendering information into owned structures
-            let mut nodes_to_render = Vec::new();
+                // Collect all node rendering information into owned structures
+                let mut nodes_to_render = Vec::new();
 
-            for node in visible_nodes {
-                let node_id = node.id();
+                for node in visible_nodes {
+                    let node_id = node.id();
 
-                if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
-                    if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
-                        nodes_to_render.push(NodeRenderInfo {
-                            node_id,
-                            bounds: gpui::Bounds {
-                                origin: gpui::Point::new(
-                                    gpui::Pixels(world_bounds.origin.x),
-                                    gpui::Pixels(world_bounds.origin.y),
-                                ),
-                                size: gpui::Size::new(
-                                    gpui::Pixels(world_bounds.size.width),
-                                    gpui::Pixels(world_bounds.size.height),
-                                ),
-                            },
-                            fill_color: node.fill(),
-                            border_color: node.border_color(),
-                            border_width: node.border_width(),
-                            corner_radius: node.corner_radius(),
-                            children: node.children().clone(),
-                        });
+                    if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
+                        if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
+                            nodes_to_render.push(NodeRenderInfo {
+                                node_id,
+                                bounds: gpui::Bounds {
+                                    origin: gpui::Point::new(
+                                        gpui::Pixels(world_bounds.origin.x),
+                                        gpui::Pixels(world_bounds.origin.y),
+                                    ),
+                                    size: gpui::Size::new(
+                                        gpui::Pixels(world_bounds.size.width),
+                                        gpui::Pixels(world_bounds.size.height),
+                                    ),
+                                },
+                                fill_color: node.fill(),
+                                border_color: node.border_color(),
+                                border_width: node.border_width(),
+                                corner_radius: node.corner_radius(),
+                                children: node.children().clone(),
+                            });
+                        }
                     }
                 }
-            }
 
-            (nodes_to_render, selected_nodes, hovered_node, canvas.potential_parent_frame(), canvas.active_drag())
-        });
+                (
+                    nodes_to_render,
+                    selected_nodes,
+                    hovered_node,
+                    canvas.potential_parent_frame(),
+                    canvas.active_drag(),
+                )
+            });
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Organize nodes into a hierarchy
             let (root_nodes, children_map) = organize_nodes_hierarchically(&nodes_to_render);
-            
+
             // Recursive function to paint a node and its children
             fn paint_node_recursively(
                 node_info: &NodeRenderInfo,
@@ -1132,34 +1144,37 @@ impl CanvasElement {
             ) {
                 // Get coordinates in parent space
                 let (frame_x, frame_y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
-                let (frame_width, frame_height) = (node_info.bounds.size.width.0, node_info.bounds.size.height.0);
-                
+                let (frame_width, frame_height) = (
+                    node_info.bounds.size.width.0,
+                    node_info.bounds.size.height.0,
+                );
+
                 // Apply parent's transform if available, or use node's bounds directly
                 let transformed_bounds = if let Some(transform) = parent_transform {
                     // Convert to gpui Points and apply the transformation
                     let top_left = transform.apply(gpui::Point::new(
                         gpui::Pixels(frame_x),
-                        gpui::Pixels(frame_y)
+                        gpui::Pixels(frame_y),
                     ));
-                    
+
                     let bottom_right = transform.apply(gpui::Point::new(
                         gpui::Pixels(frame_x + frame_width),
-                        gpui::Pixels(frame_y + frame_height)
+                        gpui::Pixels(frame_y + frame_height),
                     ));
-                    
+
                     // Create bounds from transformed points
                     gpui::Bounds {
                         origin: top_left,
                         size: gpui::Size::new(
                             gpui::Pixels(bottom_right.x.0 - top_left.x.0),
-                            gpui::Pixels(bottom_right.y.0 - top_left.y.0)
+                            gpui::Pixels(bottom_right.y.0 - top_left.y.0),
                         ),
                     }
                 } else {
                     // No parent transform, use bounds directly
                     node_info.bounds
                 };
-                
+
                 // Paint the node itself
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
@@ -1204,7 +1219,7 @@ impl CanvasElement {
                     let hover_color = theme.tokens.active_border.opacity(0.6);
                     window.paint_quad(gpui::outline(hover_bounds, hover_color, BorderStyle::Solid));
                 }
-                
+
                 // Show yellow border for potential parent frames during drag operations
                 if has_active_drag && potential_parent_frame.as_ref() == Some(&node_info.node_id) {
                     // Create a slightly larger bounds for the parent indicator
@@ -1218,11 +1233,15 @@ impl CanvasElement {
                             transformed_bounds.size.height + gpui::Pixels(6.0),
                         ),
                     };
-                    
+
                     // Use a bright yellow color for the parent indicator
                     let yellow_highlight = gpui::hsla(60.0, 1.0, 0.5, 0.8); // Bright yellow with 80% opacity
-                    window.paint_quad(gpui::outline(parent_indicator_bounds, yellow_highlight, BorderStyle::Solid));
-                    
+                    window.paint_quad(gpui::outline(
+                        parent_indicator_bounds,
+                        yellow_highlight,
+                        BorderStyle::Solid,
+                    ));
+
                     // Make the border thicker for more emphasis
                     let inner_border = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -1234,42 +1253,55 @@ impl CanvasElement {
                             transformed_bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
-                    window.paint_quad(gpui::outline(inner_border, yellow_highlight, BorderStyle::Solid));
+                    window.paint_quad(gpui::outline(
+                        inner_border,
+                        yellow_highlight,
+                        BorderStyle::Solid,
+                    ));
                 }
-                
+
                 // Create a transformation matrix for children
                 // This creates a new coordinate system relative to this frame
                 let child_transform = TransformationMatrix::unit()
                     .compose(parent_transform.unwrap_or_else(TransformationMatrix::unit))
                     .translate(point(
                         gpui::Pixels(frame_x).scale(1.0),
-                        gpui::Pixels(frame_y).scale(1.0)
+                        gpui::Pixels(frame_y).scale(1.0),
                     ));
-                
+
                 // Paint all children (if any) with clipping and proper transformation
                 if let Some(children) = children_map.get(&node_info.node_id) {
                     // Create a mask for children to clip them to the frame bounds
-                    window.with_content_mask(Some(ContentMask { bounds: transformed_bounds }), |window| {
-                        for child in children {
-                            paint_node_recursively(
-                                child,
-                                children_map,
-                                selected_node_ids,
-                                hovered_node,
-                                potential_parent_frame,
-                                has_active_drag,
-                                Some(child_transform),
-                                theme,
-                                window
-                            );
-                        }
-                    });
+                    window.with_content_mask(
+                        Some(ContentMask {
+                            bounds: transformed_bounds,
+                        }),
+                        |window| {
+                            for child in children {
+                                paint_node_recursively(
+                                    child,
+                                    children_map,
+                                    selected_node_ids,
+                                    hovered_node,
+                                    potential_parent_frame,
+                                    has_active_drag,
+                                    Some(child_transform),
+                                    theme,
+                                    window,
+                                );
+                            }
+                        },
+                    );
                 }
             }
-            
+
             // Check if we have an active drag operation
-            let has_active_drag = active_drag.is_some() && matches!(active_drag.as_ref().map(|d| &d.drag_type), Some(DragType::MoveElements));
-            
+            let has_active_drag = active_drag.is_some()
+                && matches!(
+                    active_drag.as_ref().map(|d| &d.drag_type),
+                    Some(DragType::MoveElements)
+                );
+
             // FIRST PASS: Paint all root nodes and their children recursively
             // =================================================================
             for node_info in &root_nodes {
@@ -1282,7 +1314,7 @@ impl CanvasElement {
                     has_active_drag,
                     None, // No parent transform for root nodes
                     &theme,
-                    window
+                    window,
                 );
             }
 
@@ -1540,7 +1572,7 @@ impl Element for CanvasElement {
                 // Paint rectangle preview if drawing with rectangle tool
                 if let Some((node_id, node_type, drag)) = active_element_draw {
                     match active_tool {
-                        Tool::Rectangle => {
+                        Tool::Frame => {
                             self.paint_draw_rectangle(node_id, &drag, layout, window, cx);
                         }
                         _ => {}
