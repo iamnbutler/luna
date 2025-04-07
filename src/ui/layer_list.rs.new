@@ -4,12 +4,10 @@
 //! showing their selection state and allowing interaction.
 
 use gpui::{
-    div, prelude::*, px, ElementId, Entity, Hsla, IntoElement, SharedString, Window, App,
+    div, prelude::*, px, ElementId, Entity, Hsla, IntoElement, SharedString, Window,
 };
 
-use std::collections::HashSet;
-
-use crate::{canvas::LunaCanvas, node::{NodeType, NodeId, frame::FrameNode, NodeCommon}, theme::Theme};
+use crate::{canvas::LunaCanvas, node::{NodeType, NodeId, FrameNode}, theme::Theme};
 
 /// Individual item in the layer list representing a canvas element
 #[derive(IntoElement)]
@@ -148,6 +146,8 @@ impl LayerList {
 
 impl Render for LayerList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use std::collections::HashSet;
+        
         let mut layers = div().flex().flex_col().flex_1().pt_1();
 
         // Get all nodes from Canvas

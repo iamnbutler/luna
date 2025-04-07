@@ -6,10 +6,9 @@
 //! ## Key Components
 //!
 //! - **NodeId**: Unique identifier for canvas nodes
-//! - **NodeType**: Enumeration of supported element types (Rectangle, etc.)
+//! - **NodeType**: Enumeration of supported element types (Frame, etc.)
 //! - **NodeLayout**: Position and dimension properties shared by all nodes
 //! - **NodeCommon**: Trait defining shared behavior across node types
-//! - **RectangleNode**: Concrete implementation of a rectangle element
 //!
 //! The node system focuses on managing the data model aspect of elements, while
 //! the scene graph handles spatial relationships and transformations. This separation
@@ -17,6 +16,8 @@
 
 #![allow(unused, dead_code)]
 use gpui::{Bounds, Hsla, Point, Size};
+
+pub mod frame;
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -37,8 +38,8 @@ impl std::fmt::Display for NodeId {
 /// Types of nodes that can be rendered on the canvas
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
-    /// A rectangle shape
-    Rectangle,
+    /// A frame that can contain other nodes
+    Frame,
 }
 
 /// Layout information for a node
@@ -126,94 +127,6 @@ pub trait NodeCommon: std::fmt::Debug {
     }
 }
 
-/// Concrete implementation of a rectangle visual element
-///
-/// RectangleNode represents a rectangular element with configurable:
-/// - Position and dimensions via NodeLayout
-/// - Fill color (optional)
-/// - Border properties (color and width)
-/// - Corner radius for rounded rectangles
-///
-/// As the fundamental building block in the canvas system, rectangles
-/// serve as the basis for many other visual elements and are optimized
-/// for efficient rendering and manipulation.
-#[derive(Debug, Clone)]
-pub struct RectangleNode {
-    pub id: NodeId,
-    pub layout: NodeLayout,
-    pub fill: Option<Hsla>,
-    pub border_color: Option<Hsla>,
-    pub border_width: f32,
-    pub corner_radius: f32,
-}
-
-impl RectangleNode {
-    pub fn new(id: NodeId) -> Self {
-        Self {
-            id,
-            layout: NodeLayout::new(0.0, 0.0, 100.0, 100.0),
-            fill: Some(Hsla::white()),
-            border_color: Some(Hsla::black()),
-            border_width: 1.0,
-            corner_radius: 0.0,
-        }
-    }
-
-    /// Create a rectangle with specific dimensions and position
-    pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
-        let mut node = Self::new(id);
-        node.layout = NodeLayout::new(x, y, width, height);
-        node
-    }
-}
-
-impl NodeCommon for RectangleNode {
-    fn id(&self) -> NodeId {
-        self.id
-    }
-
-    fn node_type(&self) -> NodeType {
-        NodeType::Rectangle
-    }
-
-    fn layout(&self) -> &NodeLayout {
-        &self.layout
-    }
-
-    fn layout_mut(&mut self) -> &mut NodeLayout {
-        &mut self.layout
-    }
-
-    fn fill(&self) -> Option<Hsla> {
-        self.fill
-    }
-
-    fn set_fill(&mut self, color: Option<Hsla>) {
-        self.fill = color;
-    }
-
-    fn border_color(&self) -> Option<Hsla> {
-        self.border_color
-    }
-
-    fn border_width(&self) -> f32 {
-        self.border_width
-    }
-
-    fn set_border(&mut self, color: Option<Hsla>, width: f32) {
-        self.border_color = color;
-        self.border_width = width;
-    }
-
-    fn corner_radius(&self) -> f32 {
-        self.corner_radius
-    }
-
-    fn set_corner_radius(&mut self, radius: f32) {
-        self.corner_radius = radius;
-    }
-}
-
 /// Factory for generating nodes with guaranteed unique identifiers
 ///
 /// NodeFactory centralizes node creation and ID allocation, ensuring that:
@@ -247,36 +160,50 @@ impl NodeFactory {
         id
     }
 
-    /// Create a new rectangle node
-    pub fn create_rectangle(&mut self) -> RectangleNode {
-        RectangleNode::new(self.next_id())
+    /// Create a new frame node
+    pub fn create_frame(&mut self) -> frame::FrameNode {
+        frame::FrameNode::new(self.next_id())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::frame::FrameNode;
 
     #[test]
-    fn test_rectangle_node() {
-        let id = NodeId::new(2);
-        let rect = RectangleNode::new(id);
-
-        assert_eq!(rect.node_type(), NodeType::Rectangle);
-        assert_eq!(rect.id(), id);
-        assert_eq!(rect.corner_radius(), 0.0);
+    fn test_node_id() {
+        let id = NodeId::new(42);
+        assert_eq!(id.0, 42);
+        assert_eq!(format!("{}", id), "Node-42");
     }
 
     #[test]
-    fn test_contains_point() {
-        let id = NodeId::new(1);
-        let rect = RectangleNode::with_rect(id, 10.0, 10.0, 100.0, 100.0);
+    fn test_node_layout() {
+        let layout = NodeLayout::new(10.0, 20.0, 100.0, 200.0);
+        assert_eq!(layout.x, 10.0);
+        assert_eq!(layout.y, 20.0);
+        assert_eq!(layout.width, 100.0);
+        assert_eq!(layout.height, 200.0);
 
-        // Test points inside and outside
-        let point_inside = Point::new(50.0, 50.0);
-        let point_outside = Point::new(200.0, 200.0);
+        let bounds = layout.bounds();
+        assert_eq!(bounds.origin.x, 10.0);
+        assert_eq!(bounds.origin.y, 20.0);
+        assert_eq!(bounds.size.width, 100.0);
+        assert_eq!(bounds.size.height, 200.0);
+    }
 
-        assert!(rect.contains_point(&point_inside));
-        assert!(!rect.contains_point(&point_outside));
+    #[test]
+    fn test_node_factory() {
+        let mut factory = NodeFactory::new();
+        
+        let id1 = factory.next_id();
+        let id2 = factory.next_id();
+        
+        assert_eq!(id1.0, 1);
+        assert_eq!(id2.0, 2);
+        
+        let frame = factory.create_frame();
+        assert_eq!(frame.id().0, 3);
     }
 }

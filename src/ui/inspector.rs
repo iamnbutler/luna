@@ -18,7 +18,7 @@ use crate::{
     AppState,
 };
 
-use super::property::property_input;
+use super::property::{float_input, ColorInput};
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
@@ -53,6 +53,7 @@ impl From<HashSet<NodeId>> for NodeSelection {
 /// Uses [`SmallVec`] to efficiently handle both single values and
 /// multiple values (for mixed-value states) without heap allocation
 /// in the common case.
+#[derive(Debug, Clone)]
 pub struct InspectorProperties {
     pub x: SmallVec<[f32; 1]>,
     pub y: SmallVec<[f32; 1]>,
@@ -60,6 +61,8 @@ pub struct InspectorProperties {
     pub height: SmallVec<[f32; 1]>,
     pub border_width: SmallVec<[f32; 1]>,
     pub corner_radius: SmallVec<[f32; 1]>,
+    pub border_color: SmallVec<[SharedString; 1]>,
+    pub background_color: SmallVec<[SharedString; 1]>,
 }
 
 impl Default for InspectorProperties {
@@ -71,6 +74,8 @@ impl Default for InspectorProperties {
             height: SmallVec::new(),
             border_width: SmallVec::new(),
             corner_radius: SmallVec::new(),
+            border_color: SmallVec::new(),
+            background_color: SmallVec::new(),
         }
     }
 }
@@ -108,6 +113,8 @@ impl Inspector {
         self.properties.height.clear();
         self.properties.border_width.clear();
         self.properties.corner_radius.clear();
+        self.properties.border_color.clear();
+        self.properties.background_color.clear();
 
         match selected_nodes {
             NodeSelection::None => {
@@ -122,6 +129,19 @@ impl Inspector {
                     self.properties.height.push(node.layout().height);
                     self.properties.border_width.push(node.border_width());
                     self.properties.corner_radius.push(node.corner_radius());
+
+                    // Add color properties
+                    if let Some(border_color) = node.border_color() {
+                        self.properties
+                            .border_color
+                            .push(SharedString::from(border_color.to_string()));
+                    }
+
+                    if let Some(fill_color) = node.fill() {
+                        self.properties
+                            .background_color
+                            .push(SharedString::from(fill_color.to_string()));
+                    }
                 }
             }
             NodeSelection::Multiple(nodes) => {
@@ -136,6 +156,8 @@ impl Inspector {
                 let mut all_height = Vec::new();
                 let mut all_border_width = Vec::new();
                 let mut all_corner_radius = Vec::new();
+                let mut all_border_colors = Vec::new();
+                let mut all_background_colors = Vec::new();
 
                 // Collect all values first
                 for node_id in &nodes {
@@ -150,6 +172,15 @@ impl Inspector {
                         all_height.push(node.layout().height);
                         all_border_width.push(node.border_width());
                         all_corner_radius.push(node.corner_radius());
+
+                        // Collect color values
+                        if let Some(border_color) = node.border_color() {
+                            all_border_colors.push(border_color.to_string());
+                        }
+
+                        if let Some(fill_color) = node.fill() {
+                            all_background_colors.push(fill_color.to_string());
+                        }
                     }
                 }
 
@@ -160,6 +191,15 @@ impl Inspector {
                     }
                     let first = values[0];
                     values.iter().all(|&v| (v - first).abs() < f32::EPSILON)
+                };
+
+                // Helper function to check if all strings in a vector are the same
+                let all_same_str = |values: &[String]| -> bool {
+                    if values.is_empty() {
+                        return true;
+                    }
+                    let first = &values[0];
+                    values.iter().all(|v| v == first)
                 };
 
                 // If all values are the same, just use the first one
@@ -209,6 +249,33 @@ impl Inspector {
                         self.properties.corner_radius.push(all_corner_radius[0]);
                     } else {
                         self.properties.corner_radius.extend(all_corner_radius);
+                    }
+                }
+
+                // Handle color properties
+                if !all_border_colors.is_empty() {
+                    if all_same_str(&all_border_colors) {
+                        self.properties
+                            .border_color
+                            .push(SharedString::from(&all_border_colors[0]));
+                    } else {
+                        // For mixed values, just push one to indicate mixed state
+                        self.properties
+                            .border_color
+                            .push(SharedString::from("Mixed"));
+                    }
+                }
+
+                if !all_background_colors.is_empty() {
+                    if all_same_str(&all_background_colors) {
+                        self.properties
+                            .background_color
+                            .push(SharedString::from(&all_background_colors[0]));
+                    } else {
+                        // For mixed values, just push one to indicate mixed state
+                        self.properties
+                            .background_color
+                            .push(SharedString::from("Mixed"));
                     }
                 }
             }
@@ -262,6 +329,23 @@ impl Render for Inspector {
             Some(self.properties.corner_radius.iter().cloned().collect())
         };
 
+        // Convert color properties for the ColorInput components
+        let border_color = if self.properties.border_color.is_empty() {
+            None
+        } else if self.properties.border_color.len() == 1 {
+            Some(self.properties.border_color[0].clone())
+        } else {
+            Some(SharedString::from("Mixed"))
+        };
+
+        let background_color = if self.properties.background_color.is_empty() {
+            None
+        } else if self.properties.background_color.len() == 1 {
+            Some(self.properties.background_color[0].clone())
+        } else {
+            Some(SharedString::from("Mixed"))
+        };
+
         let inner = div()
             .flex()
             .flex_col()
@@ -278,12 +362,24 @@ impl Render for Inspector {
                     .gap(px(8.))
                     .border_color(theme.tokens.inactive_border)
                     .border_b_1()
-                    .child(property_input(x, "X"))
-                    .child(property_input(y, "Y"))
-                    .child(property_input(width, "W"))
-                    .child(property_input(height, "H"))
-                    .child(property_input(border_width, "B"))
-                    .child(property_input(corner_radius, "R")),
+                    .child(float_input(x, "X"))
+                    .child(float_input(y, "Y"))
+                    .child(float_input(width, "W"))
+                    .child(float_input(height, "H"))
+                    .child(float_input(border_width, "B"))
+                    .child(float_input(corner_radius, "R")),
+            )
+            .child(
+                div()
+                    .px(px(8.))
+                    .py(px(10.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .border_color(theme.tokens.inactive_border)
+                    .border_b_1()
+                    .child(ColorInput::new(background_color, SharedString::from("BG")))
+                    .child(ColorInput::new(border_color, SharedString::from("BC"))),
             );
 
         div()

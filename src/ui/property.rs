@@ -3,15 +3,21 @@
 //! Provides reusable UI components for displaying and editing
 //! element properties, with support for mixed-value states.
 
+use std::str::FromStr;
+
 use gpui::{
-    div, prelude::*, px, Context, Entity, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window,
+    div, prelude::*, px, Context, Entity, Hsla, IntoElement, ParentElement, Render, Rgba,
+    SharedString, Styled, Window,
 };
 
-use crate::{canvas::LunaCanvas, theme::Theme, AppState};
+use crate::{
+    canvas::LunaCanvas,
+    theme::{ActiveTheme, Theme},
+    AppState,
+};
 
 /// Creates a new property input field with the given value and icon
-pub fn property_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
+pub fn float_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
     PropertyInput::new(value, icon)
 }
 
@@ -67,6 +73,81 @@ impl RenderOnce for PropertyInput {
                 })
                 .text_size(px(11.))
                 .child(div().flex_1().child(display_value))
+                .child(
+                    div()
+                        .flex()
+                        .justify_center()
+                        .flex_none()
+                        .overflow_hidden()
+                        .w(px(11.))
+                        .h_full()
+                        .child(self.icon),
+                ),
+        )
+    }
+}
+
+#[derive(IntoElement)]
+pub struct ColorInput {
+    value: Option<SharedString>,
+    opacity: Option<f32>,
+    icon: SharedString,
+}
+
+impl ColorInput {
+    pub fn new(value: Option<SharedString>, icon: SharedString) -> Self {
+        Self {
+            value,
+            opacity: None,
+            icon,
+        }
+    }
+
+    pub fn parse_color(&self) -> Option<Hsla> {
+        if let Some(color_str) = &self.value {
+            crate::color::parse_color(color_str)
+        } else {
+            None
+        }
+    }
+}
+
+impl RenderOnce for ColorInput {
+    fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+        let theme = cx.theme();
+
+        let parsed_color = self.parse_color();
+        let mut display_value = String::new();
+        if let Some(color) = parsed_color {
+            display_value = color.to_string();
+        };
+
+        div().flex().flex_row().child(
+            div()
+                .flex()
+                .items_center()
+                .flex_none()
+                .pl(px(6.))
+                .pr(px(4.))
+                .w_full()
+                .rounded(px(4.))
+                .bg(theme.tokens.surface0)
+                .text_color(theme.tokens.text)
+                .text_size(px(11.))
+                .when_some(parsed_color, |this, color| {
+                    this.child(
+                        div()
+                            .size(px(9.))
+                            .border_color(cx.theme().tokens.inactive_border)
+                            .border_1()
+                            .rounded(px(2.))
+                            .bg(color),
+                    )
+                })
+                .when(!display_value.is_empty(), |this| {
+                    this.child(div().flex_1().ml(px(4.)).child(display_value))
+                })
+                .child(div().flex_1())
                 .child(
                     div()
                         .flex()

@@ -38,6 +38,7 @@ use util::keystroke_builder;
 mod assets;
 mod canvas;
 mod canvas_element;
+mod color;
 mod css_parser;
 mod interactivity;
 mod node;
@@ -55,6 +56,7 @@ actions!(
         Copy,
         Cut,
         Delete,
+        FrameTool,
         HandTool,
         Paste,
         Quit,
@@ -153,7 +155,10 @@ struct Luna {
     scene_graph: Entity<SceneGraph>,
     /// Inspector panel for element properties and tools
     inspector: Entity<Inspector>,
+    /// Sidebar for additional tools and controls
     sidebar: Entity<Sidebar>,
+    /// Layer list showing all elements in the canvas
+    layer_list: Entity<ui::layer_list::LayerList>,
 }
 
 impl Luna {
@@ -168,6 +173,7 @@ impl Luna {
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
         let sidebar = cx.new(|cx| Sidebar::new(canvas.clone()));
+        let layer_list = cx.new(|cx| ui::layer_list::LayerList::new(canvas.clone()));
 
         Luna {
             app_state,
@@ -176,6 +182,7 @@ impl Luna {
             focus_handle,
             inspector,
             sidebar,
+            layer_list,
         }
     }
 
@@ -200,7 +207,12 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Rectangle)));
+        cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
+        cx.notify();
+    }
+
+    fn activate_frame_tool(&mut self, _: &FrameTool, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
         cx.notify();
     }
 
@@ -267,20 +279,20 @@ impl Render for Luna {
             })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
-                Tool::Frame | Tool::Rectangle | Tool::Line | Tool::TextCursor => {
-                    div.cursor_crosshair()
-                }
+                Tool::Frame | Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
+            .on_action(cx.listener(Self::activate_frame_tool))
             .on_action(cx.listener(Self::select_all_nodes))
             .on_action(cx.listener(Self::delete_selected_nodes))
             .on_action(cx.listener(Self::handle_cancel))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
+            .child(self.layer_list.clone())
     }
 }
 
@@ -317,6 +329,7 @@ fn main() {
                 KeyBinding::new("h", HandTool, None),
                 KeyBinding::new("a", SelectionTool, None),
                 KeyBinding::new("r", RectangleTool, None),
+                KeyBinding::new("f", FrameTool, None),
                 KeyBinding::new("escape", Cancel, None),
                 KeyBinding::new("delete", Delete, None),
                 KeyBinding::new("backspace", Delete, None),
