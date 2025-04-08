@@ -1,5 +1,6 @@
-use crate::node::{frame::FrameNode, NodeCommon, NodeFactory};
-use gpui::Hsla;
+use crate::node::{frame::FrameNode, NodeCommon, NodeFactory, Shadow};
+use gpui::{point, Hsla};
+use smallvec::SmallVec;
 use std::collections::HashMap;
 
 /// Parses a CSS string and creates a FrameNode with the properties defined in the CSS.
@@ -72,6 +73,13 @@ pub fn parse_rectangle_from_css(css: &str, factory: &mut NodeFactory) -> Option<
         .and_then(|v| parse_length(v))
     {
         rect.set_corner_radius(radius);
+    }
+
+    // Parse box-shadow
+    if let Some(shadow_str) = properties.get("box-shadow") {
+        if let Some(shadows) = parse_box_shadows(shadow_str) {
+            rect.set_shadows(shadows);
+        }
     }
 
     Some(rect)
@@ -246,6 +254,85 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
     None
 }
 
+/// Parse CSS box-shadow value into a collection of Shadow objects
+///
+/// Supports multiple shadow definitions separated by commas.
+/// Each shadow includes offset-x, offset-y, blur-radius, spread-radius, and color.
+///
+/// Format: `<offset-x> <offset-y> <blur-radius> <spread-radius> <color>`
+///
+/// Example: `0px 4px 8px 2px rgba(0, 0, 0, 0.2)`
+fn parse_box_shadows(value: &str) -> Option<SmallVec<[Shadow; 1]>> {
+    let mut result = SmallVec::new();
+
+    // Split by commas to handle multiple shadow definitions
+    for shadow_def in value.split(',') {
+        let shadow_def = shadow_def.trim();
+        if shadow_def.is_empty() {
+            continue;
+        }
+
+        // Split the shadow definition into components
+        let parts: Vec<&str> = shadow_def.split_whitespace().collect();
+        if parts.len() < 2 {
+            // Need at least x and y offsets
+            continue;
+        }
+
+        // Parse shadow components
+        let x_offset = parse_length(parts[0]).unwrap_or(0.0);
+        let y_offset = parse_length(parts[1]).unwrap_or(0.0);
+        let mut blur_radius = 0.0;
+        let mut spread_radius = 0.0;
+        let mut color = Hsla {
+            h: 0.0,
+            s: 0.0,
+            l: 0.0,
+            a: 0.32,
+        }; // Default semi-transparent black
+
+        // Process remaining parts (blur, spread, color)
+        let mut i = 2;
+
+        // Check if there's a blur radius
+        if i < parts.len() && (parts[i].ends_with("px") || parts[i].parse::<f32>().is_ok()) {
+            blur_radius = parse_length(parts[i]).unwrap_or(0.0);
+            i += 1;
+        }
+
+        // Check if there's a spread radius
+        if i < parts.len() && (parts[i].ends_with("px") || parts[i].parse::<f32>().is_ok()) {
+            spread_radius = parse_length(parts[i]).unwrap_or(0.0);
+            i += 1;
+        }
+
+        // The rest should be the color
+        if i < parts.len() {
+            // Reconstruct the color string (it might have been split by whitespace)
+            let color_str = parts[i..].join(" ");
+            if let Some(parsed_color) = parse_color(&color_str) {
+                color = parsed_color;
+            }
+        }
+
+        // Create the shadow
+        let shadow = Shadow {
+            color,
+            offset: point(x_offset, y_offset),
+            blur_radius,
+            spread_radius,
+        };
+
+        result.push(shadow);
+    }
+
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
 /// Parse a CSS file and extract multiple frame nodes
 ///
 /// Each CSS rule with a selector will create a separate FrameNode
@@ -310,6 +397,36 @@ mod tests {
         assert_eq!(rect.layout().y, 20.0);
         assert_eq!(rect.border_width(), 2.0);
         assert_eq!(rect.corner_radius(), 5.0);
+    }
+
+    #[test]
+    fn test_parse_shadows() {
+        let css = r#"
+            width: 100px;
+            height: 50px;
+            box-shadow: 0px 1px 1px rgba(0, 0, 0, 0.32), 0px 4px 6px rgba(0, 0, 0, 0.08);
+        "#;
+
+        let mut factory = NodeFactory::default();
+        let rect = parse_rectangle_from_css(css, &mut factory).unwrap();
+
+        // Verify shadows were parsed correctly
+        let shadows = rect.shadows();
+        assert_eq!(shadows.len(), 2);
+
+        // First shadow
+        assert_eq!(shadows[0].offset.x, 0.0);
+        assert_eq!(shadows[0].offset.y, 1.0);
+        assert_eq!(shadows[0].blur_radius, 1.0);
+        assert_eq!(shadows[0].spread_radius, 0.0);
+        assert!(shadows[0].color.a > 0.3 && shadows[0].color.a < 0.33); // Around 0.32
+
+        // Second shadow
+        assert_eq!(shadows[1].offset.x, 0.0);
+        assert_eq!(shadows[1].offset.y, 4.0);
+        assert_eq!(shadows[1].blur_radius, 6.0);
+        assert_eq!(shadows[1].spread_radius, 0.0);
+        assert!(shadows[1].color.a > 0.07 && shadows[1].color.a < 0.09); // Around 0.08
     }
 
     #[test]

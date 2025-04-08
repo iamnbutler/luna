@@ -39,16 +39,12 @@ impl Render for Sidebar {
 
         let inner = div()
             .id("sidebar-inner")
-            .debug_below()
             .flex()
             .flex_col()
             .h_full()
             .w(px(Self::INITIAL_WIDTH))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .on_click(|event, _, _| {
-                dbg!(event.down.clone());
-            })
             .child(div().w_full().h(px(Titlebar::HEIGHT)))
             .child(
                 div()
@@ -62,9 +58,6 @@ impl Render for Sidebar {
         div()
             .id("sidebar")
             .key_context("Sidebar")
-            .on_click(|_e, _, cx| {
-                cx.stop_propagation();
-            })
             .absolute()
             .top_0()
             .left_0()

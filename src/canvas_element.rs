@@ -1,19 +1,20 @@
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType},
+    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType, Shadow},
     scene_graph::SceneGraph,
     theme::{ActiveTheme, Theme},
     tools::{ActiveTool, GlobalTool},
     util::{round_to_pixel, rounded_point},
-    AppState, Tool,
+    Tool,
 };
+use smallvec::SmallVec;
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
-    Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
+    Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
+    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
-use gpui::{point, size, Bounds, Point, Size};
+use gpui::{point, Bounds, Point, Size};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -1085,6 +1086,7 @@ impl CanvasElement {
             border_color: Option<Hsla>,
             border_width: f32,
             corner_radius: f32,
+            shadows: SmallVec<[Shadow; 1]>,
             children: Vec<NodeId>,
         }
 
@@ -1159,6 +1161,7 @@ impl CanvasElement {
                                 border_color: node.border_color(),
                                 border_width: node.border_width(),
                                 corner_radius: node.corner_radius(),
+                                shadows: node.shadows(),
                                 children: node.children().clone(),
                             });
                         }
@@ -1232,7 +1235,31 @@ impl CanvasElement {
                         gpui::Pixels(frame_y).scale(1.0),
                     ));
 
-                // FIRST: Paint the node itself (background and frame)
+                // FIRST: Paint any shadows behind the node
+                // Shadows need to be rendered before the node itself
+                if !node_info.shadows.is_empty() {
+                    // Convert our Shadow types to gpui::BoxShadow types
+                    let box_shadows: Vec<gpui::BoxShadow> = node_info.shadows.iter()
+                        .map(|shadow| gpui::BoxShadow {
+                            offset: gpui::Point::new(
+                                gpui::Pixels(shadow.offset.x),
+                                gpui::Pixels(shadow.offset.y)
+                            ),
+                            blur_radius: gpui::Pixels(shadow.blur_radius),
+                            spread_radius: gpui::Pixels(shadow.spread_radius),
+                            color: shadow.color,
+                        })
+                        .collect();
+                    
+                    // Use the dedicated shadow rendering function
+                    window.paint_shadows(
+                        transformed_bounds,
+                        gpui::Corners::all(gpui::Pixels(node_info.corner_radius)),
+                        &box_shadows,
+                    );
+                }
+
+                // SECOND: Paint the node itself (background and frame)
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
                     window.paint_quad(gpui::PaintQuad {

@@ -20,7 +20,7 @@ use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
-    IntoElement, KeyBinding, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
+    IntoElement, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
     WindowOptions,
 };
 use keymap::init_keymap;

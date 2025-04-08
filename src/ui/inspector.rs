@@ -347,12 +347,16 @@ impl Render for Inspector {
         };
 
         let inner = div()
+            .id("inspector-inner")
             .flex()
             .flex_col()
             .h_full()
             .w(px(INSPECTOR_WIDTH))
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
+            .on_click(cx.listener(|_, _, _, cx| {
+                cx.stop_propagation();
+            }))
             .child(
                 div()
                     .px(px(8.))
@@ -383,7 +387,7 @@ impl Render for Inspector {
             );
 
         div()
-            .id("titlebar")
+            .id("inspector")
             .absolute()
             .right_0()
             .top_0()
