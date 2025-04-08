@@ -122,7 +122,7 @@ fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Optio
     use ResizeHandle;
 
     // Define handle size and boundaries
-    const HANDLE_SIZE: f32 = 7.0;
+    const HANDLE_SIZE: f32 = 11.0; // Increased from 7.0 to provide a larger hit area
     const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
 
     // Create bounds for each corner handle

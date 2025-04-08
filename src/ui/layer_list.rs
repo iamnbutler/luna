@@ -4,7 +4,7 @@
 //! showing their selection state and allowing interaction.
 
 use gpui::{
-    div, prelude::*, px, App, ElementId, Entity, Hsla, IntoElement, SharedString, WeakEntity,
+    div, prelude::*, px, App, ElementId, Entity, Hsla, IntoElement, List, SharedString, WeakEntity,
     Window,
 };
 
