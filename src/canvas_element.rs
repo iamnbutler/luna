@@ -821,8 +821,104 @@ impl CanvasElement {
                                 new_y = orig_center_y - new_height / 2.0;
                             }
 
-                            // Ensure minimum dimensions (prevent negative width/height)
-                            if new_width > 1.0 && new_height > 1.0 {
+                            // Calculate the correct position and dimensions for each handle type
+                            match resize_op.handle {
+                                ResizeHandle::TopLeft => {
+                                    // Handle horizontal resizing (left edge)
+                                    if new_width < 0.0 {
+                                        // Crossed right edge - fixed point switches to left
+                                        new_width = -new_width;
+                                        // Left edge is now at original right edge + the overflow
+                                        new_x = resize_op.original_x + resize_op.original_width;
+                                    } else {
+                                        // Normal case - right edge stays fixed
+                                        new_x = resize_op.original_x + resize_op.original_width - new_width;
+                                    }
+                                    
+                                    // Handle vertical resizing (top edge)
+                                    if new_height < 0.0 {
+                                        // Crossed bottom edge - fixed point switches to top
+                                        new_height = -new_height;
+                                        // Top edge is now at original bottom edge + the overflow
+                                        new_y = resize_op.original_y + resize_op.original_height;
+                                    } else {
+                                        // Normal case - bottom edge stays fixed
+                                        new_y = resize_op.original_y + resize_op.original_height - new_height;
+                                    }
+                                },
+                                ResizeHandle::TopRight => {
+                                    // Handle horizontal resizing (right edge)
+                                    if new_width < 0.0 {
+                                        // Crossed left edge - fixed point switches to right
+                                        new_width = -new_width;
+                                        // Keep the original x, width grows to the left
+                                        new_x = resize_op.original_x - new_width;
+                                    } else {
+                                        // Normal case - left edge stays fixed at original x
+                                        new_x = resize_op.original_x;
+                                    }
+                                    
+                                    // Handle vertical resizing (top edge)
+                                    if new_height < 0.0 {
+                                        // Crossed bottom edge - fixed point switches to top
+                                        new_height = -new_height;
+                                        // Top edge is now at original bottom edge + the overflow
+                                        new_y = resize_op.original_y + resize_op.original_height;
+                                    } else {
+                                        // Normal case - bottom edge stays fixed
+                                        new_y = resize_op.original_y + resize_op.original_height - new_height;
+                                    }
+                                },
+                                ResizeHandle::BottomLeft => {
+                                    // Handle horizontal resizing (left edge)
+                                    if new_width < 0.0 {
+                                        // Crossed right edge - fixed point switches to left
+                                        new_width = -new_width;
+                                        // Left edge is now at original right edge + the overflow
+                                        new_x = resize_op.original_x + resize_op.original_width;
+                                    } else {
+                                        // Normal case - right edge stays fixed
+                                        new_x = resize_op.original_x + resize_op.original_width - new_width;
+                                    }
+                                    
+                                    // Handle vertical resizing (bottom edge)
+                                    if new_height < 0.0 {
+                                        // Crossed top edge - fixed point switches to bottom
+                                        new_height = -new_height;
+                                        // Keep original y, height grows upward
+                                        new_y = resize_op.original_y - new_height;
+                                    } else {
+                                        // Normal case - top edge stays fixed at original y
+                                        new_y = resize_op.original_y;
+                                    }
+                                },
+                                ResizeHandle::BottomRight => {
+                                    // Handle horizontal resizing (right edge)
+                                    if new_width < 0.0 {
+                                        // Crossed left edge - fixed point switches to right
+                                        new_width = -new_width;
+                                        // Keep the original x, width grows to the left
+                                        new_x = resize_op.original_x - new_width;
+                                    } else {
+                                        // Normal case - left edge stays fixed at original x
+                                        new_x = resize_op.original_x;
+                                    }
+                                    
+                                    // Handle vertical resizing (bottom edge)
+                                    if new_height < 0.0 {
+                                        // Crossed top edge - fixed point switches to bottom
+                                        new_height = -new_height;
+                                        // Keep original y, height grows upward
+                                        new_y = resize_op.original_y - new_height;
+                                    } else {
+                                        // Normal case - top edge stays fixed at original y
+                                        new_y = resize_op.original_y;
+                                    }
+                                }
+                            }
+                            
+                            // Ensure minimum dimensions (very small but positive)
+                            if new_width > 0.1 && new_height > 0.1 {
                                 // Update node dimensions
                                 let layout = node.layout_mut();
                                 layout.x = new_x;
