@@ -135,7 +135,7 @@ impl LunaCanvas {
             nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
-            scroll_position: Point::new(0.0, 0.0),
+            scroll_position: Point::new(0.0, 0.0), // Will be initialized with set_scroll_position below
             zoom: 1.0,
             content_bounds,
             next_id: 1,
@@ -149,6 +149,9 @@ impl LunaCanvas {
             theme: theme.clone(),
             hovered_node: None,
         };
+
+        // Initialize proper scroll position for centered coordinate system
+        canvas.set_scroll_position(Point::new(0.0, 0.0), cx);
 
         // Load rectangles from CSS file
         let app_state_read = app_state.read(cx);
@@ -277,16 +280,30 @@ impl LunaCanvas {
     }
 
     /// Convert a window-relative point to canvas-relative point
+    /// With 0,0 at the center of the canvas
     pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
-        let canvas_x = (window_point.x / self.zoom) + self.scroll_position.x;
-        let canvas_y = (window_point.y / self.zoom) + self.scroll_position.y;
+        // Calculate center of viewport in window space
+        let center_x = self.viewport.size.width / 2.0;
+        let center_y = self.viewport.size.height / 2.0;
+        
+        // Convert from window to canvas space, accounting for center origin
+        let canvas_x = ((window_point.x - center_x) / self.zoom) + self.scroll_position.x;
+        let canvas_y = ((window_point.y - center_y) / self.zoom) + self.scroll_position.y;
+        
         Point::new(canvas_x, canvas_y)
     }
 
     /// Convert a canvas-relative point to window-relative point
+    /// From canvas space (0,0 at center) to window space (0,0 at top-left)
     pub fn canvas_to_window_point(&self, canvas_point: Point<f32>) -> Point<f32> {
-        let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
-        let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
+        // Calculate center of viewport in window space
+        let center_x = self.viewport.size.width / 2.0;
+        let center_y = self.viewport.size.height / 2.0;
+        
+        // Convert from canvas to window space, accounting for center origin
+        let window_x = ((canvas_point.x - self.scroll_position.x) * self.zoom) + center_x;
+        let window_y = ((canvas_point.y - self.scroll_position.y) * self.zoom) + center_y;
+        
         Point::new(window_x, window_y)
     }
 
@@ -873,11 +890,20 @@ impl LunaCanvas {
         self.scroll_position = position;
 
         self.scene_graph.update(cx, |sg, _cx| {
+            // Calculate viewport center for centered coordinate system
+            let center_x = self.viewport.size.width / 2.0;
+            let center_y = self.viewport.size.height / 2.0;
+            
+            // First translate by scroll position, then scale, then move to center
             let transform = TransformationMatrix::unit()
+                .translate(point(
+                    Pixels(center_x).scale(1.0),
+                    Pixels(center_y).scale(1.0),
+                ))
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
-                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
-                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.x).scale(1.0),
+                    Pixels(-self.scroll_position.y).scale(1.0),
                 ));
 
             sg.set_local_transform(self.canvas_node, transform);
@@ -892,11 +918,20 @@ impl LunaCanvas {
 
         // Update canvas root transform
         self.scene_graph.update(cx, |sg, _cx| {
+            // Calculate viewport center for centered coordinate system
+            let center_x = self.viewport.size.width / 2.0;
+            let center_y = self.viewport.size.height / 2.0;
+            
+            // First translate by scroll position, then scale, then move to center
             let transform = TransformationMatrix::unit()
+                .translate(point(
+                    Pixels(center_x).scale(1.0),
+                    Pixels(center_y).scale(1.0),
+                ))
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
-                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
-                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.x).scale(1.0),
+                    Pixels(-self.scroll_position.y).scale(1.0),
                 ));
 
             sg.set_local_transform(self.canvas_node, transform);
@@ -908,6 +943,11 @@ impl LunaCanvas {
     /// Get current zoom level
     pub fn zoom(&self) -> f32 {
         self.zoom
+    }
+    
+    /// Get current scroll position
+    pub fn get_scroll_position(&self) -> Point<f32> {
+        self.scroll_position
     }
 
     /// Check if the canvas is dirty and needs redrawing

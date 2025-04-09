@@ -1120,6 +1120,54 @@ impl CanvasElement {
     /// using `window.on_{}_event`, which is only available in the paint phase.
     ///
     /// Thus the `paint` prefix.
+    fn paint_scroll_wheel_listener(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            let hitbox = layout.hitbox.clone();
+            move |event: &gpui::ScrollWheelEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    canvas.update(cx, |canvas, cx| {
+                        // Handle scrolling/panning of the canvas
+                        let delta = match event.delta {
+                            gpui::ScrollDelta::Pixels(pixels) => {
+                                // Trackpad input - direct pixel movement
+                                pixels
+                            }
+                            gpui::ScrollDelta::Lines(lines) => {
+                                // Mouse wheel input - convert lines to pixels
+                                // Scale lines by a factor to make it feel natural
+                                // Convert lines to pixels - multiply by 30 for natural feel
+                                gpui::Point::new(
+                                    gpui::Pixels(lines.x * 30.0),
+                                    gpui::Pixels(lines.y * 30.0)
+                                )
+                            }
+                        };
+
+                        // Invert delta for natural feeling panning
+                        let inverted_delta = gpui::Point::new(
+                            gpui::Pixels(-delta.x.0),
+                            gpui::Pixels(-delta.y.0)
+                        );
+                        
+                        // Get current canvas position through getter
+                        let current_position = canvas.get_scroll_position();
+                        
+                        // Calculate new position
+                        let new_position = gpui::Point::new(
+                            current_position.x + inverted_delta.x.0 / canvas.zoom(),
+                            current_position.y + inverted_delta.y.0 / canvas.zoom()
+                        );
+                        
+                        // Update canvas scroll position
+                        canvas.set_scroll_position(new_position, cx);
+                        cx.stop_propagation();
+                    });
+                }
+            }
+        });
+    }
+
     fn paint_mouse_listeners(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         window.on_mouse_event({
             let canvas = self.canvas.clone();
@@ -1810,6 +1858,7 @@ impl Element for CanvasElement {
                 // Clone the canvas to avoid multiple borrows of cx
                 let canvas_clone = self.canvas.clone();
                 self.paint_mouse_listeners(layout, window, cx);
+                self.paint_scroll_wheel_listener(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
                 self.paint_nodes(layout, window, cx);
 
