@@ -463,6 +463,7 @@ impl CanvasElement {
                 DragType::MoveElements => {
                     // Check if the selected nodes are being dropped on a frame
                     // by getting the topmost frame at the current mouse position, excluding selected frames
+                    // Convert window coordinates to canvas coordinates (centered system)
                     let drop_point =
                         canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
@@ -498,27 +499,33 @@ impl CanvasElement {
                         for &node_id in &selected_ids {
                             // First, ensure the node isn't already a child of this frame
                             if !parent_info.children.contains(&node_id) {
-                                // First update the parent to add the child
+                                // Get canvas-space absolute position of child and parent before any changes
+                                let child_absolute_pos = if let Some(child_node) = canvas.get_node(node_id) {
+                                    let child_layout = child_node.layout();
+                                    canvas.get_absolute_position(node_id, cx)
+                                } else {
+                                    continue;
+                                };
+                                
+                                let parent_absolute_pos = canvas.get_absolute_position(parent_info.id, cx);
+                                
+                                // Calculate child's position relative to parent
+                                // This is the key part for correct parent-relative positioning
+                                let relative_x = child_absolute_pos.0 - parent_absolute_pos.0;
+                                let relative_y = child_absolute_pos.1 - parent_absolute_pos.1;
+                                
+                                // Now update parent to add child
                                 if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
                                     parent_node.add_child(node_id);
                                 }
-
-                                // Store absolute position of child before adjustment
-                                let (absolute_x, absolute_y) =
-                                    if let Some(child_node) = canvas.get_node(node_id) {
-                                        let child_layout = child_node.layout();
-                                        (child_layout.x, child_layout.y)
-                                    } else {
-                                        continue;
-                                    };
-
-                                // Then update the child position in a separate borrow
+                                
+                                // Then set the child's position relative to parent
                                 if let Some(child_node) = canvas.get_node_mut(node_id) {
                                     let child_layout = child_node.layout_mut();
-
-                                    // Adjust position to be relative to parent
-                                    child_layout.x = absolute_x - parent_info.x;
-                                    child_layout.y = absolute_y - parent_info.y;
+                                    
+                                    // Use the calculated relative coordinates
+                                    child_layout.x = relative_x;
+                                    child_layout.y = relative_y;
                                 }
 
                                 // Update the scene graph to reflect the new parent-child relationship

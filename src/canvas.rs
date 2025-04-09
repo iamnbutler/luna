@@ -416,6 +416,7 @@ impl LunaCanvas {
         };
 
         // 4. Update child's position to be relative to new parent
+        // This works regardless of the coordinate system since we're using relative offsets
         if let Some(child_node) = self.get_node_mut(child_id) {
             let child_layout = child_node.layout_mut();
             child_layout.x = child_absolute_x - parent_x;
@@ -517,46 +518,45 @@ impl LunaCanvas {
     }
 
     /// Get the absolute position of a node, accounting for all parent transformations
-    fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
-        let mut current_id = node_id;
-        let mut x = 0.0;
-        let mut y = 0.0;
-
-        // First collect all nodes in the parent chain to avoid borrow checker issues
-        let mut node_chain = Vec::new();
-
-        // Start with the node itself
-        if let Some(node) = self.get_node(current_id) {
-            node_chain.push((current_id, node.layout().x, node.layout().y));
+    /// 
+    /// This returns the absolute canvas coordinates (centered coordinate system)
+    /// of a node by accumulating all parent transformations
+    /// Get the absolute position of a node, accounting for all parent transformations
+    /// 
+    /// With centered coordinate system, this gives the position in absolute canvas coordinates
+    /// taking into account all parent node offsets
+    pub fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
+        // For nodes that have parents, we need to accumulate all parent offsets
+        // For top-level nodes, absolute position is the same as their layout position
+        
+        // Find the node in question first
+        let node = if let Some(n) = self.get_node(node_id) {
+            n
         } else {
             return (0.0, 0.0);
+        };
+        
+        // Get this node's layout position
+        let node_layout = node.layout();
+        let node_x = node_layout.x;
+        let node_y = node_layout.y;
+        
+        // If this is a top-level node with no parent, return its position directly
+        let parent_id = self.find_parent(node_id);
+        if parent_id.is_none() {
+            return (node_x, node_y);
         }
-
-        // Collect all parents
-        let mut parent_id = self.find_parent(current_id);
-        while let Some(p_id) = parent_id {
-            if let Some(parent) = self.get_node(p_id) {
-                node_chain.push((p_id, parent.layout().x, parent.layout().y));
-            }
-
-            current_id = p_id;
-            parent_id = self.find_parent(current_id);
+        
+        // Accumulate parent positions by recursively getting parent's absolute position
+        if let Some(parent_id) = parent_id {
+            let (parent_abs_x, parent_abs_y) = self.get_absolute_position(parent_id, _cx);
+            
+            // Add this node's relative position to parent's absolute position
+            return (parent_abs_x + node_x, parent_abs_y + node_y);
         }
-
-        // Now compute the absolute position using the collected chain
-        // Start with the node's own position
-        if let Some((_, node_x, node_y)) = node_chain.first() {
-            x = *node_x;
-            y = *node_y;
-        }
-
-        // Add all parent positions (skip the first node which is the starting node)
-        for (_, parent_x, parent_y) in node_chain.iter().skip(1) {
-            x += parent_x;
-            y += parent_y;
-        }
-
-        (x, y)
+        
+        // Fallback - shouldn't be reached
+        (node_x, node_y)
     }
 
     /// Remove a node from the canvas and update the scene graph
@@ -894,8 +894,10 @@ impl LunaCanvas {
             let center_x = self.viewport.size.width / 2.0;
             let center_y = self.viewport.size.height / 2.0;
             
-            // First translate by scroll position, then scale, then move to center
+            // Use a single transformation matrix that combines all operations
+            // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
+                // The order of operations: first translate to center, then scale, then apply scroll
                 .translate(point(
                     Pixels(center_x).scale(1.0),
                     Pixels(center_y).scale(1.0),
@@ -922,8 +924,10 @@ impl LunaCanvas {
             let center_x = self.viewport.size.width / 2.0;
             let center_y = self.viewport.size.height / 2.0;
             
-            // First translate by scroll position, then scale, then move to center
+            // Use a single transformation matrix that combines all operations
+            // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
+                // The order of operations: first translate to center, then scale, then apply scroll
                 .translate(point(
                     Pixels(center_x).scale(1.0),
                     Pixels(center_y).scale(1.0),

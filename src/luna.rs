@@ -34,6 +34,7 @@ mod assets;
 mod canvas;
 mod canvas_element;
 mod color;
+mod coordinates;
 mod css_parser;
 mod interactivity;
 mod keymap;
