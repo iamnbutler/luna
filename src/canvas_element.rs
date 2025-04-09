@@ -8,13 +8,13 @@ use crate::{
     util::{round_to_pixel, rounded_point},
     Tool,
 };
-use smallvec::SmallVec;
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
     Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
     TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, Bounds, Point, Size};
+use smallvec::SmallVec;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -832,9 +832,10 @@ impl CanvasElement {
                                         new_x = resize_op.original_x + resize_op.original_width;
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width - new_width;
+                                        new_x = resize_op.original_x + resize_op.original_width
+                                            - new_width;
                                     }
-                                    
+
                                     // Handle vertical resizing (top edge)
                                     if new_height < 0.0 {
                                         // Crossed bottom edge - fixed point switches to top
@@ -843,9 +844,10 @@ impl CanvasElement {
                                         new_y = resize_op.original_y + resize_op.original_height;
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height - new_height;
+                                        new_y = resize_op.original_y + resize_op.original_height
+                                            - new_height;
                                     }
-                                },
+                                }
                                 ResizeHandle::TopRight => {
                                     // Handle horizontal resizing (right edge)
                                     if new_width < 0.0 {
@@ -857,7 +859,7 @@ impl CanvasElement {
                                         // Normal case - left edge stays fixed at original x
                                         new_x = resize_op.original_x;
                                     }
-                                    
+
                                     // Handle vertical resizing (top edge)
                                     if new_height < 0.0 {
                                         // Crossed bottom edge - fixed point switches to top
@@ -866,9 +868,10 @@ impl CanvasElement {
                                         new_y = resize_op.original_y + resize_op.original_height;
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height - new_height;
+                                        new_y = resize_op.original_y + resize_op.original_height
+                                            - new_height;
                                     }
-                                },
+                                }
                                 ResizeHandle::BottomLeft => {
                                     // Handle horizontal resizing (left edge)
                                     if new_width < 0.0 {
@@ -878,9 +881,10 @@ impl CanvasElement {
                                         new_x = resize_op.original_x + resize_op.original_width;
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width - new_width;
+                                        new_x = resize_op.original_x + resize_op.original_width
+                                            - new_width;
                                     }
-                                    
+
                                     // Handle vertical resizing (bottom edge)
                                     if new_height < 0.0 {
                                         // Crossed top edge - fixed point switches to bottom
@@ -891,7 +895,7 @@ impl CanvasElement {
                                         // Normal case - top edge stays fixed at original y
                                         new_y = resize_op.original_y;
                                     }
-                                },
+                                }
                                 ResizeHandle::BottomRight => {
                                     // Handle horizontal resizing (right edge)
                                     if new_width < 0.0 {
@@ -903,7 +907,7 @@ impl CanvasElement {
                                         // Normal case - left edge stays fixed at original x
                                         new_x = resize_op.original_x;
                                     }
-                                    
+
                                     // Handle vertical resizing (bottom edge)
                                     if new_height < 0.0 {
                                         // Crossed top edge - fixed point switches to bottom
@@ -916,7 +920,7 @@ impl CanvasElement {
                                     }
                                 }
                             }
-                            
+
                             // Ensure minimum dimensions (very small but positive)
                             if new_width > 0.1 && new_height > 0.1 {
                                 // Update node dimensions
@@ -1335,18 +1339,20 @@ impl CanvasElement {
                 // Shadows need to be rendered before the node itself
                 if !node_info.shadows.is_empty() {
                     // Convert our Shadow types to gpui::BoxShadow types
-                    let box_shadows: Vec<gpui::BoxShadow> = node_info.shadows.iter()
+                    let box_shadows: Vec<gpui::BoxShadow> = node_info
+                        .shadows
+                        .iter()
                         .map(|shadow| gpui::BoxShadow {
                             offset: gpui::Point::new(
                                 gpui::Pixels(shadow.offset.x),
-                                gpui::Pixels(shadow.offset.y)
+                                gpui::Pixels(shadow.offset.y),
                             ),
                             blur_radius: gpui::Pixels(shadow.blur_radius),
                             spread_radius: gpui::Pixels(shadow.spread_radius),
                             color: shadow.color,
                         })
                         .collect();
-                    
+
                     // Use the dedicated shadow rendering function
                     window.paint_shadows(
                         transformed_bounds,
@@ -1441,8 +1447,7 @@ impl CanvasElement {
                         ),
                     };
 
-                    // Use a bright yellow color for the parent indicator
-                    let yellow_highlight = gpui::hsla(60.0, 1.0, 0.5, 0.8); // Bright yellow with 80% opacity
+                    let yellow_highlight = gpui::hsla(60.0 / 360.0, 1.0, 0.5, 0.8);
                     window.paint_quad(gpui::outline(
                         parent_indicator_bounds,
                         yellow_highlight,
