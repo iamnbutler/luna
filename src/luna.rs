@@ -1,3 +1,5 @@
+#![allow(unused, dead_code)]
+
 //! # Luna: A GPU-accelerated design canvas
 //!
 //! Luna is a modern design application built on the GPUI framework, providing a high-performance

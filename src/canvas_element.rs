@@ -500,29 +500,31 @@ impl CanvasElement {
                             // First, ensure the node isn't already a child of this frame
                             if !parent_info.children.contains(&node_id) {
                                 // Get canvas-space absolute position of child and parent before any changes
-                                let child_absolute_pos = if let Some(child_node) = canvas.get_node(node_id) {
-                                    let child_layout = child_node.layout();
-                                    canvas.get_absolute_position(node_id, cx)
-                                } else {
-                                    continue;
-                                };
-                                
-                                let parent_absolute_pos = canvas.get_absolute_position(parent_info.id, cx);
-                                
+                                let child_absolute_pos =
+                                    if let Some(child_node) = canvas.get_node(node_id) {
+                                        let child_layout = child_node.layout();
+                                        canvas.get_absolute_position(node_id, cx)
+                                    } else {
+                                        continue;
+                                    };
+
+                                let parent_absolute_pos =
+                                    canvas.get_absolute_position(parent_info.id, cx);
+
                                 // Calculate child's position relative to parent
                                 // This is the key part for correct parent-relative positioning
                                 let relative_x = child_absolute_pos.0 - parent_absolute_pos.0;
                                 let relative_y = child_absolute_pos.1 - parent_absolute_pos.1;
-                                
+
                                 // Now update parent to add child
                                 if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
                                     parent_node.add_child(node_id);
                                 }
-                                
+
                                 // Then set the child's position relative to parent
                                 if let Some(child_node) = canvas.get_node_mut(node_id) {
                                     let child_layout = child_node.layout_mut();
-                                    
+
                                     // Use the calculated relative coordinates
                                     child_layout.x = relative_x;
                                     child_layout.y = relative_y;
@@ -1127,7 +1129,12 @@ impl CanvasElement {
     /// using `window.on_{}_event`, which is only available in the paint phase.
     ///
     /// Thus the `paint` prefix.
-    fn paint_scroll_wheel_listener(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
+    fn paint_scroll_wheel_listener(
+        &mut self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         window.on_mouse_event({
             let canvas = self.canvas.clone();
             let hitbox = layout.hitbox.clone();
@@ -1146,26 +1153,24 @@ impl CanvasElement {
                                 // Convert lines to pixels - multiply by 30 for natural feel
                                 gpui::Point::new(
                                     gpui::Pixels(lines.x * 30.0),
-                                    gpui::Pixels(lines.y * 30.0)
+                                    gpui::Pixels(lines.y * 30.0),
                                 )
                             }
                         };
 
                         // Invert delta for natural feeling panning
-                        let inverted_delta = gpui::Point::new(
-                            gpui::Pixels(-delta.x.0),
-                            gpui::Pixels(-delta.y.0)
-                        );
-                        
+                        let inverted_delta =
+                            gpui::Point::new(gpui::Pixels(-delta.x.0), gpui::Pixels(-delta.y.0));
+
                         // Get current canvas position through getter
                         let current_position = canvas.get_scroll_position();
-                        
+
                         // Calculate new position
                         let new_position = gpui::Point::new(
                             current_position.x + inverted_delta.x.0 / canvas.zoom(),
-                            current_position.y + inverted_delta.y.0 / canvas.zoom()
+                            current_position.y + inverted_delta.y.0 / canvas.zoom(),
                         );
-                        
+
                         // Update canvas scroll position
                         canvas.set_scroll_position(new_position, cx);
                         cx.stop_propagation();
