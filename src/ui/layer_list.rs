@@ -4,29 +4,43 @@
 //! showing their selection state and allowing interaction.
 
 use gpui::{
-    div, prelude::*, px, ElementId, Entity, Hsla, IntoElement, SharedString, Window, App,
+    div, prelude::*, px, App, ElementId, Entity, Hsla, IntoElement, List, SharedString, WeakEntity,
+    Window,
 };
 
 use std::collections::HashSet;
 
-use crate::{canvas::LunaCanvas, node::{NodeType, NodeId, frame::FrameNode, NodeCommon}, theme::Theme};
+use crate::{
+    canvas::LunaCanvas,
+    node::{frame::FrameNode, NodeCommon, NodeId, NodeType},
+    theme::Theme,
+};
 
 /// Individual item in the layer list representing a canvas element
 #[derive(IntoElement)]
 pub struct LayerListItem {
     kind: NodeType,
+    node_id: NodeId,
     name: SharedString,
     selected: bool,
     nesting_level: usize,
+    weak_canvas_handle: WeakEntity<LunaCanvas>,
 }
 
 impl LayerListItem {
-    pub fn new(kind: NodeType, name: impl Into<SharedString>) -> Self {
+    pub fn new(
+        weak_canvas_handle: WeakEntity<LunaCanvas>,
+        node_id: NodeId,
+        name: impl Into<SharedString>,
+        kind: NodeType,
+    ) -> Self {
         Self {
             kind,
+            node_id,
             name: name.into(),
             selected: false,
             nesting_level: 0,
+            weak_canvas_handle,
         }
     }
 
@@ -34,7 +48,7 @@ impl LayerListItem {
         self.selected = selected;
         self
     }
-    
+
     pub fn nesting_level(mut self, level: usize) -> Self {
         self.nesting_level = level;
         self
@@ -48,12 +62,11 @@ impl RenderOnce for LayerListItem {
         let text_color = if self.selected {
             theme.tokens.text
         } else {
-            theme.tokens.subtext0 // Use subtext0 for unselected items
+            theme.tokens.subtext0
         };
-        
-        // Calculate indentation based on nesting level
-        let indentation = px(10.0 + (self.nesting_level as f32 * 20.0));
-        
+
+        let indentation = px(10.0 + (self.nesting_level as f32 * 10.0));
+
         div()
             .id(ElementId::Name(format!("layer-{}", self.name).into()))
             .pl(indentation)
@@ -65,11 +78,16 @@ impl RenderOnce for LayerListItem {
             .active(|div| div.bg(theme.tokens.surface2.opacity(0.7)))
             .text_color(text_color)
             .gap(px(10.))
-            .child(
-                div()
-                    .text_color(text_color.alpha(0.8))
-                    .child("□") // Simple frame icon
-            )
+            .on_click(move |e, _, cx| {
+                let canvas = self
+                    .weak_canvas_handle
+                    .upgrade()
+                    .expect("Canvas handle is dead");
+                canvas.update(cx, |canvas, cx| {
+                    canvas.select_node(self.node_id);
+                });
+            })
+            .child(div().text_color(text_color.alpha(0.8)).child("□"))
             .child(self.name)
     }
 }
@@ -80,10 +98,10 @@ pub struct LayerList {
 }
 
 impl LayerList {
-    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
+    pub fn new(canvas: Entity<LunaCanvas>, cx: &mut Context<Self>) -> Self {
         Self { canvas }
     }
-    
+
     // Helper method to find the parent of a node
     fn find_parent(&self, nodes: &[FrameNode], node_id: NodeId) -> Option<NodeId> {
         for node in nodes {
@@ -93,72 +111,76 @@ impl LayerList {
         }
         None
     }
-    
+
     // Build the layer list items with hierarchy
     fn build_items(
         &self,
+        weak_canvas_handle: WeakEntity<LunaCanvas>,
         nodes: &[FrameNode],
         parent_id: Option<NodeId>,
         nesting_level: usize,
-        selected_nodes: &HashSet<NodeId>
+        selected_nodes: &HashSet<NodeId>,
     ) -> Vec<LayerListItem> {
         let mut items = Vec::new();
-        
-        // Find nodes that are children of the given parent (or root nodes if parent_id is None)
+
         let children = if let Some(parent) = parent_id {
-            // Get children of the specified parent
-            nodes.iter()
+            nodes
+                .iter()
                 .filter(|node| self.find_parent(nodes, node.id()) == Some(parent))
                 .collect::<Vec<_>>()
         } else {
-            // Get root nodes (those without parents)
-            nodes.iter()
+            // root nodes
+            nodes
+                .iter()
                 .filter(|node| self.find_parent(nodes, node.id()).is_none())
                 .collect::<Vec<_>>()
         };
-        
-        // Create items for these nodes and their children
+
         for node in children {
             let node_id = node.id();
             let name = format!("Frame {}", node_id.0);
             let selected = selected_nodes.contains(&node_id);
-            
-            // Add this node
+
             items.push(
-                LayerListItem::new(NodeType::Frame, name)
+                LayerListItem::new(weak_canvas_handle.clone(), node_id, name, NodeType::Frame)
                     .selected(selected)
-                    .nesting_level(nesting_level)
+                    .nesting_level(nesting_level),
             );
-            
-            // Add children recursively with increased nesting level
+
+            // Add children
             if !node.children().is_empty() {
                 let child_items = self.build_items(
-                    nodes, 
+                    weak_canvas_handle.clone(),
+                    nodes,
                     Some(node_id),
                     nesting_level + 1,
-                    selected_nodes
+                    selected_nodes,
                 );
                 items.extend(child_items);
             }
         }
-        
+
         items
     }
 }
 
 impl Render for LayerList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut layers = div().flex().flex_col().flex_1().pt_1();
+        let mut layers = div()
+            .id("layer-list")
+            .key_context("LayerList")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .pt_1();
 
-        // Get all nodes from Canvas
         let canvas = self.canvas.read(cx);
-        let nodes = canvas.nodes().clone(); // Clone to avoid borrow issues
+        let nodes = canvas.nodes().clone();
         let selected_nodes = canvas.selected_nodes().clone();
+        let weak_canvas_handle = self.canvas.clone().downgrade();
 
-        // Build hierarchical layer items
-        let items = self.build_items(&nodes, None, 0, &selected_nodes);
-        
-        // Add all items to the layer list
+        let items = self.build_items(weak_canvas_handle, &nodes, None, 0, &selected_nodes);
+
         for item in items {
             layers = layers.child(item);
         }

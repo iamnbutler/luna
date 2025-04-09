@@ -16,7 +16,7 @@
 //! The system is designed to enable consistent styling across the application while
 //! allowing for theme variants and potential future theme customization.
 
-use gpui::{hsla, App, Global, Hsla, SharedString, UpdateGlobal};
+use gpui::{hsla, App, Global, Hsla, SharedString};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -70,74 +70,74 @@ pub struct Palette {
 pub fn one_dark() -> Palette {
     Palette {
         // Accent colors
-        rosewater: hsla(0.0 / 360.0, 0.50, 0.70, 1.0),     // Cursor color
-        flamingo: hsla(5.0 / 360.0, 0.48, 0.67, 1.0),      // #e06c75 (red variant)
-        pink: hsla(300.0 / 360.0, 0.60, 0.70, 1.0),        // #c678dd (purple)
-        mauve: hsla(300.0 / 360.0, 0.60, 0.70, 1.0),       // #c678dd (purple)
-        red: hsla(5.0 / 360.0, 0.48, 0.67, 1.0),           // #e06c75
-        maroon: hsla(5.0 / 360.0, 0.54, 0.60, 1.0),        // Red variant
-        peach: hsla(29.0 / 360.0, 0.54, 0.61, 1.0),        // #d19a66 (orange)
-        yellow: hsla(39.0 / 360.0, 0.67, 0.69, 1.0),       // #e5c07b
-        green: hsla(93.0 / 360.0, 0.48, 0.62, 1.0),        // #98c379
-        teal: hsla(180.0 / 360.0, 0.43, 0.55, 1.0),        // #56b6c2 (cyan)
-        sky: hsla(180.0 / 360.0, 0.43, 0.55, 1.0),         // #56b6c2 (cyan)
-        sapphire: hsla(207.0 / 360.0, 0.82, 0.66, 1.0),    // #61afef (blue)
-        blue: hsla(207.0 / 360.0, 0.82, 0.66, 1.0),        // #61afef
-        lavender: hsla(207.0 / 360.0, 1.00, 0.70, 1.0),    // #528bff (cursor)
+        rosewater: hsla(0.0 / 360.0, 0.50, 0.70, 1.0), // Cursor color
+        flamingo: hsla(5.0 / 360.0, 0.48, 0.67, 1.0),  // #e06c75 (red variant)
+        pink: hsla(300.0 / 360.0, 0.60, 0.70, 1.0),    // #c678dd (purple)
+        mauve: hsla(300.0 / 360.0, 0.60, 0.70, 1.0),   // #c678dd (purple)
+        red: hsla(5.0 / 360.0, 0.48, 0.67, 1.0),       // #e06c75
+        maroon: hsla(5.0 / 360.0, 0.54, 0.60, 1.0),    // Red variant
+        peach: hsla(29.0 / 360.0, 0.54, 0.61, 1.0),    // #d19a66 (orange)
+        yellow: hsla(39.0 / 360.0, 0.67, 0.69, 1.0),   // #e5c07b
+        green: hsla(93.0 / 360.0, 0.48, 0.62, 1.0),    // #98c379
+        teal: hsla(180.0 / 360.0, 0.43, 0.55, 1.0),    // #56b6c2 (cyan)
+        sky: hsla(180.0 / 360.0, 0.43, 0.55, 1.0),     // #56b6c2 (cyan)
+        sapphire: hsla(207.0 / 360.0, 0.82, 0.66, 1.0), // #61afef (blue)
+        blue: hsla(207.0 / 360.0, 0.82, 0.66, 1.0),    // #61afef
+        lavender: hsla(207.0 / 360.0, 1.00, 0.70, 1.0), // #528bff (cursor)
 
         // Base colors
-        text: hsla(220.0 / 360.0, 0.14, 0.75, 1.0),        // #abb2bf
-        subtext1: hsla(220.0 / 360.0, 0.10, 0.70, 1.0),    // Lighter text variant
-        subtext0: hsla(220.0 / 360.0, 0.08, 0.65, 1.0),    // Lighter text variant
-        overlay2: hsla(220.0 / 360.0, 0.10, 0.55, 1.0),    // #5c6370 (comment color)
-        overlay1: hsla(220.0 / 360.0, 0.08, 0.50, 1.0),    // Darker comment variant
-        overlay0: hsla(220.0 / 360.0, 0.06, 0.45, 1.0),    // Darker comment variant
-        surface2: hsla(220.0 / 360.0, 0.10, 0.35, 1.0),    // #3e4451 (selection)
-        surface1: hsla(222.0 / 360.0, 0.14, 0.25, 1.0),    // Darker background
-        surface0: hsla(222.0 / 360.0, 0.14, 0.22, 1.0),    // Darker background
-        base: hsla(220.0 / 360.0, 0.13, 0.18, 1.0),        // #282c34 (background)
-        mantle: hsla(222.0 / 360.0, 0.14, 0.16, 1.0),      // #21252b (UI background)
-        crust: hsla(222.0 / 360.0, 0.15, 0.14, 1.0),       // Darkest background
+        text: hsla(220.0 / 360.0, 0.14, 0.75, 1.0), // #abb2bf
+        subtext1: hsla(220.0 / 360.0, 0.10, 0.70, 1.0), // Lighter text variant
+        subtext0: hsla(220.0 / 360.0, 0.08, 0.65, 1.0), // Lighter text variant
+        overlay2: hsla(220.0 / 360.0, 0.10, 0.55, 1.0), // #5c6370 (comment color)
+        overlay1: hsla(220.0 / 360.0, 0.08, 0.50, 1.0), // Darker comment variant
+        overlay0: hsla(220.0 / 360.0, 0.06, 0.45, 1.0), // Darker comment variant
+        surface2: hsla(220.0 / 360.0, 0.10, 0.35, 1.0), // #3e4451 (selection)
+        surface1: hsla(222.0 / 360.0, 0.14, 0.25, 1.0), // Darker background
+        surface0: hsla(222.0 / 360.0, 0.14, 0.22, 1.0), // Darker background
+        base: hsla(220.0 / 360.0, 0.13, 0.18, 1.0), // #282c34 (background)
+        mantle: hsla(222.0 / 360.0, 0.14, 0.16, 1.0), // #21252b (UI background)
+        crust: hsla(222.0 / 360.0, 0.15, 0.14, 1.0), // Darkest background
     }
 }
 
 pub fn one_light() -> Palette {
     Palette {
         // Accent colors
-        rosewater: hsla(220.0 / 360.0, 1.00, 0.66, 1.0),   // #526eff (cursor)
-        flamingo: hsla(5.0 / 360.0, 0.70, 0.59, 1.0),      // #e45649 (red)
-        pink: hsla(322.0 / 360.0, 0.72, 0.40, 1.0),        // #a626a4 (purple)
-        mauve: hsla(322.0 / 360.0, 0.72, 0.40, 1.0),       // #a626a4 (purple)
-        red: hsla(5.0 / 360.0, 0.70, 0.59, 1.0),           // #e45649
-        maroon: hsla(5.0 / 360.0, 0.60, 0.50, 1.0),        // Red variant
-        peach: hsla(35.0 / 360.0, 0.99, 0.36, 1.0),        // #986801 (orange)
-        yellow: hsla(41.0 / 360.0, 0.99, 0.40, 1.0),       // #c18401
-        green: hsla(104.0 / 360.0, 0.46, 0.38, 1.0),       // #50a14f
-        teal: hsla(189.0 / 360.0, 0.99, 0.37, 1.0),        // #0184bc (cyan)
-        sky: hsla(189.0 / 360.0, 0.99, 0.37, 1.0),         // #0184bc (cyan)
-        sapphire: hsla(224.0 / 360.0, 0.88, 0.60, 1.0),    // #4078f2 (blue)
-        blue: hsla(224.0 / 360.0, 0.88, 0.60, 1.0),        // #4078f2
-        lavender: hsla(220.0 / 360.0, 1.00, 0.66, 1.0),    // #526eff (cursor)
+        rosewater: hsla(220.0 / 360.0, 1.00, 0.66, 1.0), // #526eff (cursor)
+        flamingo: hsla(5.0 / 360.0, 0.70, 0.59, 1.0),    // #e45649 (red)
+        pink: hsla(322.0 / 360.0, 0.72, 0.40, 1.0),      // #a626a4 (purple)
+        mauve: hsla(322.0 / 360.0, 0.72, 0.40, 1.0),     // #a626a4 (purple)
+        red: hsla(5.0 / 360.0, 0.70, 0.59, 1.0),         // #e45649
+        maroon: hsla(5.0 / 360.0, 0.60, 0.50, 1.0),      // Red variant
+        peach: hsla(35.0 / 360.0, 0.99, 0.36, 1.0),      // #986801 (orange)
+        yellow: hsla(41.0 / 360.0, 0.99, 0.40, 1.0),     // #c18401
+        green: hsla(104.0 / 360.0, 0.46, 0.38, 1.0),     // #50a14f
+        teal: hsla(189.0 / 360.0, 0.99, 0.37, 1.0),      // #0184bc (cyan)
+        sky: hsla(189.0 / 360.0, 0.99, 0.37, 1.0),       // #0184bc (cyan)
+        sapphire: hsla(224.0 / 360.0, 0.88, 0.60, 1.0),  // #4078f2 (blue)
+        blue: hsla(224.0 / 360.0, 0.88, 0.60, 1.0),      // #4078f2
+        lavender: hsla(220.0 / 360.0, 1.00, 0.66, 1.0),  // #526eff (cursor)
 
         // Base colors
-        text: hsla(230.0 / 360.0, 0.11, 0.25, 1.0),        // #383a42
-        subtext1: hsla(230.0 / 360.0, 0.08, 0.30, 1.0),    // Slightly lighter text
-        subtext0: hsla(230.0 / 360.0, 0.06, 0.35, 1.0),    // Slightly lighter text
-        overlay2: hsla(230.0 / 360.0, 0.05, 0.45, 1.0),    // #a0a1a7 (comments)
-        overlay1: hsla(230.0 / 360.0, 0.04, 0.50, 1.0),    // Slightly lighter comments
-        overlay0: hsla(230.0 / 360.0, 0.03, 0.55, 1.0),    // Slightly lighter comments
-        surface2: hsla(230.0 / 360.0, 0.02, 0.90, 1.0),    // #e5e5e6 (selection)
-        surface1: hsla(230.0 / 360.0, 0.01, 0.94, 1.0),    // Slightly darker than background
-        surface0: hsla(230.0 / 360.0, 0.01, 0.96, 1.0),    // Slightly darker than background
-        base: hsla(0.0 / 360.0, 0.00, 0.98, 1.0),          // #fafafa (background)
-        mantle: hsla(0.0 / 360.0, 0.00, 0.94, 1.0),        // #f0f0f0 (UI background)
-        crust: hsla(0.0 / 360.0, 0.00, 0.90, 1.0),         // Slightly darker UI background
+        text: hsla(230.0 / 360.0, 0.11, 0.25, 1.0), // #383a42
+        subtext1: hsla(230.0 / 360.0, 0.08, 0.30, 1.0), // Slightly lighter text
+        subtext0: hsla(230.0 / 360.0, 0.06, 0.35, 1.0), // Slightly lighter text
+        overlay2: hsla(230.0 / 360.0, 0.05, 0.45, 1.0), // #a0a1a7 (comments)
+        overlay1: hsla(230.0 / 360.0, 0.04, 0.50, 1.0), // Slightly lighter comments
+        overlay0: hsla(230.0 / 360.0, 0.03, 0.55, 1.0), // Slightly lighter comments
+        surface2: hsla(230.0 / 360.0, 0.02, 0.90, 1.0), // #e5e5e6 (selection)
+        surface1: hsla(230.0 / 360.0, 0.01, 0.94, 1.0), // Slightly darker than background
+        surface0: hsla(230.0 / 360.0, 0.01, 0.96, 1.0), // Slightly darker than background
+        base: hsla(0.0 / 360.0, 0.00, 0.98, 1.0),   // #fafafa (background)
+        mantle: hsla(0.0 / 360.0, 0.00, 0.94, 1.0), // #f0f0f0 (UI background)
+        crust: hsla(0.0 / 360.0, 0.00, 0.90, 1.0),  // Slightly darker UI background
     }
 }
 
 /// Semantic mapping of UI elements to specific colors
 ///
-/// ThemeTokens provides a semantic layer between the raw color palette and 
+/// ThemeTokens provides a semantic layer between the raw color palette and
 /// application components. It categorizes colors by their functional role in the UI,
 /// allowing components to reference colors by semantic meaning rather than
 /// directly using palette colors.
@@ -147,6 +147,7 @@ pub fn one_light() -> Palette {
 /// - Easy theme switching while maintaining semantic relationships
 /// - Separation between raw colors and their application-specific usage
 /// - Centralized control over the application's visual language
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct ThemeTokens {
     // Background category

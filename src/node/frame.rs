@@ -1,11 +1,14 @@
 //! # Frame Node Implementation
-//! 
+//!
 //! Implements the FrameNode type, a fundamental container node that can hold child nodes.
 //! Frames are the core building blocks of the Luna canvas system, serving as containers
 //! for other visual elements with configurable styling properties.
 
-use gpui::Hsla;
 use crate::node::{NodeCommon, NodeId, NodeLayout, NodeType};
+use gpui::Hsla;
+use smallvec::{smallvec, SmallVec};
+
+use super::Shadow;
 
 /// Concrete implementation of a frame visual element
 ///
@@ -28,6 +31,7 @@ pub struct FrameNode {
     pub border_color: Option<Hsla>,
     pub border_width: f32,
     pub corner_radius: f32,
+    pub shadows: SmallVec<[Shadow; 1]>,
     pub children: Vec<NodeId>,
 }
 
@@ -40,6 +44,7 @@ impl FrameNode {
             border_color: Some(Hsla::black()),
             border_width: 1.0,
             corner_radius: 0.0,
+            shadows: smallvec![],
             children: Vec::new(),
         }
     }
@@ -50,9 +55,9 @@ impl FrameNode {
         node.layout = NodeLayout::new(x, y, width, height);
         node
     }
-    
+
     /// Add a child node to this frame
-    /// 
+    ///
     /// Returns true if the child was added (it wasn't already a child)
     pub fn add_child(&mut self, child_id: NodeId) -> bool {
         if !self.children.contains(&child_id) {
@@ -62,21 +67,21 @@ impl FrameNode {
             false
         }
     }
-    
+
     /// Remove a child node from this frame
-    /// 
+    ///
     /// Returns true if the child was removed (it was present)
     pub fn remove_child(&mut self, child_id: NodeId) -> bool {
         let len_before = self.children.len();
         self.children.retain(|id| *id != child_id);
         len_before != self.children.len()
     }
-    
+
     /// Check if this frame contains a specific child
     pub fn has_child(&self, child_id: NodeId) -> bool {
         self.children.contains(&child_id)
     }
-    
+
     /// Get a reference to the children of this frame
     pub fn children(&self) -> &Vec<NodeId> {
         &self.children
@@ -128,6 +133,14 @@ impl NodeCommon for FrameNode {
     fn set_corner_radius(&mut self, radius: f32) {
         self.corner_radius = radius;
     }
+
+    fn shadows(&self) -> SmallVec<[Shadow; 1]> {
+        self.shadows.clone()
+    }
+
+    fn set_shadows(&mut self, shadows: SmallVec<[Shadow; 1]>) {
+        self.shadows = shadows
+    }
 }
 
 #[cfg(test)]
@@ -158,22 +171,22 @@ mod tests {
         assert!(frame.contains_point(&point_inside));
         assert!(!frame.contains_point(&point_outside));
     }
-    
+
     #[test]
     fn test_frame_children() {
         let parent_id = NodeId::new(1);
         let child_id = NodeId::new(2);
-        
+
         let mut frame = FrameNode::new(parent_id);
-        
+
         // Initially no children
         assert_eq!(frame.children().len(), 0);
-        
+
         // Add a child
         frame.add_child(child_id);
         assert_eq!(frame.children().len(), 1);
         assert_eq!(frame.children()[0], child_id);
-        
+
         // Remove the child
         frame.remove_child(child_id);
         assert_eq!(frame.children().len(), 0);

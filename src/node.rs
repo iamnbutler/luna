@@ -14,8 +14,8 @@
 //! the scene graph handles spatial relationships and transformations. This separation
 //! allows for efficient data management independent of visual representation.
 
-#![allow(unused, dead_code)]
-use gpui::{Bounds, Hsla, Point, Size};
+use gpui::{point, Bounds, Hsla, Point, Size};
+use smallvec::SmallVec;
 
 pub mod frame;
 
@@ -69,6 +69,30 @@ impl NodeLayout {
     }
 }
 
+/// Layout information for a node
+#[derive(Debug, Clone)]
+pub struct Shadow {
+    /// What color should the shadow have?
+    pub color: Hsla,
+    /// How should it be offset from its element?
+    pub offset: Point<f32>,
+    /// How much should the shadow be blurred?
+    pub blur_radius: f32,
+    /// How much should the shadow spread?
+    pub spread_radius: f32,
+}
+
+impl From<gpui::BoxShadow> for Shadow {
+    fn from(value: gpui::BoxShadow) -> Self {
+        Shadow {
+            color: value.color,
+            offset: point(value.offset.x.0, value.offset.y.0),
+            blur_radius: value.blur_radius.0,
+            spread_radius: value.spread_radius.0,
+        }
+    }
+}
+
 /// Core trait defining the common interface for all canvas elements
 ///
 /// This trait establishes a unified API for interacting with different node types,
@@ -114,6 +138,10 @@ pub trait NodeCommon: std::fmt::Debug {
 
     /// Set the corner radius
     fn set_corner_radius(&mut self, radius: f32);
+
+    fn shadows(&self) -> SmallVec<[Shadow; 1]>;
+
+    fn set_shadows(&mut self, shadows: SmallVec<[Shadow; 1]>);
 
     /// Check if a point is inside this node
     fn contains_point(&self, point: &Point<f32>) -> bool {
@@ -169,7 +197,6 @@ impl NodeFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::frame::FrameNode;
 
     #[test]
     fn test_node_id() {
@@ -196,13 +223,13 @@ mod tests {
     #[test]
     fn test_node_factory() {
         let mut factory = NodeFactory::new();
-        
+
         let id1 = factory.next_id();
         let id2 = factory.next_id();
-        
+
         assert_eq!(id1.0, 1);
         assert_eq!(id2.0, 2);
-        
+
         let frame = factory.create_frame();
         assert_eq!(frame.id().0, 3);
     }

@@ -8,9 +8,9 @@
     width: 88px;
     height: 29px;
 
-    background-color: #00ff00;
+    background-color: #292929;
     border-width: 1px;
-    border-color: #ff0000;
+    border-color: rgba(255, 255, 255, 0.03);
     box-shadow:
         0px 1px 1px rgba(0, 0, 0, 0.32),
         0px 4px 6px rgba(0, 0, 0, 0.08);

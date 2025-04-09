@@ -123,6 +123,7 @@ impl Inspector {
             NodeSelection::Single(node_id) => {
                 let canvas_read = canvas.read(cx);
                 if let Some(node) = canvas_read.nodes().iter().find(|node| node.id() == node_id) {
+                    // Round position and size values to one decimal place
                     self.properties.x.push(node.layout().x);
                     self.properties.y.push(node.layout().y);
                     self.properties.width.push(node.layout().width);
@@ -130,17 +131,15 @@ impl Inspector {
                     self.properties.border_width.push(node.border_width());
                     self.properties.corner_radius.push(node.corner_radius());
 
-                    // Add color properties
+                    // Add color properties with integers instead of decimals
                     if let Some(border_color) = node.border_color() {
-                        self.properties
-                            .border_color
-                            .push(SharedString::from(border_color.to_string()));
+                        let color_str = self.format_color_string(border_color.to_string());
+                        self.properties.border_color.push(SharedString::from(color_str));
                     }
 
                     if let Some(fill_color) = node.fill() {
-                        self.properties
-                            .background_color
-                            .push(SharedString::from(fill_color.to_string()));
+                        let color_str = self.format_color_string(fill_color.to_string());
+                        self.properties.background_color.push(SharedString::from(color_str));
                     }
                 }
             }
@@ -175,11 +174,11 @@ impl Inspector {
 
                         // Collect color values
                         if let Some(border_color) = node.border_color() {
-                            all_border_colors.push(border_color.to_string());
+                            all_border_colors.push(self.format_color_string(border_color.to_string()));
                         }
 
                         if let Some(fill_color) = node.fill() {
-                            all_background_colors.push(fill_color.to_string());
+                            all_background_colors.push(self.format_color_string(fill_color.to_string()));
                         }
                     }
                 }
@@ -283,50 +282,65 @@ impl Inspector {
 
         cx.notify();
     }
-}
-
-impl Render for Inspector {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = Theme::default();
-
-        // Update properties based on current selection
-        self.update_selected_node_properties(cx);
-
-        // Convert SmallVec properties to Option<Vec<f32>> as needed by property_input
+    
+    /// Format a color string to use integers instead of decimals
+    fn format_color_string(&self, color_str: String) -> String {
+        // Replace decimal numbers with integers in color strings
+        // Example: rgba(255.00, 0.00, 0.00, 1.00) -> rgba(255, 0, 0, 1)
+        let mut result = color_str;
+        
+        // Find all decimal numbers and replace them
+        let decimal_regex = regex::Regex::new(r"(\d+)\.\d+").unwrap();
+        result = decimal_regex.replace_all(&result, "$1").to_string();
+        
+        result
+    }
+    
+    /// Converts property data to the format needed by UI components
+    /// with visual rounding applied to numerical values
+    fn get_ui_property_values(&self) -> (Option<Vec<f32>>, Option<Vec<f32>>, Option<Vec<f32>>, 
+                                        Option<Vec<f32>>, Option<Vec<f32>>, Option<Vec<f32>>,
+                                        Option<SharedString>, Option<SharedString>) {
+        // Helper function to round f32 values to one decimal place
+        let round_values = |values: &[f32]| -> Vec<f32> {
+            values.iter().map(|&v| (v * 10.0).round() / 10.0).collect()
+        };
+        
+        // Convert SmallVec properties to Option<Vec<f32>> with rounding
         let x = if self.properties.x.is_empty() {
             None
         } else {
-            Some(self.properties.x.iter().cloned().collect())
+            Some(round_values(&self.properties.x))
         };
 
         let y = if self.properties.y.is_empty() {
             None
         } else {
-            Some(self.properties.y.iter().cloned().collect())
+            Some(round_values(&self.properties.y))
         };
 
         let width = if self.properties.width.is_empty() {
             None
         } else {
-            Some(self.properties.width.iter().cloned().collect())
+            Some(round_values(&self.properties.width))
         };
 
         let height = if self.properties.height.is_empty() {
             None
         } else {
-            Some(self.properties.height.iter().cloned().collect())
+            Some(round_values(&self.properties.height))
         };
 
         let border_width = if self.properties.border_width.is_empty() {
             None
         } else {
-            Some(self.properties.border_width.iter().cloned().collect())
+            Some(round_values(&self.properties.border_width))
         };
 
         let corner_radius = if self.properties.corner_radius.is_empty() {
             None
         } else {
-            Some(self.properties.corner_radius.iter().cloned().collect())
+            Some(round_values(&self.properties.corner_radius))
         };
 
         // Convert color properties for the ColorInput components
@@ -345,14 +359,33 @@ impl Render for Inspector {
         } else {
             Some(SharedString::from("Mixed"))
         };
+        
+        (x, y, width, height, border_width, corner_radius, border_color, background_color)
+    }
+}
+
+impl Render for Inspector {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = Theme::default();
+
+        // Update properties based on current selection
+        self.update_selected_node_properties(cx);
+        
+        // Get property values formatted for UI display with appropriate rounding
+        let (x, y, width, height, border_width, corner_radius, border_color, background_color) = 
+            self.get_ui_property_values();
 
         let inner = div()
+            .id("inspector-inner")
             .flex()
             .flex_col()
             .h_full()
             .w(px(INSPECTOR_WIDTH))
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
+            .on_click(cx.listener(|_, _, _, cx| {
+                cx.stop_propagation();
+            }))
             .child(
                 div()
                     .px(px(8.))
@@ -383,7 +416,7 @@ impl Render for Inspector {
             );
 
         div()
-            .id("titlebar")
+            .id("inspector")
             .absolute()
             .right_0()
             .top_0()

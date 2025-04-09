@@ -16,7 +16,6 @@
 
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
-use crate::GlobalState;
 use crate::{canvas::LunaCanvas, theme::Theme};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
@@ -155,17 +154,16 @@ impl ToolButton {
 impl RenderOnce for ToolButton {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-        let state = GlobalState::get(cx);
         let active_tool = cx.active_tool().clone();
 
         let tool_kind = self.tool_kind.clone();
         let selected = *active_tool == tool_kind;
 
         let icon_color = match (selected, self.disabled) {
-            (true, true) => theme.tokens.active_border.alpha(0.5), // Use active_border for selected but disabled
-            (true, false) => theme.tokens.active_border, // Use active_border for selected tools
-            (false, true) => theme.tokens.overlay1,      // Use overlay1 for disabled tools
-            (false, false) => theme.tokens.subtext0,     // Use subtext0 for normal tools
+            (true, true) => theme.tokens.active_border.alpha(0.5),
+            (true, false) => theme.tokens.active_border,
+            (false, true) => theme.tokens.overlay1,
+            (false, false) => theme.tokens.subtext0,
         };
 
         div()
@@ -178,7 +176,7 @@ impl RenderOnce for ToolButton {
             .rounded(px(3.))
             .my_neg_1()
             .when(!self.disabled, |div| {
-                div.hover(|div| div.bg(theme.tokens.surface1)) // Use surface1 for hover background
+                div.hover(|div| div.bg(theme.tokens.surface1))
             })
             .when(!self.disabled, |div| {
                 let tool = tool_kind.clone();
@@ -194,75 +192,6 @@ impl RenderOnce for ToolButton {
             )
     }
 }
-
-// #[derive(IntoElement)]
-// pub struct CurrentColorTool {}
-
-// impl CurrentColorTool {
-//     pub fn new() -> Self {
-//         Self {}
-//     }
-// }
-
-// impl RenderOnce for CurrentColorTool {
-//     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-//         let theme = Theme::get_global(cx);
-//         let state = GlobalState::get(cx);
-
-//         div()
-//             .id("current-color-tool")
-//             .group("current-color-tool")
-//             .relative()
-//             .size(px(23.))
-//             .mb_2()
-//             .child(
-//                 div()
-//                     .id("current-forground-color")
-//                     .absolute()
-//                     .bottom_0()
-//                     .right_0()
-//                     .size(px(17.))
-//                     .rounded(px(3.))
-//                     .p_px()
-//                     .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
-//                     .shadow(smallvec::smallvec![BoxShadow {
-//                         color: hsla(0.0, 0.0, 0.0, 0.24),
-//                         offset: point(px(1.), px(0.)),
-//                         blur_radius: px(0.),
-//                         spread_radius: px(0.),
-//                     }])
-//                     .child(
-//                         div()
-//                             .rounded(px(2.))
-//                             .size_full()
-//                             .bg(state.current_border_color),
-//                     ),
-//             )
-//             .child(
-//                 div()
-//                     .id("current-background-color")
-//                     .absolute()
-//                     .top_0()
-//                     .left_0()
-//                     .size(px(17.))
-//                     .rounded(px(3.))
-//                     .p_px()
-//                     .bg(theme.background_color.blend(theme.foreground.alpha(0.32)))
-//                     .shadow(smallvec::smallvec![BoxShadow {
-//                         color: hsla(0.0, 0.0, 0.0, 0.36),
-//                         offset: point(px(1.), px(1.)),
-//                         blur_radius: px(0.),
-//                         spread_radius: px(0.),
-//                     }])
-//                     .child(
-//                         div()
-//                             .rounded(px(2.))
-//                             .size_full()
-//                             .bg(state.current_background_color),
-//                     ),
-//             )
-//     }
-// }
 
 /// Main toolbar component that organizes and displays available tools
 ///
@@ -300,7 +229,7 @@ impl RenderOnce for ToolStrip {
                         .h_px()
                         .w_full()
                         .rounded_full()
-                        .bg(theme.tokens.overlay0), // Use overlay0 for dividers
+                        .bg(theme.tokens.overlay0),
                 )
         };
 

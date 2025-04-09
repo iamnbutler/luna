@@ -135,7 +135,7 @@ impl LunaCanvas {
             nodes: Vec::new(),
             selected_nodes: HashSet::new(),
             viewport,
-            scroll_position: Point::new(0.0, 0.0),
+            scroll_position: Point::new(0.0, 0.0), // Will be initialized with set_scroll_position below
             zoom: 1.0,
             content_bounds,
             next_id: 1,
@@ -149,6 +149,9 @@ impl LunaCanvas {
             theme: theme.clone(),
             hovered_node: None,
         };
+
+        // Initialize proper scroll position for centered coordinate system
+        canvas.set_scroll_position(Point::new(0.0, 0.0), cx);
 
         // Load rectangles from CSS file
         let app_state_read = app_state.read(cx);
@@ -277,16 +280,30 @@ impl LunaCanvas {
     }
 
     /// Convert a window-relative point to canvas-relative point
+    /// With 0,0 at the center of the canvas
     pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
-        let canvas_x = (window_point.x / self.zoom) + self.scroll_position.x;
-        let canvas_y = (window_point.y / self.zoom) + self.scroll_position.y;
+        // Calculate center of viewport in window space
+        let center_x = self.viewport.size.width / 2.0;
+        let center_y = self.viewport.size.height / 2.0;
+        
+        // Convert from window to canvas space, accounting for center origin
+        let canvas_x = ((window_point.x - center_x) / self.zoom) + self.scroll_position.x;
+        let canvas_y = ((window_point.y - center_y) / self.zoom) + self.scroll_position.y;
+        
         Point::new(canvas_x, canvas_y)
     }
 
     /// Convert a canvas-relative point to window-relative point
+    /// From canvas space (0,0 at center) to window space (0,0 at top-left)
     pub fn canvas_to_window_point(&self, canvas_point: Point<f32>) -> Point<f32> {
-        let window_x = (canvas_point.x - self.scroll_position.x) * self.zoom;
-        let window_y = (canvas_point.y - self.scroll_position.y) * self.zoom;
+        // Calculate center of viewport in window space
+        let center_x = self.viewport.size.width / 2.0;
+        let center_y = self.viewport.size.height / 2.0;
+        
+        // Convert from canvas to window space, accounting for center origin
+        let window_x = ((canvas_point.x - self.scroll_position.x) * self.zoom) + center_x;
+        let window_y = ((canvas_point.y - self.scroll_position.y) * self.zoom) + center_y;
+        
         Point::new(window_x, window_y)
     }
 
@@ -399,6 +416,7 @@ impl LunaCanvas {
         };
 
         // 4. Update child's position to be relative to new parent
+        // This works regardless of the coordinate system since we're using relative offsets
         if let Some(child_node) = self.get_node_mut(child_id) {
             let child_layout = child_node.layout_mut();
             child_layout.x = child_absolute_x - parent_x;
@@ -500,46 +518,45 @@ impl LunaCanvas {
     }
 
     /// Get the absolute position of a node, accounting for all parent transformations
-    fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
-        let mut current_id = node_id;
-        let mut x = 0.0;
-        let mut y = 0.0;
-
-        // First collect all nodes in the parent chain to avoid borrow checker issues
-        let mut node_chain = Vec::new();
-
-        // Start with the node itself
-        if let Some(node) = self.get_node(current_id) {
-            node_chain.push((current_id, node.layout().x, node.layout().y));
+    /// 
+    /// This returns the absolute canvas coordinates (centered coordinate system)
+    /// of a node by accumulating all parent transformations
+    /// Get the absolute position of a node, accounting for all parent transformations
+    /// 
+    /// With centered coordinate system, this gives the position in absolute canvas coordinates
+    /// taking into account all parent node offsets
+    pub fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
+        // For nodes that have parents, we need to accumulate all parent offsets
+        // For top-level nodes, absolute position is the same as their layout position
+        
+        // Find the node in question first
+        let node = if let Some(n) = self.get_node(node_id) {
+            n
         } else {
             return (0.0, 0.0);
+        };
+        
+        // Get this node's layout position
+        let node_layout = node.layout();
+        let node_x = node_layout.x;
+        let node_y = node_layout.y;
+        
+        // If this is a top-level node with no parent, return its position directly
+        let parent_id = self.find_parent(node_id);
+        if parent_id.is_none() {
+            return (node_x, node_y);
         }
-
-        // Collect all parents
-        let mut parent_id = self.find_parent(current_id);
-        while let Some(p_id) = parent_id {
-            if let Some(parent) = self.get_node(p_id) {
-                node_chain.push((p_id, parent.layout().x, parent.layout().y));
-            }
-
-            current_id = p_id;
-            parent_id = self.find_parent(current_id);
+        
+        // Accumulate parent positions by recursively getting parent's absolute position
+        if let Some(parent_id) = parent_id {
+            let (parent_abs_x, parent_abs_y) = self.get_absolute_position(parent_id, _cx);
+            
+            // Add this node's relative position to parent's absolute position
+            return (parent_abs_x + node_x, parent_abs_y + node_y);
         }
-
-        // Now compute the absolute position using the collected chain
-        // Start with the node's own position
-        if let Some((_, node_x, node_y)) = node_chain.first() {
-            x = *node_x;
-            y = *node_y;
-        }
-
-        // Add all parent positions (skip the first node which is the starting node)
-        for (_, parent_x, parent_y) in node_chain.iter().skip(1) {
-            x += parent_x;
-            y += parent_y;
-        }
-
-        (x, y)
+        
+        // Fallback - shouldn't be reached
+        (node_x, node_y)
     }
 
     /// Remove a node from the canvas and update the scene graph
@@ -873,11 +890,22 @@ impl LunaCanvas {
         self.scroll_position = position;
 
         self.scene_graph.update(cx, |sg, _cx| {
+            // Calculate viewport center for centered coordinate system
+            let center_x = self.viewport.size.width / 2.0;
+            let center_y = self.viewport.size.height / 2.0;
+            
+            // Use a single transformation matrix that combines all operations
+            // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
+                // The order of operations: first translate to center, then scale, then apply scroll
+                .translate(point(
+                    Pixels(center_x).scale(1.0),
+                    Pixels(center_y).scale(1.0),
+                ))
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
-                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
-                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.x).scale(1.0),
+                    Pixels(-self.scroll_position.y).scale(1.0),
                 ));
 
             sg.set_local_transform(self.canvas_node, transform);
@@ -892,11 +920,22 @@ impl LunaCanvas {
 
         // Update canvas root transform
         self.scene_graph.update(cx, |sg, _cx| {
+            // Calculate viewport center for centered coordinate system
+            let center_x = self.viewport.size.width / 2.0;
+            let center_y = self.viewport.size.height / 2.0;
+            
+            // Use a single transformation matrix that combines all operations
+            // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
+                // The order of operations: first translate to center, then scale, then apply scroll
+                .translate(point(
+                    Pixels(center_x).scale(1.0),
+                    Pixels(center_y).scale(1.0),
+                ))
                 .scale(size(self.zoom, self.zoom))
                 .translate(point(
-                    Pixels(-self.scroll_position.x.floor()).scale(1.0),
-                    Pixels(-self.scroll_position.y.floor()).scale(1.0),
+                    Pixels(-self.scroll_position.x).scale(1.0),
+                    Pixels(-self.scroll_position.y).scale(1.0),
                 ));
 
             sg.set_local_transform(self.canvas_node, transform);
@@ -908,6 +947,11 @@ impl LunaCanvas {
     /// Get current zoom level
     pub fn zoom(&self) -> f32 {
         self.zoom
+    }
+    
+    /// Get current scroll position
+    pub fn get_scroll_position(&self) -> Point<f32> {
+        self.scroll_position
     }
 
     /// Check if the canvas is dirty and needs redrawing
@@ -934,6 +978,76 @@ impl LunaCanvas {
 
     pub fn deselect_all_nodes(&mut self, cx: &mut Context<Self>) {
         self.selected_nodes.clear();
+        self.mark_dirty(cx);
+    }
+    
+    /// Updates the layouts of all child nodes after a parent node has been resized
+    /// 
+    /// This ensures that when a parent frame is resized, the relative positions of its
+    /// children are maintained in the node data structure, keeping it in sync with 
+    /// the scene graph transformations.
+    /// 
+    /// # Arguments
+    /// * `parent_id` - The ID of the parent node that was resized
+    /// * `cx` - The context for scene graph updates
+    pub fn update_child_layouts_after_parent_resize(&mut self, parent_id: NodeId, cx: &mut Context<Self>) {
+        // First get the parent node to access its children
+        let parent = match self.get_node(parent_id) {
+            Some(node) => node,
+            None => return,
+        };
+        
+        // Only frame nodes can have children
+        if parent.node_type() != NodeType::Frame {
+            return;
+        }
+        
+        // Find all children of this parent by looking for nodes whose parent is this node
+        // We need to do this since we can't directly cast to FrameNode
+        let children: Vec<NodeId> = self.nodes.iter()
+            .filter(|n| {
+                // A node is a child if this parent is its parent
+                self.find_parent(n.id()) == Some(parent_id)
+            })
+            .map(|n| n.id())
+            .collect();
+        
+        // Get parent's layout information
+        let parent_layout = parent.layout();
+        let parent_x = parent_layout.x;
+        let parent_y = parent_layout.y;
+        
+        // Process each child
+        for &child_id in &children {
+            // Get child's scene graph node and its world bounds
+            let child_scene_id = match self.scene_graph.update(cx, |sg, _cx| {
+                sg.get_scene_node_id(child_id)
+            }) {
+                Some(id) => id,
+                None => continue,
+            };
+            
+            // Get world bounds from scene graph
+            let world_bounds = match self.scene_graph.update(cx, |sg, _cx| {
+                sg.get_world_bounds(child_scene_id)
+            }) {
+                Some(bounds) => bounds,
+                None => continue,
+            };
+            
+            // Update the child's layout to maintain its position relative to parent
+            if let Some(child_node) = self.get_node_mut(child_id) {
+                let child_layout = child_node.layout_mut();
+                
+                // Convert from world coordinates to coordinates relative to parent
+                child_layout.x = world_bounds.origin.x - parent_x;
+                child_layout.y = world_bounds.origin.y - parent_y;
+                
+                // Recursively update this child's children
+                self.update_child_layouts_after_parent_resize(child_id, cx);
+            }
+        }
+        
         self.mark_dirty(cx);
     }
 }
