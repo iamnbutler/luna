@@ -375,4 +375,42 @@ mod tests {
         assert_eq!(world_point.x, 0.0);
         assert_eq!(world_point.y, 0.0);
     }
+    
+    #[test]
+    fn test_roundtrip_coordinate_conversions() {
+        // Create test data: parent position, position data, and zoom level
+        let parent_pos = WorldPoint::new(100.0, 150.0);
+        let position_data = PositionData::new(
+            WorldPoint::new(50.0, 25.0),  // Canvas offset
+            Size::new(1000.0, 800.0),     // Window size
+        );
+        let zoom = 1.5;  // Non-1.0 zoom to ensure scaling works properly
+        
+        // Start with local coordinates relative to parent
+        let original_local = LocalPoint::new(25.0, 35.0);
+        
+        // Convert: Local → World
+        let world = original_local.to_canvas(parent_pos);
+        assert_eq!(world.x, 125.0);  // 100 + 25
+        assert_eq!(world.y, 185.0);  // 150 + 35
+        
+        // Convert: World → Window 
+        let window = position_data.world_to_window(world, zoom);
+        // Expected: ((125 - 50) * 1.5) + 500 = 112.5 + 500 = 612.5
+        // Expected: ((185 - 25) * 1.5) + 400 = 240 + 400 = 640
+        assert_eq!(window.x, 612.5);
+        assert_eq!(window.y, 640.0);
+        
+        // Convert: Window → World 
+        let world_again = position_data.window_to_world(window, zoom);
+        // Should be same as original world coordinates
+        assert_eq!(world_again.x, world.x);
+        assert_eq!(world_again.y, world.y);
+        
+        // Convert: World → Local
+        let local_again = world_again.to_local(parent_pos);
+        // Should be same as original local coordinates
+        assert_eq!(local_again.x, original_local.x);
+        assert_eq!(local_again.y, original_local.y);
+    }
 }

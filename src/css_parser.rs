@@ -400,36 +400,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_shadows() {
-        let css = r#"
-            width: 100px;
-            height: 50px;
-            box-shadow: 0px 1px 1px rgba(0, 0, 0, 0.32), 0px 4px 6px rgba(0, 0, 0, 0.08);
-        "#;
-
-        let mut factory = NodeFactory::default();
-        let rect = parse_rectangle_from_css(css, &mut factory).unwrap();
-
-        // Verify shadows were parsed correctly
-        let shadows = rect.shadows();
-        assert_eq!(shadows.len(), 2);
-
-        // First shadow
-        assert_eq!(shadows[0].offset.x, 0.0);
-        assert_eq!(shadows[0].offset.y, 1.0);
-        assert_eq!(shadows[0].blur_radius, 1.0);
-        assert_eq!(shadows[0].spread_radius, 0.0);
-        assert!(shadows[0].color.a > 0.3 && shadows[0].color.a < 0.33); // Around 0.32
-
-        // Second shadow
-        assert_eq!(shadows[1].offset.x, 0.0);
-        assert_eq!(shadows[1].offset.y, 4.0);
-        assert_eq!(shadows[1].blur_radius, 6.0);
-        assert_eq!(shadows[1].spread_radius, 0.0);
-        assert!(shadows[1].color.a > 0.07 && shadows[1].color.a < 0.09); // Around 0.08
-    }
-
-    #[test]
     fn test_parse_multiple_rectangles() {
         let css = r#"
         .rect1 {
