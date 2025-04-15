@@ -47,6 +47,8 @@ mod theme;
 mod tools;
 mod ui;
 mod util;
+#[cfg(test)]
+mod tests;
 
 actions!(
     luna,
