@@ -18,7 +18,13 @@ use gpui::{point, Bounds, Hsla, Point, Size};
 use smallvec::SmallVec;
 
 pub mod frame;
+pub mod image;
+pub mod text;
+pub mod importer;
 mod schema;
+
+// Re-export schema for the importer
+pub use schema::SerializedNode;
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,8 +45,12 @@ impl std::fmt::Display for NodeId {
 /// Types of nodes that can be rendered on the canvas
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
-    /// A frame that can contain other nodes
+    /// A frame that can contain other nodes (equivalent to Div in schema)
     Frame,
+    /// An image element
+    Image,
+    /// A text element
+    Text,
 }
 
 /// Layout information for a node
@@ -92,6 +102,60 @@ impl From<gpui::BoxShadow> for Shadow {
             spread_radius: value.spread_radius.0,
         }
     }
+}
+
+/// Typography-related properties for nodes that can display text
+pub trait NodeTypography: std::fmt::Debug {
+    /// Get the font family
+    fn font_family(&self) -> Option<String>;
+    
+    /// Set the font family
+    fn set_font_family(&mut self, family: Option<String>);
+    
+    /// Get the font size
+    fn font_size(&self) -> Option<String>;
+    
+    /// Set the font size
+    fn set_font_size(&mut self, size: Option<String>);
+    
+    /// Get the font weight
+    fn font_weight(&self) -> Option<String>;
+    
+    /// Set the font weight
+    fn set_font_weight(&mut self, weight: Option<String>);
+    
+    /// Get the text color
+    fn text_color(&self) -> Option<Hsla>;
+    
+    /// Set the text color
+    fn set_text_color(&mut self, color: Option<Hsla>);
+    
+    /// Get the text alignment
+    fn text_align(&self) -> Option<String>;
+    
+    /// Set the text alignment
+    fn set_text_align(&mut self, align: Option<String>);
+}
+
+/// Image-specific properties for nodes that display images
+pub trait NodeImage: std::fmt::Debug {
+    /// Get the image source URL or path
+    fn image_src(&self) -> &str;
+    
+    /// Set the image source URL or path
+    fn set_image_src(&mut self, src: String);
+    
+    /// Get the alt text for the image
+    fn alt_text(&self) -> Option<&str>;
+    
+    /// Set the alt text for the image
+    fn set_alt_text(&mut self, alt: Option<String>);
+    
+    /// Get the object fit style
+    fn object_fit(&self) -> Option<String>;
+    
+    /// Set the object fit style
+    fn set_object_fit(&mut self, fit: Option<String>);
 }
 
 /// Core trait defining the common interface for all canvas elements
@@ -192,6 +256,16 @@ impl NodeFactory {
     /// Create a new frame node
     pub fn create_frame(&mut self) -> frame::FrameNode {
         frame::FrameNode::new(self.next_id())
+    }
+    
+    /// Create a new image node
+    pub fn create_image(&mut self, src: String) -> image::ImageNode {
+        image::ImageNode::new(self.next_id(), src)
+    }
+    
+    /// Create a new text node
+    pub fn create_text(&mut self, content: String) -> text::TextNode {
+        text::TextNode::new(self.next_id(), content)
     }
 }
 

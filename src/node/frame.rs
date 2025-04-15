@@ -4,7 +4,7 @@
 //! Frames are the core building blocks of the Luna canvas system, serving as containers
 //! for other visual elements with configurable styling properties.
 
-use crate::node::{NodeCommon, NodeId, NodeLayout, NodeType};
+use crate::node::{NodeCommon, NodeId, NodeLayout, NodeType, NodeTypography};
 use gpui::Hsla;
 use smallvec::{smallvec, SmallVec};
 
@@ -33,6 +33,11 @@ pub struct FrameNode {
     pub corner_radius: f32,
     pub shadows: SmallVec<[Shadow; 1]>,
     pub children: Vec<NodeId>,
+    pub font_family: Option<String>,
+    pub font_size: Option<String>,
+    pub font_weight: Option<String>,
+    pub text_color: Option<Hsla>,
+    pub text_align: Option<String>,
 }
 
 impl FrameNode {
@@ -46,6 +51,11 @@ impl FrameNode {
             corner_radius: 0.0,
             shadows: smallvec![],
             children: Vec::new(),
+            font_family: None,
+            font_size: None,
+            font_weight: None,
+            text_color: None,
+            text_align: None,
         }
     }
 
@@ -140,6 +150,48 @@ impl NodeCommon for FrameNode {
 
     fn set_shadows(&mut self, shadows: SmallVec<[Shadow; 1]>) {
         self.shadows = shadows
+    }
+}
+
+impl NodeTypography for FrameNode {
+    fn font_family(&self) -> Option<String> {
+        self.font_family.clone()
+    }
+    
+    fn set_font_family(&mut self, family: Option<String>) {
+        self.font_family = family;
+    }
+    
+    fn font_size(&self) -> Option<String> {
+        self.font_size.clone()
+    }
+    
+    fn set_font_size(&mut self, size: Option<String>) {
+        self.font_size = size;
+    }
+    
+    fn font_weight(&self) -> Option<String> {
+        self.font_weight.clone()
+    }
+    
+    fn set_font_weight(&mut self, weight: Option<String>) {
+        self.font_weight = weight;
+    }
+    
+    fn text_color(&self) -> Option<Hsla> {
+        self.text_color
+    }
+    
+    fn set_text_color(&mut self, color: Option<Hsla>) {
+        self.text_color = color;
+    }
+    
+    fn text_align(&self) -> Option<String> {
+        self.text_align.clone()
+    }
+    
+    fn set_text_align(&mut self, align: Option<String>) {
+        self.text_align = align;
     }
 }
 
