@@ -42,6 +42,9 @@ mod interactivity;
 mod keymap;
 mod node;
 mod scene_graph;
+mod scene_graph_2;
+#[cfg(test)]
+mod scene_graph_2_test;
 mod scene_node;
 mod theme;
 mod tools;
