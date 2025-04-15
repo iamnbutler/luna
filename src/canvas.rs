@@ -334,34 +334,9 @@ impl LunaCanvas {
         self.nodes.iter_mut().find(|n| n.id() == node_id)
     }
 
-    /// Convert a window-relative point to canvas-relative point
-    /// With 0,0 at the center of the canvas
-    pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
-        // For backward compatibility, maintain the original implementation
-        // Calculate center of viewport in window space
-        let center_x = self.viewport.size.width / 2.0;
-        let center_y = self.viewport.size.height / 2.0;
-        
-        // Convert from window to canvas space, accounting for center origin
-        let canvas_x = ((window_point.x - center_x) / self.zoom) + self.scroll_position.x;
-        let canvas_y = ((window_point.y - center_y) / self.zoom) + self.scroll_position.y;
-        
-        Point::new(canvas_x, canvas_y)
-    }
+    // window_to_canvas_point removed - use coordinates::PositionData::window_to_world instead
 
-    /// Convert a canvas-relative point to window-relative point
-    /// From canvas space (0,0 at center) to window space (0,0 at top-left)
-    pub fn canvas_to_window_point(&self, canvas_point: Point<f32>) -> Point<f32> {
-        // Calculate center of viewport in window space
-        let center_x = self.viewport.size.width / 2.0;
-        let center_y = self.viewport.size.height / 2.0;
-        
-        // Convert from canvas to window space, accounting for center origin
-        let window_x = ((canvas_point.x - self.scroll_position.x) * self.zoom) + center_x;
-        let window_y = ((canvas_point.y - self.scroll_position.y) * self.zoom) + center_y;
-        
-        Point::new(window_x, window_y)
-    }
+    // canvas_to_window_point removed - use coordinates::PositionData::world_to_window instead
 
     pub fn scene_graph(&self) -> &Entity<SceneGraph> {
         &self.scene_graph
@@ -457,7 +432,9 @@ impl LunaCanvas {
 
         // Store relevant coordinate values before mutating
         // Get absolute position of child (depends on current parent)
-        let (child_absolute_x, child_absolute_y) = self.get_absolute_position(child_id, cx);
+        let child_absolute_pos = self.get_absolute_position(child_id, cx);
+        let child_absolute_x = child_absolute_pos.x;
+        let child_absolute_y = child_absolute_pos.y;
 
         // Get parent position
         let (parent_x, parent_y) = if let Some(parent) = self.get_node(parent_id) {
@@ -510,7 +487,9 @@ impl LunaCanvas {
 
         if let Some(parent_id) = parent_id {
             // Get absolute position before changing parent
-            let (absolute_x, absolute_y) = self.get_absolute_position(child_id, cx);
+            let absolute_pos = self.get_absolute_position(child_id, cx);
+            let absolute_x = absolute_pos.x;
+            let absolute_y = absolute_pos.y;
 
             // Update data model - remove child from parent
             let data_updated = if let Some(parent_node) = self.get_node_mut(parent_id) {
@@ -584,7 +563,9 @@ impl LunaCanvas {
     /// 
     /// With centered coordinate system, this gives the position in absolute canvas coordinates
     /// taking into account all parent node offsets
-    pub fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
+    pub fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> crate::coordinates::WorldPoint {
+        use crate::coordinates::{WorldPoint, LocalPoint};
+        
         // For nodes that have parents, we need to accumulate all parent offsets
         // For top-level nodes, absolute position is the same as their layout position
         
@@ -592,30 +573,29 @@ impl LunaCanvas {
         let node = if let Some(n) = self.get_node(node_id) {
             n
         } else {
-            return (0.0, 0.0);
+            return WorldPoint::new(0.0, 0.0);
         };
         
-        // Get this node's layout position
+        // Get this node's layout position as a LocalPoint
         let node_layout = node.layout();
-        let node_x = node_layout.x;
-        let node_y = node_layout.y;
+        let local_pos = node_layout.position();
         
-        // If this is a top-level node with no parent, return its position directly
+        // If this is a top-level node with no parent, return its position directly as a WorldPoint
         let parent_id = self.find_parent(node_id);
         if parent_id.is_none() {
-            return (node_x, node_y);
+            return WorldPoint::new(local_pos.x, local_pos.y);
         }
         
         // Accumulate parent positions by recursively getting parent's absolute position
         if let Some(parent_id) = parent_id {
-            let (parent_abs_x, parent_abs_y) = self.get_absolute_position(parent_id, _cx);
+            let parent_abs_pos = self.get_absolute_position(parent_id, _cx);
             
-            // Add this node's relative position to parent's absolute position
-            return (parent_abs_x + node_x, parent_abs_y + node_y);
+            // Convert local position to world space using the parent's world position
+            return local_pos.to_canvas(parent_abs_pos);
         }
         
         // Fallback - shouldn't be reached
-        (node_x, node_y)
+        WorldPoint::new(local_pos.x, local_pos.y)
     }
 
     /// Remove a node from the canvas and update the scene graph

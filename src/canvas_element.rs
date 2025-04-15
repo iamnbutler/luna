@@ -261,8 +261,17 @@ impl CanvasElement {
         window_point: Point<f32>,
         cx: &Context<LunaCanvas>,
     ) -> Option<NodeId> {
-        // Convert window coordinate to canvas coordinate
-        let canvas_point = canvas.window_to_canvas_point(window_point);
+        // Convert window coordinate to canvas (world) coordinate
+        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+        
+        // Get position data and zoom from canvas
+        let position_data_arc = cx.position_data();
+        let position_data = position_data_arc.read().unwrap();
+        let zoom = canvas.zoom();
+        
+        // Convert window point to world point
+        let window_point = WindowPoint::from_point(window_point);
+        let canvas_point = position_data.window_to_world(window_point, zoom).to_point();
 
         // Direct node testing with 1x1 selection point for hit detection
         let select_point_bounds = Bounds {
@@ -313,7 +322,16 @@ impl CanvasElement {
                         };
 
                         // Convert canvas point to world coordinates for hit detection
-                        let world_point = canvas.window_to_canvas_point(canvas_point);
+                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+                        
+                        // Get position data and zoom from canvas
+                        let position_data_arc = cx.position_data();
+                        let position_data = position_data_arc.read().unwrap();
+                        let zoom = canvas.zoom();
+                        
+                        // Convert window point to world point
+                        let window_point = WindowPoint::from_point(canvas_point);
+                        let world_point = position_data.window_to_world(window_point, zoom).to_point();
 
                         // Check if the point is within any resize handle
                         if let Some(handle) = point_in_resize_handle(world_point, &node_bounds) {
@@ -425,9 +443,18 @@ impl CanvasElement {
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
                         // Convert window coordinates to canvas coordinates
-                        let canvas_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
-                        let rel_x = canvas_point.x;
-                        let rel_y = canvas_point.y;
+                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+                        
+                        // Get position data and zoom from canvas
+                        let position_data_arc = cx.position_data();
+                        let position_data = position_data_arc.read().unwrap();
+                        let zoom = canvas.zoom();
+                        
+                        // Convert window point to world point
+                        let window_point = WindowPoint::from_point(Point::new(min_x, min_y));
+                        let world_point = position_data.window_to_world(window_point, zoom);
+                        let rel_x = world_point.x;
+                        let rel_y = world_point.y;
 
                         // Create a new rectangle node
                         let mut rect = FrameNode::new(node_id);
@@ -464,8 +491,16 @@ impl CanvasElement {
                     // Check if the selected nodes are being dropped on a frame
                     // by getting the topmost frame at the current mouse position, excluding selected frames
                     // Convert window coordinates to canvas coordinates (centered system)
-                    let drop_point =
-                        canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                    use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+                    
+                    // Get position data and zoom from canvas
+                    let position_data_arc = cx.position_data();
+                    let position_data = position_data_arc.read().unwrap();
+                    let zoom = canvas.zoom();
+                    
+                    // Convert window point to world point
+                    let window_point = WindowPoint::from_point(Point::new(position.x.0, position.y.0));
+                    let drop_point = position_data.window_to_world(window_point, zoom).to_point();
 
                     // Get all the selected node IDs
                     let selected_ids: Vec<NodeId> =
@@ -517,8 +552,8 @@ impl CanvasElement {
 
                                 // Calculate child's position relative to parent
                                 // This is the key part for correct parent-relative positioning
-                                let relative_x = child_absolute_pos.0 - parent_absolute_pos.0;
-                                let relative_y = child_absolute_pos.1 - parent_absolute_pos.1;
+                                let relative_x = child_absolute_pos.x - parent_absolute_pos.x;
+                                let relative_y = child_absolute_pos.y - parent_absolute_pos.y;
 
                                 // Now update parent to add child
                                 if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
@@ -623,8 +658,18 @@ impl CanvasElement {
                         let max_y = start_pos.y.0.max(position.y.0);
 
                         // Convert to canvas coordinates
-                        let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
-                        let max_point = canvas.window_to_canvas_point(Point::new(max_x, max_y));
+                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+                        
+                        // Get position data and zoom from canvas
+                        let position_data_arc = cx.position_data();
+                        let position_data = position_data_arc.read().unwrap();
+                        let zoom = canvas.zoom();
+                        
+                        // Convert window points to world points
+                        let min_window_point = WindowPoint::from_point(Point::new(min_x, min_y));
+                        let max_window_point = WindowPoint::from_point(Point::new(max_x, max_y));
+                        let min_point = position_data.window_to_world(min_window_point, zoom).to_point();
+                        let max_point = position_data.window_to_world(max_window_point, zoom).to_point();
 
                         // Create selection bounds
                         let selection_bounds = Bounds {
@@ -665,8 +710,16 @@ impl CanvasElement {
                         let delta = new_drag.delta();
 
                         // Get current canvas point to check for potential parent frames
-                        let canvas_point =
-                            canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+                        
+                        // Get position data and zoom from canvas
+                        let position_data_arc = cx.position_data();
+                        let position_data = position_data_arc.read().unwrap();
+                        let zoom = canvas.zoom();
+                        
+                        // Convert window point to world point
+                        let window_point = WindowPoint::from_point(Point::new(position.x.0, position.y.0));
+                        let canvas_point = position_data.window_to_world(window_point, zoom).to_point();
 
                         // Get all the selected node IDs
                         let selected_ids: Vec<NodeId> =
@@ -1148,12 +1201,23 @@ impl CanvasElement {
             let zoom = canvas.zoom();
             
             // Determine visible area in canvas coordinates
+            use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
+            
+            // Get position data and zoom from canvas
+            let position_data_arc = cx.position_data();
+            let position_data = position_data_arc.read().unwrap();
+            // No need to re-get the zoom since we already have it above
+            
             let bounds = layout.hitbox.bounds;
-            let top_left = canvas.window_to_canvas_point(Point::new(bounds.origin.x.0, bounds.origin.y.0));
-            let bottom_right = canvas.window_to_canvas_point(Point::new(
-                bounds.origin.x.0 + bounds.size.width.0,
-                bounds.origin.y.0 + bounds.size.height.0,
-            ));
+            
+            // Convert window points to world points
+            let top_left_window = WindowPoint::from_point(Point::new(bounds.origin.x.0, bounds.origin.y.0));
+            let bottom_right_window = WindowPoint::from_point(Point::new(
+                bounds.origin.x.0 + bounds.size.width.0, 
+                bounds.origin.y.0 + bounds.size.height.0));
+                
+            let top_left = position_data.window_to_world(top_left_window, zoom).to_point();
+            let bottom_right = position_data.window_to_world(bottom_right_window, zoom).to_point();
             
             // Calculate grid boundaries
             // Add some margin to ensure we cover the entire visible area
