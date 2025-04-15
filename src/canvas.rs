@@ -888,7 +888,7 @@ impl LunaCanvas {
     /// # Arguments
     /// * `delta` - The transformation vector to apply to all selected elements
     /// * `cx` - Context used for scene graph updates
-    pub fn move_selected_nodes_with_drag(&mut self, delta: Point<f32>, cx: &mut Context<Self>) {
+    pub fn move_selected_nodes_with_drag(&mut self, delta: crate::coordinates::WorldPoint, cx: &mut Context<Self>) {
         use crate::coordinates::{WorldPoint, CanvasBounds, CanvasSize};
         
         for node in &mut self.nodes {

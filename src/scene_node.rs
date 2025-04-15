@@ -18,6 +18,7 @@
 
 use crate::node::NodeId;
 use crate::scene_graph::SceneNodeId;
+use crate::coordinates::CanvasBounds;
 use gpui::{Bounds, TransformationMatrix};
 use std::fmt::Debug;
 
@@ -48,10 +49,10 @@ pub struct SceneNode {
     pub(crate) world_transform: TransformationMatrix,
 
     /// Bounds in local coordinate space
-    pub(crate) local_bounds: Bounds<f32>,
+    pub(crate) local_bounds: CanvasBounds,
 
     /// Bounds in world space after transformation
-    pub(crate) world_bounds: Bounds<f32>,
+    pub(crate) world_bounds: CanvasBounds,
 
     /// Associated data node ID
     pub(crate) data_node_id: Option<NodeId>,
@@ -73,13 +74,21 @@ impl SceneNode {
     /// After creation, the node must be inserted into the scene graph and
     /// have its transforms and bounds updated accordingly.
     pub fn new(parent: Option<SceneNodeId>, data_node_id: Option<NodeId>) -> Self {
+        use crate::coordinates::WorldPoint;
+        
+        // Create empty bounds using typed coordinates
+        let empty_bounds = CanvasBounds::new(
+            WorldPoint::new(0.0, 0.0),
+            crate::coordinates::CanvasSize::new(0.0, 0.0)
+        );
+        
         Self {
             parent,
             children: Vec::new(),
             local_transform: TransformationMatrix::unit(),
             world_transform: TransformationMatrix::unit(),
-            local_bounds: Bounds::default(),
-            world_bounds: Bounds::default(),
+            local_bounds: empty_bounds.clone(),
+            world_bounds: empty_bounds,
             data_node_id,
             visible: true,
         }

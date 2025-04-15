@@ -1,4 +1,5 @@
 use gpui::{Pixels, Point};
+use crate::coordinates::{WindowPoint, WorldPoint, CanvasSize};
 
 /// The type of dragging operation being performed
 #[derive(Clone, Debug, PartialEq)]
@@ -16,8 +17,8 @@ pub enum DragType {
 /// Represents a drag operation in progress with start and current points
 #[derive(Clone, Debug)]
 pub struct ActiveDrag {
-    pub start_position: Point<Pixels>,
-    pub current_position: Point<Pixels>,
+    pub start_position: WindowPoint,
+    pub current_position: WindowPoint,
     /// The type of drag operation being performed
     pub drag_type: DragType,
 }
@@ -25,45 +26,50 @@ pub struct ActiveDrag {
 impl ActiveDrag {
     /// Creates a new selection drag operation
     pub fn new_selection(start: Point<Pixels>) -> Self {
+        let window_point = WindowPoint::new(start.x.0, start.y.0);
         Self {
-            start_position: start,
-            current_position: start,
+            start_position: window_point,
+            current_position: window_point,
             drag_type: DragType::Selection,
         }
     }
 
     /// Creates a new move elements drag operation
     pub fn new_move_elements(start: Point<Pixels>) -> Self {
+        let window_point = WindowPoint::new(start.x.0, start.y.0);
         Self {
-            start_position: start,
-            current_position: start,
+            start_position: window_point,
+            current_position: window_point,
             drag_type: DragType::MoveElements,
         }
     }
 
     /// Creates a new create element drag operation
     pub fn new_create_element(start: Point<Pixels>) -> Self {
+        let window_point = WindowPoint::new(start.x.0, start.y.0);
         Self {
-            start_position: start,
-            current_position: start,
+            start_position: window_point,
+            current_position: window_point,
             drag_type: DragType::CreateElement,
         }
     }
 
     /// Creates a new resize element drag operation
     pub fn new_resize(start: Point<Pixels>, resize_op: ResizeOperation) -> Self {
+        let window_point = WindowPoint::new(start.x.0, start.y.0);
         Self {
-            start_position: start,
-            current_position: start,
+            start_position: window_point,
+            current_position: window_point,
             drag_type: DragType::Resize(resize_op),
         }
     }
 
     /// Gets the delta (change) between the current position and the start position
-    pub fn delta(&self) -> Point<f32> {
-        Point::new(
-            self.current_position.x.0 - self.start_position.x.0,
-            self.current_position.y.0 - self.start_position.y.0,
+    pub fn delta(&self) -> WorldPoint {
+        // Return delta as a WorldPoint since we're dealing with movement in the canvas
+        WorldPoint::new(
+            self.current_position.x - self.start_position.x,
+            self.current_position.y - self.start_position.y,
         )
     }
 }
@@ -132,14 +138,10 @@ impl Default for ResizeConfig {
 pub struct ResizeOperation {
     /// The handle being dragged
     pub handle: ResizeHandle,
-    /// The original width before resize
-    pub original_width: f32,
-    /// The original height before resize
-    pub original_height: f32,
-    /// The original x position before resize
-    pub original_x: f32,
-    /// The original y position before resize
-    pub original_y: f32,
+    /// The original size before resize
+    pub original_size: CanvasSize,
+    /// The original position before resize in world coordinates
+    pub original_position: WorldPoint,
     /// Configuration for the resize operation
     pub config: ResizeConfig,
 }
@@ -149,10 +151,8 @@ impl ResizeOperation {
     pub fn new(handle: ResizeHandle, x: f32, y: f32, width: f32, height: f32) -> Self {
         Self {
             handle,
-            original_width: width,
-            original_height: height,
-            original_x: x,
-            original_y: y,
+            original_size: CanvasSize::new(width, height),
+            original_position: WorldPoint::new(x, y),
             config: ResizeConfig::default(),
         }
     }

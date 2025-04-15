@@ -17,6 +17,7 @@
 
 #![allow(unused, dead_code)]
 use crate::node::NodeId;
+use crate::coordinates::{CanvasBounds, WorldPoint, CanvasSize};
 use gpui::{Bounds, Point, Size, TransformationMatrix};
 use slotmap::{KeyData, SlotMap};
 use std::{
@@ -81,13 +82,19 @@ impl SceneGraph {
     #[allow(dead_code)]
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
+        // Create empty bounds using typed coordinates
+        let empty_bounds = CanvasBounds::new(
+            WorldPoint::new(0.0, 0.0),
+            CanvasSize::new(0.0, 0.0)
+        );
+        
         let root_node = GraphNode {
             parent: None,
             children: Vec::new(),
             local_transform: TransformationMatrix::unit(),
             world_transform: TransformationMatrix::unit(),
-            local_bounds: Bounds::default(),
-            world_bounds: Bounds::default(),
+            local_bounds: empty_bounds.clone(),
+            world_bounds: empty_bounds.clone(),
             data_node_id: None,
             visible: true,
         };
@@ -116,13 +123,19 @@ impl SceneGraph {
         let parent_id = parent_id.unwrap_or(self.root);
 
         // Create the new node
+        // Create empty bounds using typed coordinates
+        let empty_bounds = CanvasBounds::new(
+            WorldPoint::new(0.0, 0.0),
+            CanvasSize::new(0.0, 0.0)
+        );
+        
         let node = GraphNode {
             parent: Some(parent_id),
             children: Vec::new(),
             local_transform: TransformationMatrix::unit(),
             world_transform: TransformationMatrix::unit(),
-            local_bounds: Bounds::default(),
-            world_bounds: Bounds::default(),
+            local_bounds: empty_bounds.clone(),
+            world_bounds: empty_bounds.clone(),
             data_node_id,
             visible: true,
         };
@@ -301,29 +314,30 @@ impl SceneGraph {
     /// 3. Computes the min/max coordinates to form an AABB
     /// 4. Updates the node's world_bounds property
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
+        use crate::coordinates::{WorldPoint, CanvasSize, CanvasBounds};
+        use gpui::{Point, Size, Pixels};
+        
         // First collect the data we need
         let (transform, local_bounds, children) = match self.nodes.get(node_id) {
             Some(node) => (
                 node.world_transform,
-                node.local_bounds,
+                node.local_bounds.clone(),
                 node.children.clone(),
             ),
             None => return,
         };
 
-        // Transform the four corners of the bounds to create an axis-aligned bounding box
-        let origin_x = local_bounds.origin.x;
-        let origin_y = local_bounds.origin.y;
-        let width = local_bounds.size.width;
-        let height = local_bounds.size.height;
+        // Get the corners from the canvas bounds
+        let origin = local_bounds.origin;
+        let size = local_bounds.size;
 
         // Create points for the four corners in gpui::Pixels format
-        let top_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y));
-        let top_right = gpui::Point::new(gpui::Pixels(origin_x + width), gpui::Pixels(origin_y));
-        let bottom_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y + height));
+        let top_left = gpui::Point::new(Pixels(origin.x), Pixels(origin.y));
+        let top_right = gpui::Point::new(Pixels(origin.x + size.width), Pixels(origin.y));
+        let bottom_left = gpui::Point::new(Pixels(origin.x), Pixels(origin.y + size.height));
         let bottom_right = gpui::Point::new(
-            gpui::Pixels(origin_x + width),
-            gpui::Pixels(origin_y + height),
+            Pixels(origin.x + size.width),
+            Pixels(origin.y + size.height),
         );
 
         // Apply the transformation
@@ -361,12 +375,11 @@ impl SceneGraph {
             .max(bottom_left_transformed.y.0)
             .max(bottom_right_transformed.y.0);
 
-        // Update world bounds
+        // Update world bounds using typed coordinates
         if let Some(node) = self.nodes.get_mut(node_id) {
-            node.world_bounds = Bounds {
-                origin: Point::new(min_x, min_y),
-                size: Size::new(max_x - min_x, max_y - min_y),
-            };
+            let world_origin = WorldPoint::new(min_x, min_y);
+            let world_size = CanvasSize::new(max_x - min_x, max_y - min_y);
+            node.world_bounds = CanvasBounds::new(world_origin, world_size);
         }
 
         // Recursively update all children's world bounds
@@ -387,12 +400,22 @@ impl SceneGraph {
 
     /// Get the local bounds for a node
     pub fn get_local_bounds(&self, node_id: SceneNodeId) -> Option<Bounds<f32>> {
-        self.nodes.get(node_id).map(|node| node.local_bounds)
+        self.nodes.get(node_id).map(|node| node.local_bounds.to_bounds())
+    }
+
+    /// Get typed local bounds for a node
+    pub fn get_local_canvas_bounds(&self, node_id: SceneNodeId) -> Option<CanvasBounds> {
+        self.nodes.get(node_id).map(|node| node.local_bounds.clone())
     }
 
     /// Get the world bounds for a node
     pub fn get_world_bounds(&self, node_id: SceneNodeId) -> Option<Bounds<f32>> {
-        self.nodes.get(node_id).map(|node| node.world_bounds)
+        self.nodes.get(node_id).map(|node| node.world_bounds.to_bounds())
+    }
+    
+    /// Get typed world bounds for a node
+    pub fn get_world_canvas_bounds(&self, node_id: SceneNodeId) -> Option<CanvasBounds> {
+        self.nodes.get(node_id).map(|node| node.world_bounds.clone())
     }
 
     /// Sets the visibility of a node
@@ -405,7 +428,9 @@ impl SceneGraph {
     /// Sets the local bounds for a node
     pub fn set_local_bounds(&mut self, node_id: SceneNodeId, bounds: Bounds<f32>) {
         if let Some(node) = self.nodes.get_mut(node_id) {
-            node.local_bounds = bounds;
+            // Convert gpui Bounds to typed CanvasBounds
+            let canvas_bounds = CanvasBounds::from_bounds(bounds);
+            node.local_bounds = canvas_bounds;
             self.update_world_bounds(node_id);
         }
     }
@@ -459,11 +484,11 @@ pub struct GraphNode {
     /// The bounding box of this node in its local coordinate space
     ///
     /// Example: a 100x100 rectangle at local position (0,0)
-    local_bounds: Bounds<f32>,
+    local_bounds: CanvasBounds,
 
     /// The bounding box of this node in world space
     /// Example: A 100x100 rectangle with scale(2.0) becomes a 200x200 rectangle in world space
-    world_bounds: Bounds<f32>,
+    world_bounds: CanvasBounds,
 
     /// Reference to the associated data node in the flat data model, if any
     /// Structural nodes like the canvas root may not have a data node
@@ -481,12 +506,12 @@ impl GraphNode {
     }
 
     /// Returns a reference to the node's local bounds
-    pub fn local_bounds(&self) -> &Bounds<f32> {
+    pub fn local_bounds(&self) -> &CanvasBounds {
         &self.local_bounds
     }
 
     /// Returns a reference to the node's world bounds
-    pub fn world_bounds(&self) -> &Bounds<f32> {
+    pub fn world_bounds(&self) -> &CanvasBounds {
         &self.world_bounds
     }
 
