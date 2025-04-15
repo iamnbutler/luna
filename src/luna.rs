@@ -250,6 +250,16 @@ impl Focusable for Luna {
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalTool(Arc::new(Tool::default())));
+    
+    // Initialize position data with default values
+    use coordinates::{GlobalPosition, PositionData, WorldPoint};
+    use std::sync::RwLock;
+    
+    let initial_position = PositionData::new(
+        WorldPoint::new(0.0, 0.0),  // Initial canvas offset
+        gpui::Size::new(800.0, 600.0)  // Default window size, will be updated
+    );
+    cx.set_global(GlobalPosition(Arc::new(RwLock::new(initial_position))));
 }
 
 /// Application entry point

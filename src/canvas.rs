@@ -935,14 +935,27 @@ impl LunaCanvas {
     }
 
     /// Set viewport bounds (when window resizes)
-    pub fn set_viewport(&mut self, viewport: Bounds<f32>) {
+    pub fn set_viewport(&mut self, viewport: Bounds<f32>, cx: &mut Context<Self>) {
         self.viewport = viewport;
+        
+        // Update global position data with new window dimensions
+        use crate::coordinates::PositionStore;
+        
+        let position_data = cx.position_data();
+        position_data.write().unwrap().update_dimensions(viewport.size);
+        
         self.dirty = true;
     }
 
     /// Set scroll position
     pub fn set_scroll_position(&mut self, position: Point<f32>, cx: &mut Context<Self>) {
         self.scroll_position = position;
+
+        // Update global position data
+        use crate::coordinates::{GlobalPosition, PositionStore, WorldPoint};
+        
+        let position_data = cx.position_data();
+        position_data.write().unwrap().update_offset(WorldPoint::new(position.x, position.y));
 
         self.scene_graph.update(cx, |sg, _cx| {
             // Calculate viewport center for centered coordinate system
