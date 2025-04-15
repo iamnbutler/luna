@@ -18,6 +18,7 @@ use gpui::{point, Bounds, Hsla, Point, Size};
 use smallvec::SmallVec;
 
 pub mod frame;
+mod schema;
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
