@@ -153,37 +153,92 @@ impl LunaCanvas {
         // Initialize proper scroll position for centered coordinate system
         canvas.set_scroll_position(Point::new(0.0, 0.0), cx);
 
-        // Load rectangles from CSS file
+        // Load nodes from schema JSON file
         let app_state_read = app_state.read(cx);
         let current_background_color = app_state_read.current_background_color;
         let current_border_color = app_state_read.current_border_color;
 
-        // Try to load the CSS file from assets
+        // Try to load the JSON file from assets
         let mut node_to_select = None;
 
-        if let Ok(css_content) = std::fs::read_to_string("assets/css/buttons.css") {
-            // Use our CSS parser to create rectangle nodes
-            let mut factory = crate::node::NodeFactory::default();
-            let frames = crate::css_parser::parse_frames_from_css_file(&css_content, &mut factory);
-
-            // Add all rectangles to the canvas
-            for (index, mut rect) in frames.into_iter().enumerate() {
-                // Add the node and capture the ID
-                let node_id = canvas.add_node(rect, None, cx);
-
-                // Select the second node (index 1) if it exists
-                if index == 1 {
-                    node_to_select = Some(node_id);
+        if let Ok(json_content) = std::fs::read_to_string("luna/assets/test/nodes/single_element.json") {
+            // Deserialize the JSON to our SerializedNode type
+            if let Ok(serialized_node) = serde_json::from_str::<crate::node::SerializedNode>(&json_content) {
+                // Create a factory for the importer
+                let mut factory = crate::node::NodeFactory::default();
+                
+                // Process based on the node type
+                match &serialized_node {
+                    crate::node::SerializedNode::Div { id, style, .. } => {
+                        // Create a frame node (which is equivalent to Div)
+                        let node_id = factory.next_id();
+                        let mut frame = crate::node::frame::FrameNode::new(node_id);
+                        
+                        // Apply basic positioning from the style
+                        if let Some(style) = style {
+                            // Set size if specified
+                            if let Some(width) = &style.width {
+                                if let Ok(w) = width.trim_end_matches("px").parse::<f32>() {
+                                    frame.layout_mut().width = w;
+                                }
+                            }
+                            
+                            if let Some(height) = &style.height {
+                                if let Ok(h) = height.trim_end_matches("px").parse::<f32>() {
+                                    frame.layout_mut().height = h;
+                                }
+                            }
+                            
+                            // Set position to center
+                            frame.layout_mut().x = -frame.layout().width / 2.0;
+                            frame.layout_mut().y = -frame.layout().height / 2.0;
+                            
+                            // Set background color if specified
+                            if let Some(bg_color) = &style.background_color {
+                                // Simple conversion - we'd want better color parsing in production
+                                frame.set_fill(Some(hsla(0.6, 0.6, 0.5, 1.0)));
+                            }
+                            
+                            // Set border properties if specified
+                            if let Some(border_width) = &style.border_width {
+                                if let Ok(width) = border_width.trim_end_matches("px").parse::<f32>() {
+                                    frame.border_width = width;
+                                }
+                            }
+                            
+                            if let Some(border_color) = &style.border_color {
+                                // Simple conversion for border color
+                                frame.border_color = Some(hsla(0.6, 0.5, 0.4, 1.0));
+                            }
+                            
+                            // Set corner radius if specified
+                            if let Some(radius) = &style.border_radius {
+                                if let Ok(r) = radius.trim_end_matches("px").parse::<f32>() {
+                                    frame.corner_radius = r;
+                                }
+                            }
+                        }
+                        
+                        // Add the frame to the canvas
+                        let canvas_node_id = canvas.add_node(frame, None, cx);
+                        node_to_select = Some(canvas_node_id);
+                        
+                        // Make sure our next_id is higher than any loaded ID
+                        canvas.next_id = canvas.next_id.max(canvas_node_id.0 + 1);
+                        
+                        // TODO: Process children nodes recursively
+                    },
+                    _ => {
+                        eprintln!("Only Div nodes are currently supported for the root element");
+                    }
                 }
-
-                // Make sure our next_id is higher than any loaded ID to prevent collisions
-                // NodeId stores an internal usize, so we access it with .0
-                canvas.next_id = canvas.next_id.max(node_id.0 + 1);
+            } else {
+                eprintln!("Failed to deserialize JSON to SerializedNode");
             }
         } else {
-            // Fallback to creating a single default rectangle if CSS loading fails
+            // Fallback to creating a single default rectangle if JSON loading fails
             let node_id = canvas.generate_id();
-            let mut rect = FrameNode::with_rect(node_id, 100.0, 100.0, 200.0, 150.0);
+            let mut rect = FrameNode::with_rect(node_id, 0.0, 0.0, 300.0, 300.0);
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
             let node_id = canvas.add_node(rect, None, cx);
