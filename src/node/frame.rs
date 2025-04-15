@@ -4,7 +4,7 @@
 //! Frames are the core building blocks of the Luna canvas system, serving as containers
 //! for other visual elements with configurable styling properties.
 
-use crate::node::{NodeCommon, NodeId, NodeLayout, NodeType};
+use crate::node::{NodeCommon, CanvasNodeId, NodeLayout, NodeType};
 use gpui::Hsla;
 use smallvec::{smallvec, SmallVec};
 
@@ -25,18 +25,18 @@ use super::Shadow;
 /// creating a hierarchy of elements.
 #[derive(Debug, Clone)]
 pub struct FrameNode {
-    pub id: NodeId,
+    pub id: CanvasNodeId,
     pub layout: NodeLayout,
     pub fill: Option<Hsla>,
     pub border_color: Option<Hsla>,
     pub border_width: f32,
     pub corner_radius: f32,
     pub shadows: SmallVec<[Shadow; 1]>,
-    pub children: Vec<NodeId>,
+    pub children: Vec<CanvasNodeId>,
 }
 
 impl FrameNode {
-    pub fn new(id: NodeId) -> Self {
+    pub fn new(id: CanvasNodeId) -> Self {
         Self {
             id,
             layout: NodeLayout::new(0.0, 0.0, 100.0, 100.0),
@@ -50,7 +50,7 @@ impl FrameNode {
     }
 
     /// Create a frame with specific dimensions and position
-    pub fn with_rect(id: NodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
+    pub fn with_rect(id: CanvasNodeId, x: f32, y: f32, width: f32, height: f32) -> Self {
         let mut node = Self::new(id);
         node.layout = NodeLayout::new(x, y, width, height);
         node
@@ -59,7 +59,7 @@ impl FrameNode {
     /// Add a child node to this frame
     ///
     /// Returns true if the child was added (it wasn't already a child)
-    pub fn add_child(&mut self, child_id: NodeId) -> bool {
+    pub fn add_child(&mut self, child_id: CanvasNodeId) -> bool {
         if !self.children.contains(&child_id) {
             self.children.push(child_id);
             true
@@ -71,25 +71,25 @@ impl FrameNode {
     /// Remove a child node from this frame
     ///
     /// Returns true if the child was removed (it was present)
-    pub fn remove_child(&mut self, child_id: NodeId) -> bool {
+    pub fn remove_child(&mut self, child_id: CanvasNodeId) -> bool {
         let len_before = self.children.len();
         self.children.retain(|id| *id != child_id);
         len_before != self.children.len()
     }
 
     /// Check if this frame contains a specific child
-    pub fn has_child(&self, child_id: NodeId) -> bool {
+    pub fn has_child(&self, child_id: CanvasNodeId) -> bool {
         self.children.contains(&child_id)
     }
 
     /// Get a reference to the children of this frame
-    pub fn children(&self) -> &Vec<NodeId> {
+    pub fn children(&self) -> &Vec<CanvasNodeId> {
         &self.children
     }
 }
 
 impl NodeCommon for FrameNode {
-    fn id(&self) -> NodeId {
+    fn id(&self) -> CanvasNodeId {
         self.id
     }
 
@@ -150,7 +150,7 @@ mod tests {
 
     #[test]
     fn test_frame_node() {
-        let id = NodeId::new(2);
+        let id = CanvasNodeId::new(2);
         let frame = FrameNode::new(id);
 
         assert_eq!(frame.node_type(), NodeType::Frame);
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_contains_point() {
-        let id = NodeId::new(1);
+        let id = CanvasNodeId::new(1);
         let frame = FrameNode::with_rect(id, 10.0, 10.0, 100.0, 100.0);
 
         // Test points inside and outside
@@ -174,8 +174,8 @@ mod tests {
 
     #[test]
     fn test_frame_children() {
-        let parent_id = NodeId::new(1);
-        let child_id = NodeId::new(2);
+        let parent_id = CanvasNodeId::new(1);
+        let child_id = CanvasNodeId::new(2);
 
         let mut frame = FrameNode::new(parent_id);
 

@@ -21,15 +21,15 @@ pub mod frame;
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NodeId(pub usize);
+pub struct CanvasNodeId(pub usize);
 
-impl NodeId {
+impl CanvasNodeId {
     pub fn new(id: usize) -> Self {
-        NodeId(id)
+        CanvasNodeId(id)
     }
 }
 
-impl std::fmt::Display for NodeId {
+impl std::fmt::Display for CanvasNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Node-{}", self.0)
     }
@@ -107,7 +107,7 @@ impl From<gpui::BoxShadow> for Shadow {
 /// heterogeneous collections of nodes.
 pub trait NodeCommon: std::fmt::Debug {
     /// Get the node's ID
-    fn id(&self) -> NodeId;
+    fn id(&self) -> CanvasNodeId;
 
     /// Get the node type
     fn node_type(&self) -> NodeType;
@@ -182,8 +182,8 @@ impl NodeFactory {
     }
 
     /// Generate a new unique node ID
-    pub fn next_id(&mut self) -> NodeId {
-        let id = NodeId::new(self.next_id);
+    pub fn next_id(&mut self) -> CanvasNodeId {
+        let id = CanvasNodeId::new(self.next_id);
         self.next_id += 1;
         id
     }
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_node_id() {
-        let id = NodeId::new(42);
+        let id = CanvasNodeId::new(42);
         assert_eq!(id.0, 42);
         assert_eq!(format!("{}", id), "Node-42");
     }

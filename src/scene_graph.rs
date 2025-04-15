@@ -16,7 +16,7 @@
 //! and relationships while the scene graph handles coordinate systems and transformations.
 
 #![allow(unused, dead_code)]
-use crate::node::NodeId;
+use crate::node::CanvasNodeId;
 use gpui::{Bounds, Point, Size, TransformationMatrix};
 use slotmap::{KeyData, SlotMap};
 use std::{
@@ -73,7 +73,7 @@ pub struct SceneGraph {
     nodes: SlotMap<SceneNodeId, SceneNode>,
 
     /// Maps from data node IDs to scene node IDs, allowing lookups in both directions
-    node_mapping: HashMap<NodeId, SceneNodeId>,
+    node_mapping: HashMap<CanvasNodeId, SceneNodeId>,
 }
 
 impl SceneGraph {
@@ -111,7 +111,7 @@ impl SceneGraph {
     pub fn create_node(
         &mut self,
         parent_id: Option<SceneNodeId>,
-        data_node_id: Option<NodeId>,
+        data_node_id: Option<CanvasNodeId>,
     ) -> SceneNodeId {
         let parent_id = parent_id.unwrap_or(self.root);
 
@@ -182,7 +182,7 @@ impl SceneGraph {
     }
 
     /// Removes a node and all its children from the scene graph
-    pub fn remove_node(&mut self, node_id: SceneNodeId) -> Option<NodeId> {
+    pub fn remove_node(&mut self, node_id: SceneNodeId) -> Option<CanvasNodeId> {
         // Can't remove the root node
         if node_id == self.root {
             return None;
@@ -218,14 +218,14 @@ impl SceneGraph {
     }
 
     /// Gets the data node ID associated with a scene node
-    pub fn get_data_node_id(&self, scene_node_id: SceneNodeId) -> Option<NodeId> {
+    pub fn get_data_node_id(&self, scene_node_id: SceneNodeId) -> Option<CanvasNodeId> {
         self.nodes
             .get(scene_node_id)
             .and_then(|node| node.data_node_id)
     }
 
     /// Gets the scene node ID associated with a data node
-    pub fn get_scene_node_id(&self, data_node_id: NodeId) -> Option<SceneNodeId> {
+    pub fn get_scene_node_id(&self, data_node_id: CanvasNodeId) -> Option<SceneNodeId> {
         self.node_mapping.get(&data_node_id).copied()
     }
 
@@ -303,7 +303,11 @@ impl SceneGraph {
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
         // First collect the data we need
         let (transform, local_bounds, children) = match self.nodes.get(node_id) {
-            Some(node) => (node.world_transform, node.local_bounds, node.children.clone()),
+            Some(node) => (
+                node.world_transform,
+                node.local_bounds,
+                node.children.clone(),
+            ),
             None => return,
         };
 
@@ -364,7 +368,7 @@ impl SceneGraph {
                 size: Size::new(max_x - min_x, max_y - min_y),
             };
         }
-        
+
         // Recursively update all children's world bounds
         for child_id in children {
             self.update_world_bounds(child_id);
@@ -463,7 +467,7 @@ pub struct SceneNode {
 
     /// Reference to the associated data node in the flat data model, if any
     /// Structural nodes like the canvas root may not have a data node
-    data_node_id: Option<NodeId>,
+    data_node_id: Option<CanvasNodeId>,
 
     /// Whether this node should be considered for rendering and hit testing
     /// Useful for temporarily hiding nodes without removing them
@@ -487,7 +491,7 @@ impl SceneNode {
     }
 
     /// Returns the node's data node ID, if any
-    pub fn data_node_id(&self) -> Option<NodeId> {
+    pub fn data_node_id(&self) -> Option<CanvasNodeId> {
         self.data_node_id
     }
 
@@ -602,7 +606,7 @@ mod tests {
         let mut graph = SceneGraph::new();
 
         // Create a data node ID
-        let data_id = NodeId::new(123);
+        let data_id = CanvasNodeId::new(123);
 
         // Create a scene node linked to the data node
         let scene_id = graph.create_node(None, Some(data_id));

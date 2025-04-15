@@ -2,7 +2,7 @@
 
 use crate::{
     interactivity::ActiveDrag,
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType},
+    node::{frame::FrameNode, CanvasNodeId, NodeCommon, NodeLayout, NodeType},
     scene_graph::{SceneGraph, SceneNodeId},
     theme::Theme,
     AppState, Tool,
@@ -63,10 +63,10 @@ pub struct LunaCanvas {
     nodes: Vec<FrameNode>,
 
     /// Currently selected nodes
-    selected_nodes: HashSet<NodeId>,
+    selected_nodes: HashSet<CanvasNodeId>,
 
     /// Currently hovered node (for hover effects)
-    hovered_node: Option<NodeId>,
+    hovered_node: Option<CanvasNodeId>,
 
     /// The visible viewport of the canvas in canvas coordinates
     viewport: Bounds<f32>,
@@ -92,15 +92,15 @@ pub struct LunaCanvas {
     active_drag: Option<ActiveDrag>,
 
     /// Tracks an active drawing operation (e.g., rectangle being drawn)
-    active_element_draw: Option<(NodeId, NodeType, ActiveDrag)>,
+    active_element_draw: Option<(CanvasNodeId, NodeType, ActiveDrag)>,
 
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
-    element_initial_positions: HashMap<NodeId, Point<f32>>,
+    element_initial_positions: HashMap<CanvasNodeId, Point<f32>>,
 
     /// Tracks a potential parent frame when dragging elements
     /// Used to highlight frames that can become parents when dropping elements
-    potential_parent_frame: Option<NodeId>,
+    potential_parent_frame: Option<CanvasNodeId>,
 
     theme: Theme,
 }
@@ -205,8 +205,8 @@ impl LunaCanvas {
     }
 
     /// Generate a unique ID for a new node
-    pub fn generate_id(&mut self) -> NodeId {
-        let id = NodeId::new(self.next_id);
+    pub fn generate_id(&mut self) -> CanvasNodeId {
+        let id = CanvasNodeId::new(self.next_id);
         self.next_id += 1;
         println!("Generated new node ID: {}", id); // Debug logging
         id
@@ -216,7 +216,7 @@ impl LunaCanvas {
         &self.nodes
     }
 
-    pub fn selected_nodes(&self) -> &HashSet<NodeId> {
+    pub fn selected_nodes(&self) -> &HashSet<CanvasNodeId> {
         &self.selected_nodes
     }
 
@@ -236,11 +236,14 @@ impl LunaCanvas {
         self.active_drag = None;
     }
 
-    pub fn active_element_draw(&self) -> Option<(NodeId, NodeType, ActiveDrag)> {
+    pub fn active_element_draw(&self) -> Option<(CanvasNodeId, NodeType, ActiveDrag)> {
         self.active_element_draw.clone()
     }
 
-    pub fn set_active_element_draw(&mut self, active_element_draw: (NodeId, NodeType, ActiveDrag)) {
+    pub fn set_active_element_draw(
+        &mut self,
+        active_element_draw: (CanvasNodeId, NodeType, ActiveDrag),
+    ) {
         self.active_element_draw = Some(active_element_draw);
     }
 
@@ -248,34 +251,34 @@ impl LunaCanvas {
         self.active_element_draw = None;
     }
 
-    pub fn element_initial_positions(&self) -> &HashMap<NodeId, Point<f32>> {
+    pub fn element_initial_positions(&self) -> &HashMap<CanvasNodeId, Point<f32>> {
         &self.element_initial_positions
     }
-    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, Point<f32>> {
+    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<CanvasNodeId, Point<f32>> {
         &mut self.element_initial_positions
     }
 
-    pub fn potential_parent_frame(&self) -> Option<NodeId> {
+    pub fn potential_parent_frame(&self) -> Option<CanvasNodeId> {
         self.potential_parent_frame
     }
 
-    pub fn set_potential_parent_frame(&mut self, frame_id: Option<NodeId>) {
+    pub fn set_potential_parent_frame(&mut self, frame_id: Option<CanvasNodeId>) {
         self.potential_parent_frame = frame_id;
     }
 
-    pub fn hovered_node(&self) -> Option<NodeId> {
+    pub fn hovered_node(&self) -> Option<CanvasNodeId> {
         self.hovered_node
     }
 
-    pub fn set_hovered_node(&mut self, hovered_node: Option<NodeId>) {
+    pub fn set_hovered_node(&mut self, hovered_node: Option<CanvasNodeId>) {
         self.hovered_node = hovered_node;
     }
 
-    pub fn get_node(&self, node_id: NodeId) -> Option<&FrameNode> {
+    pub fn get_node(&self, node_id: CanvasNodeId) -> Option<&FrameNode> {
         self.nodes.iter().find(|n| n.id() == node_id)
     }
 
-    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut FrameNode> {
+    pub fn get_node_mut(&mut self, node_id: CanvasNodeId) -> Option<&mut FrameNode> {
         self.nodes.iter_mut().find(|n| n.id() == node_id)
     }
 
@@ -285,11 +288,11 @@ impl LunaCanvas {
         // Calculate center of viewport in window space
         let center_x = self.viewport.size.width / 2.0;
         let center_y = self.viewport.size.height / 2.0;
-        
+
         // Convert from window to canvas space, accounting for center origin
         let canvas_x = ((window_point.x - center_x) / self.zoom) + self.scroll_position.x;
         let canvas_y = ((window_point.y - center_y) / self.zoom) + self.scroll_position.y;
-        
+
         Point::new(canvas_x, canvas_y)
     }
 
@@ -299,11 +302,11 @@ impl LunaCanvas {
         // Calculate center of viewport in window space
         let center_x = self.viewport.size.width / 2.0;
         let center_y = self.viewport.size.height / 2.0;
-        
+
         // Convert from canvas to window space, accounting for center origin
         let window_x = ((canvas_point.x - self.scroll_position.x) * self.zoom) + center_x;
         let window_y = ((canvas_point.y - self.scroll_position.y) * self.zoom) + center_y;
-        
+
         Point::new(window_x, window_y)
     }
 
@@ -319,9 +322,9 @@ impl LunaCanvas {
     pub fn add_node(
         &mut self,
         mut node: FrameNode,
-        parent_id: Option<NodeId>,
+        parent_id: Option<CanvasNodeId>,
         cx: &mut Context<Self>,
-    ) -> NodeId {
+    ) -> CanvasNodeId {
         let node_id = node.id();
 
         // Get parent node's scene node ID if specified, otherwise use canvas node
@@ -382,8 +385,8 @@ impl LunaCanvas {
     /// The child's coordinates will be transformed to be relative to the parent's coordinate system.
     pub fn add_child_to_parent(
         &mut self,
-        parent_id: NodeId,
-        child_id: NodeId,
+        parent_id: CanvasNodeId,
+        child_id: CanvasNodeId,
         cx: &mut Context<Self>,
     ) -> bool {
         // 1. Verify both nodes exist
@@ -445,7 +448,11 @@ impl LunaCanvas {
     ///
     /// The child will remain in the canvas but will be moved to the root level.
     /// Its coordinates will be converted from parent-relative to absolute.
-    pub fn remove_child_from_parent(&mut self, child_id: NodeId, cx: &mut Context<Self>) -> bool {
+    pub fn remove_child_from_parent(
+        &mut self,
+        child_id: CanvasNodeId,
+        cx: &mut Context<Self>,
+    ) -> bool {
         // Find the parent of this child
         let parent_id = self.find_parent(child_id);
 
@@ -489,7 +496,7 @@ impl LunaCanvas {
     }
 
     /// Find the parent node of a child node
-    fn find_parent(&self, child_id: NodeId) -> Option<NodeId> {
+    fn find_parent(&self, child_id: CanvasNodeId) -> Option<CanvasNodeId> {
         for node in &self.nodes {
             if node.children().contains(&child_id) {
                 return Some(node.id());
@@ -501,7 +508,7 @@ impl LunaCanvas {
     /// Check if a node is an ancestor of another node
     ///
     /// Returns true if ancestor_id is an ancestor (parent, grandparent, etc.) of descendant_id
-    fn is_ancestor_of(&self, ancestor_id: NodeId, descendant_id: NodeId) -> bool {
+    fn is_ancestor_of(&self, ancestor_id: CanvasNodeId, descendant_id: CanvasNodeId) -> bool {
         if ancestor_id == descendant_id {
             return true; // Same node
         }
@@ -518,43 +525,47 @@ impl LunaCanvas {
     }
 
     /// Get the absolute position of a node, accounting for all parent transformations
-    /// 
+    ///
     /// This returns the absolute canvas coordinates (centered coordinate system)
     /// of a node by accumulating all parent transformations
     /// Get the absolute position of a node, accounting for all parent transformations
-    /// 
+    ///
     /// With centered coordinate system, this gives the position in absolute canvas coordinates
     /// taking into account all parent node offsets
-    pub fn get_absolute_position(&self, node_id: NodeId, _cx: &mut Context<Self>) -> (f32, f32) {
+    pub fn get_absolute_position(
+        &self,
+        node_id: CanvasNodeId,
+        _cx: &mut Context<Self>,
+    ) -> (f32, f32) {
         // For nodes that have parents, we need to accumulate all parent offsets
         // For top-level nodes, absolute position is the same as their layout position
-        
+
         // Find the node in question first
         let node = if let Some(n) = self.get_node(node_id) {
             n
         } else {
             return (0.0, 0.0);
         };
-        
+
         // Get this node's layout position
         let node_layout = node.layout();
         let node_x = node_layout.x;
         let node_y = node_layout.y;
-        
+
         // If this is a top-level node with no parent, return its position directly
         let parent_id = self.find_parent(node_id);
         if parent_id.is_none() {
             return (node_x, node_y);
         }
-        
+
         // Accumulate parent positions by recursively getting parent's absolute position
         if let Some(parent_id) = parent_id {
             let (parent_abs_x, parent_abs_y) = self.get_absolute_position(parent_id, _cx);
-            
+
             // Add this node's relative position to parent's absolute position
             return (parent_abs_x + node_x, parent_abs_y + node_y);
         }
-        
+
         // Fallback - shouldn't be reached
         (node_x, node_y)
     }
@@ -565,7 +576,7 @@ impl LunaCanvas {
     /// from both the data model and the scene graph.
     pub fn remove_node(
         &mut self,
-        node_id: NodeId,
+        node_id: CanvasNodeId,
         cx: &mut Context<Self>,
     ) -> Option<crate::node::frame::FrameNode> {
         // Remove from selection
@@ -604,7 +615,7 @@ impl LunaCanvas {
     }
 
     /// Select a node
-    pub fn select_node(&mut self, node_id: NodeId) {
+    pub fn select_node(&mut self, node_id: CanvasNodeId) {
         if self.nodes.iter().any(|node| node.id() == node_id) {
             self.selected_nodes.insert(node_id);
             self.dirty = true;
@@ -612,7 +623,7 @@ impl LunaCanvas {
     }
 
     /// Deselect a node
-    pub fn deselect_node(&mut self, node_id: NodeId) {
+    pub fn deselect_node(&mut self, node_id: CanvasNodeId) {
         self.selected_nodes.remove(&node_id);
         self.dirty = true;
     }
@@ -629,7 +640,7 @@ impl LunaCanvas {
     }
 
     /// Toggle selection state of a node
-    pub fn toggle_node_selection(&mut self, node_id: NodeId) {
+    pub fn toggle_node_selection(&mut self, node_id: CanvasNodeId) {
         if self.selected_nodes.contains(&node_id) {
             self.selected_nodes.remove(&node_id);
         } else if self.nodes.iter().any(|node| node.id() == node_id) {
@@ -639,7 +650,7 @@ impl LunaCanvas {
     }
 
     /// Check if a node is selected
-    pub fn is_node_selected(&self, node_id: NodeId) -> bool {
+    pub fn is_node_selected(&self, node_id: CanvasNodeId) -> bool {
         self.selected_nodes.contains(&node_id)
     }
 
@@ -740,7 +751,7 @@ impl LunaCanvas {
         node_id: SceneNodeId,
         viewport: gpui::Bounds<gpui::Pixels>,
         sg: &SceneGraph,
-        result: &mut Vec<NodeId>,
+        result: &mut Vec<CanvasNodeId>,
     ) {
         // TODO: Implement proper visibility checking
         // For now, just add the node and its children to the result
@@ -780,7 +791,7 @@ impl LunaCanvas {
     }
 
     /// Get all root nodes (all nodes since we removed hierarchy)
-    pub fn get_root_nodes(&self) -> Vec<NodeId> {
+    pub fn get_root_nodes(&self) -> Vec<CanvasNodeId> {
         self.nodes.iter().map(|node| node.id()).collect()
     }
 
@@ -790,7 +801,7 @@ impl LunaCanvas {
         _node_type: NodeType,
         position: Point<f32>,
         cx: &mut Context<Self>,
-    ) -> NodeId {
+    ) -> CanvasNodeId {
         let id = self.generate_id();
 
         // Create a rectangle node at the specified position
@@ -893,7 +904,7 @@ impl LunaCanvas {
             // Calculate viewport center for centered coordinate system
             let center_x = self.viewport.size.width / 2.0;
             let center_y = self.viewport.size.height / 2.0;
-            
+
             // Use a single transformation matrix that combines all operations
             // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
@@ -923,7 +934,7 @@ impl LunaCanvas {
             // Calculate viewport center for centered coordinate system
             let center_x = self.viewport.size.width / 2.0;
             let center_y = self.viewport.size.height / 2.0;
-            
+
             // Use a single transformation matrix that combines all operations
             // This ensures consistent transformation for all nodes
             let transform = TransformationMatrix::unit()
@@ -948,7 +959,7 @@ impl LunaCanvas {
     pub fn zoom(&self) -> f32 {
         self.zoom
     }
-    
+
     /// Get current scroll position
     pub fn get_scroll_position(&self) -> Point<f32> {
         self.scroll_position
@@ -980,74 +991,82 @@ impl LunaCanvas {
         self.selected_nodes.clear();
         self.mark_dirty(cx);
     }
-    
+
     /// Updates the layouts of all child nodes after a parent node has been resized
-    /// 
+    ///
     /// This ensures that when a parent frame is resized, the relative positions of its
-    /// children are maintained in the node data structure, keeping it in sync with 
+    /// children are maintained in the node data structure, keeping it in sync with
     /// the scene graph transformations.
-    /// 
+    ///
     /// # Arguments
     /// * `parent_id` - The ID of the parent node that was resized
     /// * `cx` - The context for scene graph updates
-    pub fn update_child_layouts_after_parent_resize(&mut self, parent_id: NodeId, cx: &mut Context<Self>) {
+    pub fn update_child_layouts_after_parent_resize(
+        &mut self,
+        parent_id: CanvasNodeId,
+        cx: &mut Context<Self>,
+    ) {
         // First get the parent node to access its children
         let parent = match self.get_node(parent_id) {
             Some(node) => node,
             None => return,
         };
-        
+
         // Only frame nodes can have children
         if parent.node_type() != NodeType::Frame {
             return;
         }
-        
+
         // Find all children of this parent by looking for nodes whose parent is this node
         // We need to do this since we can't directly cast to FrameNode
-        let children: Vec<NodeId> = self.nodes.iter()
+        let children: Vec<CanvasNodeId> = self
+            .nodes
+            .iter()
             .filter(|n| {
                 // A node is a child if this parent is its parent
                 self.find_parent(n.id()) == Some(parent_id)
             })
             .map(|n| n.id())
             .collect();
-        
+
         // Get parent's layout information
         let parent_layout = parent.layout();
         let parent_x = parent_layout.x;
         let parent_y = parent_layout.y;
-        
+
         // Process each child
         for &child_id in &children {
             // Get child's scene graph node and its world bounds
-            let child_scene_id = match self.scene_graph.update(cx, |sg, _cx| {
-                sg.get_scene_node_id(child_id)
-            }) {
+            let child_scene_id = match self
+                .scene_graph
+                .update(cx, |sg, _cx| sg.get_scene_node_id(child_id))
+            {
                 Some(id) => id,
                 None => continue,
             };
-            
+
             // Get world bounds from scene graph
-            let world_bounds = match self.scene_graph.update(cx, |sg, _cx| {
-                sg.get_world_bounds(child_scene_id)
-            }) {
+            let world_bounds = match self
+                .scene_graph
+                .update(cx, |sg, _cx| sg.get_world_bounds(child_scene_id))
+            {
                 Some(bounds) => bounds,
                 None => continue,
             };
-            
+
             // Update the child's layout to maintain its position relative to parent
             if let Some(child_node) = self.get_node_mut(child_id) {
                 let child_layout = child_node.layout_mut();
-                
+
                 // Convert from world coordinates to coordinates relative to parent
                 child_layout.x = world_bounds.origin.x - parent_x;
                 child_layout.y = world_bounds.origin.y - parent_y;
-                
+
                 // Recursively update this child's children
                 self.update_child_layouts_after_parent_resize(child_id, cx);
             }
         }
-        
+
         self.mark_dirty(cx);
     }
 }

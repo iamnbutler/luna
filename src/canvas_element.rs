@@ -1,7 +1,7 @@
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType, Shadow},
+    node::{frame::FrameNode, NodeCommon, CanvasNodeId, NodeLayout, NodeType, Shadow},
     scene_graph::SceneGraph,
     theme::{ActiveTheme, Theme},
     tools::{ActiveTool, GlobalTool},
@@ -260,7 +260,7 @@ impl CanvasElement {
         canvas: &LunaCanvas,
         window_point: Point<f32>,
         cx: &Context<LunaCanvas>,
-    ) -> Option<NodeId> {
+    ) -> Option<CanvasNodeId> {
         // Convert window coordinate to canvas coordinate
         let canvas_point = canvas.window_to_canvas_point(window_point);
 
@@ -468,13 +468,13 @@ impl CanvasElement {
                         canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
                     // Get all the selected node IDs
-                    let selected_ids: Vec<NodeId> =
+                    let selected_ids: Vec<CanvasNodeId> =
                         canvas.selected_nodes().iter().cloned().collect();
 
                     // Structure to hold all the information we need from the parent frame
                     struct ParentFrameInfo {
-                        id: NodeId,
-                        children: Vec<NodeId>,
+                        id: CanvasNodeId,
+                        children: Vec<CanvasNodeId>,
                         x: f32,
                         y: f32,
                     }
@@ -629,7 +629,7 @@ impl CanvasElement {
                         };
 
                         // Pre-calculate all nodes that intersect with selection
-                        let nodes_in_selection: HashSet<NodeId> = canvas
+                        let nodes_in_selection: HashSet<CanvasNodeId> = canvas
                             .nodes()
                             .iter()
                             .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
@@ -665,7 +665,7 @@ impl CanvasElement {
                             canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
                         // Get all the selected node IDs
-                        let selected_ids: Vec<NodeId> =
+                        let selected_ids: Vec<CanvasNodeId> =
                             canvas.selected_nodes().iter().cloned().collect();
 
                         // Find potential parent frame at the current position
@@ -1068,7 +1068,7 @@ impl CanvasElement {
     /// as it is being created by clicking and dragging the tool
     fn paint_draw_rectangle(
         &self,
-        new_node_id: NodeId,
+        new_node_id: CanvasNodeId,
         active_drag: &ActiveDrag,
         layout: &CanvasLayout,
         window: &mut Window,
@@ -1240,22 +1240,22 @@ impl CanvasElement {
         // Collect ALL data we need up front to avoid any borrow issues
         #[derive(Clone)]
         struct NodeRenderInfo {
-            node_id: NodeId,
+            node_id: CanvasNodeId,
             bounds: gpui::Bounds<Pixels>,
             fill_color: Option<Hsla>,
             border_color: Option<Hsla>,
             border_width: f32,
             corner_radius: f32,
             shadows: SmallVec<[Shadow; 1]>,
-            children: Vec<NodeId>,
+            children: Vec<CanvasNodeId>,
         }
 
         // Helper function to organize nodes into a hierarchy
         fn organize_nodes_hierarchically(
             all_nodes: &[NodeRenderInfo],
-        ) -> (Vec<NodeRenderInfo>, HashMap<NodeId, Vec<NodeRenderInfo>>) {
+        ) -> (Vec<NodeRenderInfo>, HashMap<CanvasNodeId, Vec<NodeRenderInfo>>) {
             let mut root_nodes = Vec::new();
-            let mut children_map: HashMap<NodeId, Vec<NodeRenderInfo>> = HashMap::new();
+            let mut children_map: HashMap<CanvasNodeId, Vec<NodeRenderInfo>> = HashMap::new();
 
             // First, create a mapping of parent NodeId to child nodes
             for node in all_nodes {
@@ -1274,7 +1274,7 @@ impl CanvasElement {
             }
 
             // Identify root nodes (not children of any other node)
-            let all_children: HashSet<NodeId> = children_map
+            let all_children: HashSet<CanvasNodeId> = children_map
                 .values()
                 .flat_map(|nodes| nodes.iter().map(|n| n.node_id))
                 .collect();
@@ -1344,10 +1344,10 @@ impl CanvasElement {
             // Recursive function to paint a node and its children
             fn paint_node_recursively(
                 node_info: &NodeRenderInfo,
-                children_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
-                selected_node_ids: &HashSet<NodeId>,
-                hovered_node: &Option<NodeId>,
-                potential_parent_frame: &Option<NodeId>,
+                children_map: &HashMap<CanvasNodeId, Vec<NodeRenderInfo>>,
+                selected_node_ids: &HashSet<CanvasNodeId>,
+                hovered_node: &Option<CanvasNodeId>,
+                potential_parent_frame: &Option<CanvasNodeId>,
                 has_active_drag: bool,
                 parent_transform: Option<TransformationMatrix>,
                 theme: &Theme,
@@ -1560,13 +1560,13 @@ impl CanvasElement {
             // ===========================================================
 
             // Build a map of node ID to parent transform
-            let mut node_transforms: HashMap<NodeId, TransformationMatrix> = HashMap::new();
+            let mut node_transforms: HashMap<CanvasNodeId, TransformationMatrix> = HashMap::new();
 
             // Helper function to compute the absolute transform for a node
             fn compute_node_transform(
-                node_id: NodeId,
-                node_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
-                transforms: &mut HashMap<NodeId, TransformationMatrix>,
+                node_id: CanvasNodeId,
+                node_map: &HashMap<CanvasNodeId, Vec<NodeRenderInfo>>,
+                transforms: &mut HashMap<CanvasNodeId, TransformationMatrix>,
                 all_nodes: &[NodeRenderInfo],
             ) -> TransformationMatrix {
                 // If we've already computed this node's transform, return it

@@ -13,7 +13,7 @@ use smallvec::SmallVec;
 
 use crate::{
     canvas::LunaCanvas,
-    node::{NodeCommon, NodeId},
+    node::{CanvasNodeId, NodeCommon},
     theme::Theme,
     AppState,
 };
@@ -27,13 +27,13 @@ pub enum NodeSelection {
     /// No nodes are selected
     None,
     /// Exactly one node is selected
-    Single(NodeId),
+    Single(CanvasNodeId),
     /// Multiple nodes are selected
-    Multiple(Vec<NodeId>),
+    Multiple(Vec<CanvasNodeId>),
 }
 
-impl From<HashSet<NodeId>> for NodeSelection {
-    fn from(nodes: HashSet<NodeId>) -> Self {
+impl From<HashSet<CanvasNodeId>> for NodeSelection {
+    fn from(nodes: HashSet<CanvasNodeId>) -> Self {
         match nodes.len() {
             0 => NodeSelection::None,
             1 => match nodes.iter().next() {
@@ -41,7 +41,7 @@ impl From<HashSet<NodeId>> for NodeSelection {
                 None => NodeSelection::None,
             },
             _ => {
-                let nodes_vec: Vec<NodeId> = nodes.into_iter().collect();
+                let nodes_vec: Vec<CanvasNodeId> = nodes.into_iter().collect();
                 NodeSelection::Multiple(nodes_vec)
             }
         }
@@ -134,12 +134,16 @@ impl Inspector {
                     // Add color properties with integers instead of decimals
                     if let Some(border_color) = node.border_color() {
                         let color_str = self.format_color_string(border_color.to_string());
-                        self.properties.border_color.push(SharedString::from(color_str));
+                        self.properties
+                            .border_color
+                            .push(SharedString::from(color_str));
                     }
 
                     if let Some(fill_color) = node.fill() {
                         let color_str = self.format_color_string(fill_color.to_string());
-                        self.properties.background_color.push(SharedString::from(color_str));
+                        self.properties
+                            .background_color
+                            .push(SharedString::from(color_str));
                     }
                 }
             }
@@ -174,11 +178,13 @@ impl Inspector {
 
                         // Collect color values
                         if let Some(border_color) = node.border_color() {
-                            all_border_colors.push(self.format_color_string(border_color.to_string()));
+                            all_border_colors
+                                .push(self.format_color_string(border_color.to_string()));
                         }
 
                         if let Some(fill_color) = node.fill() {
-                            all_background_colors.push(self.format_color_string(fill_color.to_string()));
+                            all_background_colors
+                                .push(self.format_color_string(fill_color.to_string()));
                         }
                     }
                 }
@@ -282,30 +288,39 @@ impl Inspector {
 
         cx.notify();
     }
-    
+
     /// Format a color string to use integers instead of decimals
     fn format_color_string(&self, color_str: String) -> String {
         // Replace decimal numbers with integers in color strings
         // Example: rgba(255.00, 0.00, 0.00, 1.00) -> rgba(255, 0, 0, 1)
         let mut result = color_str;
-        
+
         // Find all decimal numbers and replace them
         let decimal_regex = regex::Regex::new(r"(\d+)\.\d+").unwrap();
         result = decimal_regex.replace_all(&result, "$1").to_string();
-        
+
         result
     }
-    
+
     /// Converts property data to the format needed by UI components
     /// with visual rounding applied to numerical values
-    fn get_ui_property_values(&self) -> (Option<Vec<f32>>, Option<Vec<f32>>, Option<Vec<f32>>, 
-                                        Option<Vec<f32>>, Option<Vec<f32>>, Option<Vec<f32>>,
-                                        Option<SharedString>, Option<SharedString>) {
+    fn get_ui_property_values(
+        &self,
+    ) -> (
+        Option<Vec<f32>>,
+        Option<Vec<f32>>,
+        Option<Vec<f32>>,
+        Option<Vec<f32>>,
+        Option<Vec<f32>>,
+        Option<Vec<f32>>,
+        Option<SharedString>,
+        Option<SharedString>,
+    ) {
         // Helper function to round f32 values to one decimal place
         let round_values = |values: &[f32]| -> Vec<f32> {
             values.iter().map(|&v| (v * 10.0).round() / 10.0).collect()
         };
-        
+
         // Convert SmallVec properties to Option<Vec<f32>> with rounding
         let x = if self.properties.x.is_empty() {
             None
@@ -359,8 +374,17 @@ impl Inspector {
         } else {
             Some(SharedString::from("Mixed"))
         };
-        
-        (x, y, width, height, border_width, corner_radius, border_color, background_color)
+
+        (
+            x,
+            y,
+            width,
+            height,
+            border_width,
+            corner_radius,
+            border_color,
+            background_color,
+        )
     }
 }
 
@@ -370,9 +394,9 @@ impl Render for Inspector {
 
         // Update properties based on current selection
         self.update_selected_node_properties(cx);
-        
+
         // Get property values formatted for UI display with appropriate rounding
-        let (x, y, width, height, border_width, corner_radius, border_color, background_color) = 
+        let (x, y, width, height, border_width, corner_radius, border_color, background_color) =
             self.get_ui_property_values();
 
         let inner = div()

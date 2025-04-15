@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use crate::{
     canvas::LunaCanvas,
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeType},
+    node::{frame::FrameNode, NodeCommon, CanvasNodeId, NodeType},
     theme::Theme,
 };
 
@@ -20,7 +20,7 @@ use crate::{
 #[derive(IntoElement)]
 pub struct LayerListItem {
     kind: NodeType,
-    node_id: NodeId,
+    node_id: CanvasNodeId,
     name: SharedString,
     selected: bool,
     nesting_level: usize,
@@ -30,7 +30,7 @@ pub struct LayerListItem {
 impl LayerListItem {
     pub fn new(
         weak_canvas_handle: WeakEntity<LunaCanvas>,
-        node_id: NodeId,
+        node_id: CanvasNodeId,
         name: impl Into<SharedString>,
         kind: NodeType,
     ) -> Self {
@@ -103,7 +103,7 @@ impl LayerList {
     }
 
     // Helper method to find the parent of a node
-    fn find_parent(&self, nodes: &[FrameNode], node_id: NodeId) -> Option<NodeId> {
+    fn find_parent(&self, nodes: &[FrameNode], node_id: CanvasNodeId) -> Option<CanvasNodeId> {
         for node in nodes {
             if node.children().contains(&node_id) {
                 return Some(node.id());
@@ -117,9 +117,9 @@ impl LayerList {
         &self,
         weak_canvas_handle: WeakEntity<LunaCanvas>,
         nodes: &[FrameNode],
-        parent_id: Option<NodeId>,
+        parent_id: Option<CanvasNodeId>,
         nesting_level: usize,
-        selected_nodes: &HashSet<NodeId>,
+        selected_nodes: &HashSet<CanvasNodeId>,
     ) -> Vec<LayerListItem> {
         let mut items = Vec::new();
 

@@ -7,7 +7,7 @@
 //! ## Architecture
 //!
 //! Scene nodes form the backbone of Luna's spatial organization:
-//! 
+//!
 //! - They track parent-child relationships in the scene hierarchy
 //! - They maintain both local and world transformation matrices
 //! - They store both local and world bounds for efficient spatial operations
@@ -16,7 +16,7 @@
 //! Scene nodes provide the spatial organization layer, while data nodes (NodeId)
 //! contain the actual element properties.
 
-use crate::node::NodeId;
+use crate::node::CanvasNodeId;
 use crate::scene_graph::SceneNodeId;
 use gpui::{Bounds, TransformationMatrix};
 use std::fmt::Debug;
@@ -54,7 +54,7 @@ pub struct SceneNode {
     pub(crate) world_bounds: Bounds<f32>,
 
     /// Associated data node ID
-    pub(crate) data_node_id: Option<NodeId>,
+    pub(crate) data_node_id: Option<CanvasNodeId>,
 
     /// Visibility flag
     pub(crate) visible: bool,
@@ -72,7 +72,7 @@ impl SceneNode {
     ///
     /// After creation, the node must be inserted into the scene graph and
     /// have its transforms and bounds updated accordingly.
-    pub fn new(parent: Option<SceneNodeId>, data_node_id: Option<NodeId>) -> Self {
+    pub fn new(parent: Option<SceneNodeId>, data_node_id: Option<CanvasNodeId>) -> Self {
         Self {
             parent,
             children: Vec::new(),

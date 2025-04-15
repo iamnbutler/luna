@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::node::NodeId;
+use crate::node::CanvasNodeId;
 use anyhow::Error;
 use gpui::{App, Bounds, Pixels, Point, Size, TransformationMatrix, Window};
 use slotmap::{KeyData, SlotMap};
@@ -169,8 +169,6 @@ impl std::hash::Hash for GraphNodeId {
     }
 }
 
-// TODO: Should transforms & bounds be storeed on the node in
-// both local and world values?
 pub struct GraphNode {
     parent: Option<GraphNodeId>,
     children: Vec<NodeElementId>,
@@ -178,7 +176,7 @@ pub struct GraphNode {
     world_transform: TransformationMatrix,
     local_bounds: Bounds<f32>,
     world_bounds: Bounds<f32>,
-    data_node_id: Option<NodeId>,
+    data_node_id: Option<CanvasNodeId>,
     visible: bool,
     dirty: bool,
 }
@@ -230,7 +228,7 @@ pub struct SceneGraph2 {
     dirty_nodes: HashSet<GraphNodeId>,
 
     /// Maps from data node IDs to scene node IDs, allowing bidirectional lookups
-    node_mapping: HashMap<NodeId, NodeElementId>,
+    node_mapping: HashMap<CanvasNodeId, NodeElementId>,
 }
 
 impl SceneGraph2 {
@@ -261,7 +259,7 @@ impl SceneGraph2 {
     fn create_node(
         &mut self,
         parent: Option<GraphNodeId>,
-        data_node_id: Option<NodeId>,
+        data_node_id: Option<CanvasNodeId>,
     ) -> NodeElementId {
         // Determine parent ID, default to root if none provided
         let parent_id = match parent {
@@ -425,49 +423,27 @@ impl SceneGraph2 {
         let width = local_bounds.size.width;
         let height = local_bounds.size.height;
 
-        // Create points for the four corners
-        let top_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y));
-        let top_right = gpui::Point::new(gpui::Pixels(origin_x + width), gpui::Pixels(origin_y));
-        let bottom_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y + height));
-        let bottom_right = gpui::Point::new(
+        let tl_point = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y));
+        let tr_point = gpui::Point::new(gpui::Pixels(origin_x + width), gpui::Pixels(origin_y));
+        let bl_point = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y + height));
+        let br_point = gpui::Point::new(
             gpui::Pixels(origin_x + width),
             gpui::Pixels(origin_y + height),
         );
 
-        // Apply the transformation
-        let top_left_transformed = transform.apply(top_left);
-        let top_right_transformed = transform.apply(top_right);
-        let bottom_left_transformed = transform.apply(bottom_left);
-        let bottom_right_transformed = transform.apply(bottom_right);
+        let tl = transform.apply(tl_point);
+        let tr = transform.apply(tr_point);
+        let bl = transform.apply(bl_point);
+        let br = transform.apply(br_point);
 
         // Calculate the extremes to create an axis-aligned bounding box
-        let min_x = top_left_transformed
-            .x
-            .0
-            .min(top_right_transformed.x.0)
-            .min(bottom_left_transformed.x.0)
-            .min(bottom_right_transformed.x.0);
+        let min_x = tl.x.0.min(tr.x.0).min(bl.x.0).min(br.x.0);
 
-        let min_y = top_left_transformed
-            .y
-            .0
-            .min(top_right_transformed.y.0)
-            .min(bottom_left_transformed.y.0)
-            .min(bottom_right_transformed.y.0);
+        let min_y = tl.y.0.min(tr.y.0).min(bl.y.0).min(br.y.0);
 
-        let max_x = top_left_transformed
-            .x
-            .0
-            .max(top_right_transformed.x.0)
-            .max(bottom_left_transformed.x.0)
-            .max(bottom_right_transformed.x.0);
+        let max_x = tl.x.0.max(tr.x.0).max(bl.x.0).max(br.x.0);
 
-        let max_y = top_left_transformed
-            .y
-            .0
-            .max(top_right_transformed.y.0)
-            .max(bottom_left_transformed.y.0)
-            .max(bottom_right_transformed.y.0);
+        let max_y = tl.y.0.max(tr.y.0).max(bl.y.0).max(br.y.0);
 
         // Update world bounds
         if let Some(node) = self.nodes.get_mut(node_id) {
@@ -521,7 +497,7 @@ impl SceneGraph2 {
     }
 
     /// Removes a node and all its children from the scene graph
-    fn remove_node(&mut self, node_id: GraphNodeId) -> Option<NodeId> {
+    fn remove_node(&mut self, node_id: GraphNodeId) -> Option<CanvasNodeId> {
         match node_id {
             GraphNodeId::Node(id) => {
                 // Can't remove the root node
@@ -566,7 +542,7 @@ impl SceneGraph2 {
     }
 
     /// Gets the data node ID associated with a scene node
-    fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<NodeId> {
+    fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<CanvasNodeId> {
         match scene_node_id {
             GraphNodeId::Node(id) => self.nodes.get(id).and_then(|node| node.data_node_id),
             _ => None,
@@ -574,7 +550,7 @@ impl SceneGraph2 {
     }
 
     /// Gets the scene node ID associated with a data node
-    fn get_scene_node_id(&self, data_node_id: NodeId) -> Option<GraphNodeId> {
+    fn get_canvas_node_id(&self, data_node_id: CanvasNodeId) -> Option<GraphNodeId> {
         self.node_mapping
             .get(&data_node_id)
             .map(|&id| GraphNodeId::Node(id))
@@ -727,7 +703,7 @@ impl<'a> ModContext<'a> {
     pub fn create_node_with_data(
         &mut self,
         parent: Option<GraphNodeId>,
-        data_node_id: NodeId,
+        data_node_id: CanvasNodeId,
     ) -> NodeElementId {
         let parent = parent.unwrap_or_else(|| GraphNodeId::Node(self.scene.root));
         // Use existing create_node logic with data node ID
@@ -739,7 +715,7 @@ impl<'a> ModContext<'a> {
     }
 
     /// Removes a node and all its children from the scene graph
-    pub fn remove_node(&mut self, node_id: GraphNodeId) -> Option<NodeId> {
+    pub fn remove_node(&mut self, node_id: GraphNodeId) -> Option<CanvasNodeId> {
         self.scene.remove_node(node_id)
     }
 
@@ -761,12 +737,12 @@ impl<'a> ModContext<'a> {
         self.scene.set_node_visibility(node_id, visible)
     }
 
-    pub fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<NodeId> {
+    pub fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<CanvasNodeId> {
         self.scene.get_data_node_id(scene_node_id)
     }
 
-    pub fn get_scene_node_id(&self, data_node_id: NodeId) -> Option<GraphNodeId> {
-        self.scene.get_scene_node_id(data_node_id)
+    pub fn get_scene_node_id(&self, data_node_id: CanvasNodeId) -> Option<GraphNodeId> {
+        self.scene.get_canvas_node_id(data_node_id)
     }
 
     // Transition to Update phase.
@@ -807,12 +783,12 @@ impl<'a> QueryContext<'a> {
         self.scene.get_local_bounds(node_id)
     }
 
-    pub fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<NodeId> {
+    pub fn get_data_node_id(&self, scene_node_id: GraphNodeId) -> Option<CanvasNodeId> {
         self.scene.get_data_node_id(scene_node_id)
     }
 
-    pub fn get_scene_node_id(&self, data_node_id: NodeId) -> Option<GraphNodeId> {
-        self.scene.get_scene_node_id(data_node_id)
+    pub fn get_scene_node_id(&self, data_node_id: CanvasNodeId) -> Option<GraphNodeId> {
+        self.scene.get_canvas_node_id(data_node_id)
     }
 
     pub fn hit_test(&self, point: LocalPoint) -> Vec<GraphNodeId> {
@@ -853,27 +829,4 @@ impl LocalPoint {
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
-}
-
-//--|CANVAS|--//
-
-pub enum Direction {
-    North,
-    East,
-    South,
-    West,
-}
-
-pub fn new_canvas(window: &mut Window, cx: &mut App) {}
-
-pub struct Canvas {
-    visible_bounds: Bounds<f32>,
-    bounds: Bounds<f32>,
-    // scale factor = zoom
-    scale_factor: f32,
-}
-
-impl Canvas {
-    pub fn update_visible_bounds(&mut self) {}
-    pub fn expand_bounds(&mut self, direction: Direction, amount: f32) {}
 }
