@@ -96,7 +96,7 @@ pub struct LunaCanvas {
 
     /// The initial positions of selected elements before dragging
     /// Used to calculate relative positions when dragging multiple elements
-    element_initial_positions: HashMap<NodeId, Point<f32>>,
+    element_initial_positions: HashMap<NodeId, crate::coordinates::WorldPoint>,
 
     /// Tracks a potential parent frame when dragging elements
     /// Used to highlight frames that can become parents when dropping elements
@@ -303,10 +303,10 @@ impl LunaCanvas {
         self.active_element_draw = None;
     }
 
-    pub fn element_initial_positions(&self) -> &HashMap<NodeId, Point<f32>> {
+    pub fn element_initial_positions(&self) -> &HashMap<NodeId, crate::coordinates::WorldPoint> {
         &self.element_initial_positions
     }
-    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, Point<f32>> {
+    pub fn element_initial_positions_mut(&mut self) -> &mut HashMap<NodeId, crate::coordinates::WorldPoint> {
         &mut self.element_initial_positions
     }
 
@@ -337,6 +337,7 @@ impl LunaCanvas {
     /// Convert a window-relative point to canvas-relative point
     /// With 0,0 at the center of the canvas
     pub fn window_to_canvas_point(&self, window_point: Point<f32>) -> Point<f32> {
+        // For backward compatibility, maintain the original implementation
         // Calculate center of viewport in window space
         let center_x = self.viewport.size.width / 2.0;
         let center_y = self.viewport.size.height / 2.0;
@@ -419,12 +420,15 @@ impl LunaCanvas {
             // Set initial bounds from node layout
             let node = self.nodes.last().unwrap();
             let layout = node.layout();
-            let bounds = Bounds {
-                origin: Point::new(layout.x, layout.y),
-                size: Size::new(layout.width, layout.height),
-            };
-
-            sg.set_local_bounds(scene_node, bounds);
+            
+            // Create bounds using typed coordinates
+            use crate::coordinates::{WorldPoint, CanvasBounds, CanvasSize};
+            let origin = WorldPoint::new(layout.x, layout.y);
+            let size = CanvasSize::new(layout.width, layout.height);
+            let bounds = CanvasBounds::new(origin, size);
+            
+            // Convert to gpui Bounds for the scene graph
+            sg.set_local_bounds(scene_node, bounds.to_bounds());
         });
 
         self.dirty = true;
@@ -725,6 +729,8 @@ impl LunaCanvas {
 
     /// Update the content bounds of the canvas
     fn update_content_bounds(&mut self) {
+        use crate::coordinates::{WorldPoint, CanvasBounds, CanvasSize};
+        
         let mut min_x = f32::MAX;
         let mut min_y = f32::MAX;
         let mut max_x = f32::MIN;
@@ -741,10 +747,13 @@ impl LunaCanvas {
 
         // Update content bounds if we have nodes
         if min_x != f32::MAX {
-            self.content_bounds = Bounds {
-                origin: Point::new(min_x, min_y),
-                size: Size::new(max_x - min_x, max_y - min_y),
-            };
+            // Create bounds using typed coordinates
+            let origin = WorldPoint::new(min_x, min_y);
+            let size = CanvasSize::new(max_x - min_x, max_y - min_y);
+            let canvas_bounds = CanvasBounds::new(origin, size);
+            
+            // Convert to GPUI bounds for storage
+            self.content_bounds = canvas_bounds.to_bounds();
         }
     }
 
@@ -846,11 +855,16 @@ impl LunaCanvas {
         position: Point<f32>,
         cx: &mut Context<Self>,
     ) -> NodeId {
+        use crate::coordinates::WorldPoint;
+        
         let id = self.generate_id();
 
+        // Convert to WorldPoint if needed
+        let world_position = WorldPoint::from_point(position);
+        
         // Create a rectangle node at the specified position
         let mut rect = FrameNode::new(id);
-        *rect.layout_mut() = NodeLayout::new(position.x, position.y, 100.0, 100.0);
+        *rect.layout_mut() = NodeLayout::new(world_position.x, world_position.y, 100.0, 100.0);
 
         self.add_node(rect, None, cx)
     }
@@ -880,7 +894,7 @@ impl LunaCanvas {
             if self.selected_nodes.contains(&node.id()) {
                 let layout = node.layout();
                 self.element_initial_positions
-                    .insert(node.id(), Point::new(layout.x, layout.y));
+                    .insert(node.id(), crate::coordinates::WorldPoint::new(layout.x, layout.y));
             }
         }
     }
@@ -895,6 +909,8 @@ impl LunaCanvas {
     /// * `delta` - The transformation vector to apply to all selected elements
     /// * `cx` - Context used for scene graph updates
     pub fn move_selected_nodes_with_drag(&mut self, delta: Point<f32>, cx: &mut Context<Self>) {
+        use crate::coordinates::{WorldPoint, CanvasBounds, CanvasSize};
+        
         for node in &mut self.nodes {
             // Get the node ID first before any mutable borrows
             let node_id = node.id();
@@ -918,12 +934,15 @@ impl LunaCanvas {
                         .update(cx, |sg, _cx| sg.get_scene_node_id(node_id))
                     {
                         self.scene_graph.update(cx, |sg, _cx| {
+                            // Create bounds using typed coordinates
+                            let origin = WorldPoint::new(new_x, new_y);
+                            let size = CanvasSize::new(width, height);
+                            let bounds = CanvasBounds::new(origin, size);
+                            
+                            // Convert to gpui Bounds for the scene graph
                             sg.set_local_bounds(
                                 scene_node_id,
-                                Bounds {
-                                    origin: Point::new(new_x, new_y),
-                                    size: Size::new(width, height),
-                                },
+                                bounds.to_bounds(),
                             );
                         });
                     }
@@ -1108,8 +1127,19 @@ impl LunaCanvas {
                 let child_layout = child_node.layout_mut();
                 
                 // Convert from world coordinates to coordinates relative to parent
-                child_layout.x = world_bounds.origin.x - parent_x;
-                child_layout.y = world_bounds.origin.y - parent_y;
+                // Use proper coordinate types
+                use crate::coordinates::{WorldPoint, LocalPoint};
+                
+                // Create world points
+                let world_point = WorldPoint::new(world_bounds.origin.x, world_bounds.origin.y);
+                let parent_point = WorldPoint::new(parent_x, parent_y);
+                
+                // Convert to local coordinates
+                let local_point = world_point.to_local(parent_point);
+                
+                // Update layout with local coordinates
+                child_layout.x = local_point.x;
+                child_layout.y = local_point.y;
                 
                 // Recursively update this child's children
                 self.update_child_layouts_after_parent_resize(child_id, cx);

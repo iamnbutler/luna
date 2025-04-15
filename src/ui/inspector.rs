@@ -123,11 +123,35 @@ impl Inspector {
             NodeSelection::Single(node_id) => {
                 let canvas_read = canvas.read(cx);
                 if let Some(node) = canvas_read.nodes().iter().find(|node| node.id() == node_id) {
-                    // Round position and size values to one decimal place
-                    self.properties.x.push(node.layout().x);
-                    self.properties.y.push(node.layout().y);
-                    self.properties.width.push(node.layout().width);
-                    self.properties.height.push(node.layout().height);
+                    // We don't need to access the viewport directly for coordinate conversion
+                    
+                    // Use the coordinates system for conversion
+                    use crate::coordinates::{PositionStore, WorldPoint};
+                    
+                    // Get the node's position in canvas coordinate system
+                    let node_x = node.layout().x;
+                    let node_y = node.layout().y;
+                    let node_width = node.layout().width;
+                    let node_height = node.layout().height;
+                    
+                    // Convert node's position from canvas-centered to window-relative coordinates
+                    // This displays the coordinates relative to the top-left as users would expect
+                    let position_data = cx.position_data();
+                    let position_data = position_data.read().unwrap();
+                    
+                    // Create a WorldPoint from the node's coordinates
+                    let world_point = WorldPoint::new(node_x, node_y);
+                    
+                    // Convert to window coordinates
+                    let window_point = position_data.world_to_window(world_point, canvas_read.zoom());
+                    
+                    // Use the window coordinates for display
+                    self.properties.x.push(window_point.x);
+                    self.properties.y.push(window_point.y);
+                    
+                    // Keep size values as is (not affected by coordinate system)
+                    self.properties.width.push(node_width);
+                    self.properties.height.push(node_height);
                     self.properties.border_width.push(node.border_width());
                     self.properties.corner_radius.push(node.corner_radius());
 
@@ -147,6 +171,12 @@ impl Inspector {
                 // For multiple selections, we'll collect all values and then
                 // check if they're all the same to properly handle the "Mixed" state
                 let canvas_read = canvas.read(cx);
+                
+                // Get conversion tools ready
+                use crate::coordinates::{PositionStore, WorldPoint};
+                let position_data = cx.position_data();
+                let position_data = position_data.read().unwrap();
+                let zoom = canvas_read.zoom();
 
                 // Temporary collections for all values
                 let mut all_x = Vec::new();
@@ -165,8 +195,19 @@ impl Inspector {
                         .iter()
                         .find(|node| node.id() == *node_id)
                     {
-                        all_x.push(node.layout().x);
-                        all_y.push(node.layout().y);
+                        // Get node properties
+                        let node_x = node.layout().x;
+                        let node_y = node.layout().y;
+                        
+                        // Convert to window coordinates for display
+                        let world_point = WorldPoint::new(node_x, node_y);
+                        let window_point = position_data.world_to_window(world_point, zoom);
+                        
+                        // Store window coordinates for display
+                        all_x.push(window_point.x);
+                        all_y.push(window_point.y);
+                        
+                        // Size values stay as-is
                         all_width.push(node.layout().width);
                         all_height.push(node.layout().height);
                         all_border_width.push(node.border_width());

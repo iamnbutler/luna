@@ -216,9 +216,10 @@ mod tests {
         let id = NodeId::new(1);
         let frame = FrameNode::with_rect(id, 10.0, 10.0, 100.0, 100.0);
 
-        // Test points inside and outside
-        let point_inside = Point::new(50.0, 50.0);
-        let point_outside = Point::new(200.0, 200.0);
+        // Test points inside and outside using WorldPoint
+        use crate::coordinates::WorldPoint;
+        let point_inside = WorldPoint::new(50.0, 50.0);
+        let point_outside = WorldPoint::new(200.0, 200.0);
 
         assert!(frame.contains_point(&point_inside));
         assert!(!frame.contains_point(&point_outside));

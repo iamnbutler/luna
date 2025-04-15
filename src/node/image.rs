@@ -159,9 +159,10 @@ mod tests {
         let src = "https://example.com/image.jpg".to_string();
         let image = ImageNode::with_rect(id, src, 10.0, 10.0, 100.0, 100.0);
 
-        // Test points inside and outside
-        let point_inside = Point::new(50.0, 50.0);
-        let point_outside = Point::new(200.0, 200.0);
+        // Test points inside and outside using WorldPoint
+        use crate::coordinates::WorldPoint;
+        let point_inside = WorldPoint::new(50.0, 50.0);
+        let point_outside = WorldPoint::new(200.0, 200.0);
 
         assert!(image.contains_point(&point_inside));
         assert!(!image.contains_point(&point_outside));

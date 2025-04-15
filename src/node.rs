@@ -53,12 +53,19 @@ pub enum NodeType {
     Text,
 }
 
+use crate::coordinates::{LocalPoint, CanvasSize};
+
 /// Layout information for a node
 #[derive(Debug, Clone)]
 pub struct NodeLayout {
+    /// Position in local coordinate space (relative to parent)
+    /// x coordinate
     pub x: f32,
+    /// y coordinate
     pub y: f32,
+    /// width of the node
     pub width: f32,
+    /// height of the node
     pub height: f32,
 }
 
@@ -71,7 +78,18 @@ impl NodeLayout {
             height,
         }
     }
+    
+    /// Get the local position as a typed coordinate
+    pub fn position(&self) -> crate::coordinates::LocalPoint {
+        crate::coordinates::LocalPoint::new(self.x, self.y)
+    }
+    
+    /// Get the size as a typed coordinate
+    pub fn size(&self) -> crate::coordinates::CanvasSize {
+        crate::coordinates::CanvasSize::new(self.width, self.height)
+    }
 
+    /// Convert to GPUI bounds (for rendering)
     pub fn bounds(&self) -> Bounds<f32> {
         Bounds {
             origin: Point::new(self.x, self.y),
@@ -209,9 +227,9 @@ pub trait NodeCommon: std::fmt::Debug {
     fn set_shadows(&mut self, shadows: SmallVec<[Shadow; 1]>);
 
     /// Check if a point is inside this node
-    fn contains_point(&self, point: &Point<f32>) -> bool {
+    fn contains_point(&self, point: &crate::coordinates::WorldPoint) -> bool {
         let bounds = self.layout().bounds();
-        bounds.contains(point)
+        bounds.contains(&point.to_point())
     }
 
     /// Get the bounds of this node

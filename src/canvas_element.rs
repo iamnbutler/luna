@@ -485,7 +485,11 @@ impl CanvasElement {
                         .iter()
                         .rev() // Reverse to get top-to-bottom z-order
                         .filter(|node| !selected_ids.contains(&node.id()))
-                        .find(|node| node.contains_point(&drop_point))
+                        .find(|node| {
+                            // Convert to WorldPoint for contains_point check
+                            let world_point = crate::coordinates::WorldPoint::from_point(drop_point);
+                            node.contains_point(&world_point)
+                        })
                         .map(|parent_frame| ParentFrameInfo {
                             id: parent_frame.id(),
                             children: parent_frame.children().clone(),
@@ -674,7 +678,11 @@ impl CanvasElement {
                             .iter()
                             .rev() // Reverse to get top-to-bottom z-order
                             .filter(|node| !selected_ids.contains(&node.id()))
-                            .find(|node| node.contains_point(&canvas_point))
+                            .find(|node| {
+                                // Convert to WorldPoint for contains_point check
+                                let world_point = crate::coordinates::WorldPoint::from_point(canvas_point);
+                                node.contains_point(&world_point)
+                            })
                             .map(|node| node.id());
 
                         // Update the potential parent frame
