@@ -1122,6 +1122,99 @@ impl CanvasElement {
             window.paint_quad(gpui::fill(layout.hitbox.bounds, self.style.background));
         });
     }
+    
+    /// Paint a grid on the canvas.
+    ///
+    /// This draws a grid with major lines every 50px, minor lines every 10px,
+    /// and a stronger line at the origin (0,0).
+    fn paint_grid(
+        &self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            // Get canvas state to determine current scroll position and zoom
+            let canvas = self.canvas.read(cx);
+            let scroll_position = canvas.get_scroll_position();
+            let zoom = canvas.zoom();
+            
+            // Determine visible area in canvas coordinates
+            let bounds = layout.hitbox.bounds;
+            let top_left = canvas.window_to_canvas_point(Point::new(bounds.origin.x.0, bounds.origin.y.0));
+            let bottom_right = canvas.window_to_canvas_point(Point::new(
+                bounds.origin.x.0 + bounds.size.width.0,
+                bounds.origin.y.0 + bounds.size.height.0,
+            ));
+            
+            // Calculate grid boundaries
+            // Add some margin to ensure we cover the entire visible area
+            let start_x = (top_left.x / 10.0).floor() * 10.0 - 10.0;
+            let end_x = (bottom_right.x / 10.0).ceil() * 10.0 + 10.0;
+            let start_y = (top_left.y / 10.0).floor() * 10.0 - 10.0;
+            let end_y = (bottom_right.y / 10.0).ceil() * 10.0 + 10.0;
+            
+            // Get foreground color for grid lines with different alpha values
+            let theme = Theme::get_global(cx);
+            let minor_color = theme.tokens.text.opacity(0.05);
+            let major_color = theme.tokens.text.opacity(0.1);
+            let origin_color = theme.tokens.text.opacity(0.2);
+            
+            // Draw vertical grid lines
+            for x in (start_x as i32..=end_x as i32).step_by(10) {
+                let x_pos = x as f32;
+                // Convert canvas coordinate to window coordinate
+                let window_x = (x_pos - scroll_position.x) * zoom + bounds.origin.x.0;
+                
+                // Get line color based on position
+                let color = if x == 0 {
+                    // Origin line
+                    origin_color
+                } else if x % 50 == 0 {
+                    // Major line
+                    major_color
+                } else {
+                    // Minor line
+                    minor_color
+                };
+                
+                // Draw the vertical line
+                let line_bounds = Bounds {
+                    origin: Point::new(gpui::Pixels(window_x), bounds.origin.y),
+                    size: Size::new(gpui::Pixels(1.0), bounds.size.height),
+                };
+                window.paint_quad(gpui::fill(line_bounds, color));
+            }
+            
+            // Draw horizontal grid lines
+            for y in (start_y as i32..=end_y as i32).step_by(10) {
+                let y_pos = y as f32;
+                // Convert canvas coordinate to window coordinate
+                let window_y = (y_pos - scroll_position.y) * zoom + bounds.origin.y.0;
+                
+                // Get line color based on position
+                let color = if y == 0 {
+                    // Origin line
+                    origin_color
+                } else if y % 50 == 0 {
+                    // Major line
+                    major_color
+                } else {
+                    // Minor line
+                    minor_color
+                };
+                
+                // Draw the horizontal line
+                let line_bounds = Bounds {
+                    origin: Point::new(bounds.origin.x, gpui::Pixels(window_y)),
+                    size: Size::new(bounds.size.width, gpui::Pixels(1.0)),
+                };
+                window.paint_quad(gpui::fill(line_bounds, color));
+            }
+            
+            window.request_animation_frame();
+        });
+    }
 
     /// Register mouse listeners like click, hover and drag events.
     ///
@@ -1872,6 +1965,7 @@ impl Element for CanvasElement {
                 self.paint_mouse_listeners(layout, window, cx);
                 self.paint_scroll_wheel_listener(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
+                self.paint_grid(layout, window, cx); // Paint grid after background but before nodes
                 self.paint_nodes(layout, window, cx);
 
                 // Read canvas once to get all needed data
