@@ -20,10 +20,11 @@
 use assets::Assets;
 use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
+use coordinates::{GlobalPosition, PositionData, WorldPoint};
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
-    IntoElement, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
-    WindowOptions,
+    IntoElement, Menu, MenuItem, Size, TitlebarOptions, UpdateGlobal, Window,
+    WindowBackgroundAppearance, WindowOptions,
 };
 use keymap::init_keymap;
 use scene_graph::SceneGraph;
@@ -43,12 +44,12 @@ mod keymap;
 mod node;
 mod scene_graph;
 mod scene_node;
+#[cfg(test)]
+mod tests;
 mod theme;
 mod tools;
 mod ui;
 mod util;
-#[cfg(test)]
-mod tests;
 
 actions!(
     luna,
@@ -122,6 +123,16 @@ impl Luna {
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|_| Inspector::new(app_state.clone(), canvas.clone()));
         let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
+
+        cx.observe_window_bounds(window, move |_, window, cx| {
+            let bounds = window.bounds();
+            let window_size = gpui::Size::new(bounds.size.width.0, bounds.size.height.0);
+
+            GlobalPosition::update_global(cx, |position, cx| {
+                position.0.write().unwrap().update_dimensions(window_size);
+            });
+        })
+        .detach();
 
         Luna {
             app_state,
@@ -250,15 +261,11 @@ impl Focusable for Luna {
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalTool(Arc::new(Tool::default())));
-    
-    // Initialize position data with default values
-    use coordinates::{GlobalPosition, PositionData, WorldPoint};
+
     use std::sync::RwLock;
-    
-    let initial_position = PositionData::new(
-        WorldPoint::new(0.0, 0.0),  // Initial canvas offset
-        gpui::Size::new(800.0, 600.0)  // Default window size, will be updated
-    );
+
+    let initial_position =
+        PositionData::new(WorldPoint::new(0.0, 0.0), gpui::Size::new(800.0, 600.0));
     cx.set_global(GlobalPosition(Arc::new(RwLock::new(initial_position))));
 }
 
