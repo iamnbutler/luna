@@ -1,6 +1,6 @@
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
-    coordinates::{WindowPoint, WorldPoint, PositionStore},
+    coordinates::{CanvasBounds, CanvasSize, PositionStore, WindowPoint, WorldPoint},
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
     node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType, Shadow},
     scene_graph::SceneGraph,
@@ -119,64 +119,56 @@ fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {
 }
 
 /// Detects if a point intersects with a resize handle on the node boundaries
-fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Option<ResizeHandle> {
+fn point_in_resize_handle(point: WorldPoint, node_bounds: &CanvasBounds) -> Option<ResizeHandle> {
     use ResizeHandle;
 
-    // Define handle size and boundaries
-    const HANDLE_SIZE: f32 = 11.0; // Increased from 7.0 to provide a larger hit area
+    const HANDLE_SIZE: f32 = 11.0;
     const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
 
-    // Create bounds for each corner handle
+    let bounds = |origin: WorldPoint| -> CanvasBounds {
+        CanvasBounds {
+            origin,
+            size: CanvasSize::new(HANDLE_SIZE, HANDLE_SIZE),
+        }
+    };
+
     let handles = [
         // Top left
         (
-            Bounds {
-                origin: Point::new(
-                    node_bounds.origin.x - HALF_HANDLE,
-                    node_bounds.origin.y - HALF_HANDLE,
-                ),
-                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
-            },
+            bounds(WorldPoint::new(
+                node_bounds.origin.x - HALF_HANDLE,
+                node_bounds.origin.y - HALF_HANDLE,
+            )),
             ResizeHandle::TopLeft,
         ),
         // Top right
         (
-            Bounds {
-                origin: Point::new(
-                    node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
-                    node_bounds.origin.y - HALF_HANDLE,
-                ),
-                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
-            },
+            bounds(WorldPoint::new(
+                node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
+                node_bounds.origin.y - HALF_HANDLE,
+            )),
             ResizeHandle::TopRight,
         ),
         // Bottom left
         (
-            Bounds {
-                origin: Point::new(
-                    node_bounds.origin.x - HALF_HANDLE,
-                    node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
-                ),
-                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
-            },
+            bounds(WorldPoint::new(
+                node_bounds.origin.x - HALF_HANDLE,
+                node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
+            )),
             ResizeHandle::BottomLeft,
         ),
         // Bottom right
         (
-            Bounds {
-                origin: Point::new(
-                    node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
-                    node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
-                ),
-                size: Size::new(HANDLE_SIZE, HANDLE_SIZE),
-            },
+            bounds(WorldPoint::new(
+                node_bounds.origin.x + node_bounds.size.width - HALF_HANDLE,
+                node_bounds.origin.y + node_bounds.size.height - HALF_HANDLE,
+            )),
             ResizeHandle::BottomRight,
         ),
     ];
 
-    // Check if point is inside any handle
     for (bounds, handle) in handles {
-        if bounds.contains(&point) {
+        if bounds.contains(point) {
             return Some(handle);
         }
     }
@@ -219,12 +211,6 @@ pub struct CanvasLayout {
     hitbox: Hitbox,
 }
 
-/// CanvasElement uses  prefixes for identifying the role of methods within the canvas.
-///
-/// - handle_: handle user input events
-/// - layout_: layout elements within the canvas
-/// - paint_: paint elements within the canvas
-/// - data_:  returns some derived data for other methods to use within the canvas
 pub struct CanvasElement {
     canvas: Entity<LunaCanvas>,
     style: CanvasStyle,
@@ -255,37 +241,27 @@ impl CanvasElement {
         register_canvas_action(canvas, window, LunaCanvas::clear_selection);
     }
 
-    // handle_mouse_down, etc
-    // Helper function to find the top node at a given point using scene graph for efficiency
     fn find_top_node_at_point(
         canvas: &LunaCanvas,
         window_point: Point<f32>,
         cx: &Context<LunaCanvas>,
     ) -> Option<NodeId> {
-        // Convert window coordinate to canvas (world) coordinate
-        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-        
-        // Get position data and zoom from canvas
         let position_data_arc = cx.position_data();
         let position_data = position_data_arc.read().unwrap();
+        let scene_graph = canvas.scene_graph().read(cx);
         let zoom = canvas.zoom();
-        
-        // Convert window point to world point
-        let window_point = WindowPoint::from_point(window_point);
-        let canvas_point = position_data.window_to_world(window_point, zoom).to_point();
 
-        // Direct node testing with 1x1 selection point for hit detection
-        let select_point_bounds = Bounds {
-            origin: canvas_point,
-            size: Size::new(1.0, 1.0),
-        };
+        let hit_point = WindowPoint::from_point(window_point);
 
-        // Test each node to see if it contains this point
-        // Iterate in reverse order to match the painting order (last node is visually on top)
+        let world_point = position_data.window_to_world(hit_point, zoom);
+
         for node in canvas.nodes().iter().rev() {
-            let node_bounds = node.bounds();
-            if node_bounds.contains(&canvas_point) {
-                return Some(node.id());
+            if let Some(scene_node_id) = scene_graph.get_scene_node_id(node.id()) {
+                if let Some(canvas_bounds) = scene_graph.get_world_canvas_bounds(scene_node_id) {
+                    if canvas_bounds.contains(world_point) {
+                        return Some(node.id());
+                    }
+                }
             }
         }
 
@@ -309,34 +285,25 @@ impl CanvasElement {
 
         match *active_tool {
             Tool::Selection => {
-                // First, check if we've clicked on a resize handle when only a single node is selected
                 if canvas.selected_nodes().len() == 1 {
-                    // Get the bounds of the selected node
                     let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
                     if let Some(node) = canvas.nodes().iter().find(|n| n.id() == selected_node_id) {
                         let node_layout = node.layout();
 
-                        // Create node bounds to check for resize handle hits
-                        let node_bounds = Bounds {
-                            origin: Point::new(node_layout.x, node_layout.y),
-                            size: Size::new(node_layout.width, node_layout.height),
+                        let node_bounds = CanvasBounds {
+                            origin: WorldPoint::new(node_layout.x, node_layout.y),
+                            size: CanvasSize::new(node_layout.width, node_layout.height),
                         };
 
-                        // Convert canvas point to world coordinates for hit detection
-                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-                        
-                        // Get position data and zoom from canvas
                         let position_data_arc = cx.position_data();
                         let position_data = position_data_arc.read().unwrap();
                         let zoom = canvas.zoom();
-                        
-                        // Convert window point to world point
-                        let window_point = WindowPoint::from_point(canvas_point);
-                        let world_point = position_data.window_to_world(window_point, zoom).to_point();
 
-                        // Check if the point is within any resize handle
+                        let window_point = WindowPoint::from_point(canvas_point);
+                        let world_point = position_data.window_to_world(window_point, zoom);
+
+                        // are we resizing?
                         if let Some(handle) = point_in_resize_handle(world_point, &node_bounds) {
-                            // Create a resize operation with the original node dimensions
                             let resize_op = ResizeOperation::new(
                                 handle,
                                 node_layout.x,
@@ -345,7 +312,6 @@ impl CanvasElement {
                                 node_layout.height,
                             );
 
-                            // Start a resize drag operation
                             canvas.set_active_drag(ActiveDrag::new_resize(position, resize_op));
                             canvas.mark_dirty(cx);
                             cx.stop_propagation();
@@ -354,44 +320,33 @@ impl CanvasElement {
                     }
                 }
 
-                // If we didn't hit a resize handle, proceed with normal selection behavior
-                // Attempt to find a node at the clicked point
+                // selecting
                 if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
-                    // Check if we clicked on a node that's already selected
                     let already_selected = canvas.is_node_selected(node_id);
 
-                    // If shift is not pressed, clear current selection first (unless clicking on already selected)
                     let modifiers = event.modifiers;
                     if !modifiers.shift && !already_selected {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
-                    // If shift is pressed and node is already selected, deselect it
                     if modifiers.shift && already_selected {
                         canvas.deselect_node(node_id);
                     } else {
-                        // Otherwise select the node
                         canvas.select_node(node_id);
                     }
 
-                    // If we clicked on a selected node, we should start dragging it
                     if canvas.is_node_selected(node_id) {
-                        // Save initial positions of all selected elements
                         canvas.save_selected_nodes_positions();
-
-                        // Start a move elements drag operation
                         canvas.set_active_drag(ActiveDrag::new_move_elements(position));
                     }
 
                     canvas.mark_dirty(cx);
                 } else {
-                    // Clicked on empty space - start a selection rectangle drag
-                    // First clear selection if shift is not pressed
                     if !event.modifiers.shift {
                         canvas.clear_selection(&ClearSelection, window, cx);
                     }
 
-                    // Only start a selection drag if using the Selection tool
+                    // selection drag
                     if *active_tool == Tool::Selection {
                         canvas.set_active_drag(ActiveDrag::new_selection(position));
                     }
@@ -399,7 +354,6 @@ impl CanvasElement {
                 }
             }
             Tool::Frame => {
-                // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
                 let active_drag = ActiveDrag::new_create_element(position);
@@ -432,7 +386,6 @@ impl CanvasElement {
         if let Some((node_id, node_type, active_drag)) = canvas.active_element_draw().take() {
             match (node_type, active_tool) {
                 (NodeType::Frame, Tool::Frame) => {
-                    // Calculate rectangle dimensions
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
 
@@ -443,41 +396,26 @@ impl CanvasElement {
 
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
-                        // Convert window coordinates to canvas coordinates
-                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-                        
-                        // Get position data and zoom from canvas
                         let position_data_arc = cx.position_data();
                         let position_data = position_data_arc.read().unwrap();
                         let zoom = canvas.zoom();
-                        
-                        // Convert window point to world point
+
                         let window_point = WindowPoint::from_point(Point::new(min_x, min_y));
                         let world_point = position_data.window_to_world(window_point, zoom);
-                        let rel_x = world_point.x;
-                        let rel_y = world_point.y;
 
-                        // Create a new rectangle node
                         let mut rect = FrameNode::new(node_id);
 
-                        // Set position and size
-                        *rect.layout_mut() = NodeLayout::new(rel_x, rel_y, width, height);
+                        *rect.layout_mut() =
+                            NodeLayout::new(world_point.x, world_point.y, width, height);
 
-                        // Set colors
                         rect.set_fill(Some(current_background_color));
                         rect.set_border(Some(current_border_color), 1.0);
 
-                        // Add the node to the canvas
                         let new_node_id = canvas.add_node(rect, None, cx);
-
-                        // Clear any existing selection
                         canvas.deselect_all_nodes(cx);
-
-                        // Select only the newly created element
                         canvas.select_node(new_node_id);
 
                         cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
-
                         canvas.mark_dirty(cx);
                     }
                 }
@@ -489,25 +427,17 @@ impl CanvasElement {
         if let Some(active_drag) = canvas.active_drag().take() {
             match active_drag.drag_type {
                 DragType::MoveElements => {
-                    // Check if the selected nodes are being dropped on a frame
-                    // by getting the topmost frame at the current mouse position, excluding selected frames
-                    // Convert window coordinates to canvas coordinates (centered system)
-                    use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-                    
-                    // Get position data and zoom from canvas
                     let position_data_arc = cx.position_data();
                     let position_data = position_data_arc.read().unwrap();
                     let zoom = canvas.zoom();
-                    
-                    // Convert window point to world point
-                    let window_point = WindowPoint::from_point(Point::new(position.x.0, position.y.0));
+
+                    let window_point =
+                        WindowPoint::from_point(Point::new(position.x.0, position.y.0));
                     let drop_point = position_data.window_to_world(window_point, zoom).to_point();
 
-                    // Get all the selected node IDs
                     let selected_ids: Vec<NodeId> =
                         canvas.selected_nodes().iter().cloned().collect();
 
-                    // Structure to hold all the information we need from the parent frame
                     struct ParentFrameInfo {
                         id: NodeId,
                         children: Vec<NodeId>,
@@ -515,15 +445,13 @@ impl CanvasElement {
                         y: f32,
                     }
 
-                    // Get all the information we need from the potential parent before borrowing canvas mutably
                     let parent_info = canvas
                         .nodes()
                         .iter()
                         .rev() // Reverse to get top-to-bottom z-order
                         .filter(|node| !selected_ids.contains(&node.id()))
                         .find(|node| {
-                            // Convert to WorldPoint for contains_point check
-                            let world_point = crate::coordinates::WorldPoint::from_point(drop_point);
+                            let world_point = WorldPoint::from_point(drop_point);
                             node.contains_point(&world_point)
                         })
                         .map(|parent_frame| ParentFrameInfo {
@@ -533,13 +461,9 @@ impl CanvasElement {
                             y: parent_frame.layout().y,
                         });
 
-                    // Process if we found a potential parent
                     if let Some(parent_info) = parent_info {
-                        // For each selected node, add it as a child to the parent frame
                         for &node_id in &selected_ids {
-                            // First, ensure the node isn't already a child of this frame
                             if !parent_info.children.contains(&node_id) {
-                                // Get canvas-space absolute position of child and parent before any changes
                                 let child_absolute_pos =
                                     if let Some(child_node) = canvas.get_node(node_id) {
                                         let child_layout = child_node.layout();
@@ -660,18 +584,22 @@ impl CanvasElement {
                         let max_y = start_pos.y.max(window_position.y);
 
                         // Convert to canvas coordinates
-                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-                        
+                        use crate::coordinates::{PositionStore, WindowPoint, WorldPoint};
+
                         // Get position data and zoom from canvas
                         let position_data_arc = cx.position_data();
                         let position_data = position_data_arc.read().unwrap();
                         let zoom = canvas.zoom();
-                        
+
                         // Convert window points to world points
                         let min_window_point = WindowPoint::from_point(Point::new(min_x, min_y));
                         let max_window_point = WindowPoint::from_point(Point::new(max_x, max_y));
-                        let min_point = position_data.window_to_world(min_window_point, zoom).to_point();
-                        let max_point = position_data.window_to_world(max_window_point, zoom).to_point();
+                        let min_point = position_data
+                            .window_to_world(min_window_point, zoom)
+                            .to_point();
+                        let max_point = position_data
+                            .window_to_world(max_window_point, zoom)
+                            .to_point();
 
                         // Create selection bounds
                         let selection_bounds = Bounds {
@@ -712,16 +640,18 @@ impl CanvasElement {
                         let delta = new_drag.delta();
 
                         // Get current canvas point to check for potential parent frames
-                        use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-                        
+                        use crate::coordinates::{PositionStore, WindowPoint, WorldPoint};
+
                         // Get position data and zoom from canvas
                         let position_data_arc = cx.position_data();
                         let position_data = position_data_arc.read().unwrap();
                         let zoom = canvas.zoom();
-                        
+
                         // Convert window point to world point
-                        let window_point = WindowPoint::from_point(Point::new(position.x.0, position.y.0));
-                        let canvas_point = position_data.window_to_world(window_point, zoom).to_point();
+                        let window_point =
+                            WindowPoint::from_point(Point::new(position.x.0, position.y.0));
+                        let canvas_point =
+                            position_data.window_to_world(window_point, zoom).to_point();
 
                         // Get all the selected node IDs
                         let selected_ids: Vec<NodeId> =
@@ -735,7 +665,8 @@ impl CanvasElement {
                             .filter(|node| !selected_ids.contains(&node.id()))
                             .find(|node| {
                                 // Convert to WorldPoint for contains_point check
-                                let world_point = crate::coordinates::WorldPoint::from_point(canvas_point);
+                                let world_point =
+                                    crate::coordinates::WorldPoint::from_point(canvas_point);
                                 node.contains_point(&world_point)
                             })
                             .map(|node| node.id());
@@ -751,39 +682,31 @@ impl CanvasElement {
                     // Nothing to do here - handled in the rectangle drawing code below
                 }
                 DragType::Resize(mut resize_op) => {
-                    // Handle resize operation
                     if canvas.selected_nodes().len() == 1 {
-                        // Get the zoom value before any mutable borrows
                         let zoom = canvas.zoom();
 
-                        // Get the selected node
                         let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
                         if let Some(node) = canvas.get_node_mut(selected_node_id) {
-                            // Convert window delta to canvas delta
                             let delta = Point::new(
                                 (position.x.0 - active_drag.start_position.x) / zoom,
                                 (position.y.0 - active_drag.start_position.y) / zoom,
                             );
 
-                            // Check modifiers: shift for aspect ratio, option (alt) for resize from center
                             let preserve_aspect_ratio = event.modifiers.shift;
                             let resize_from_center = event.modifiers.alt;
 
-                            // Update resize config
                             resize_op.config.preserve_aspect_ratio = preserve_aspect_ratio;
                             resize_op.config.resize_from_center = resize_from_center;
 
-                            // Calculate new dimensions based on resize handle and modifiers
                             let mut new_x = resize_op.original_position.x;
                             let mut new_y = resize_op.original_position.y;
                             let mut new_width = resize_op.original_size.width;
                             let mut new_height = resize_op.original_size.height;
 
-                            // Calculate aspect ratio if needed
                             let aspect_ratio = if preserve_aspect_ratio {
                                 resize_op.original_size.width / resize_op.original_size.height
                             } else {
-                                0.0 // Not used when not preserving aspect ratio
+                                0.0
                             };
 
                             // Adjust dimensions based on which handle is being dragged
@@ -798,13 +721,15 @@ impl CanvasElement {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
                                             new_width = resize_op.original_size.width + width_delta;
-                                            new_height = resize_op.original_size.height + adj_height;
+                                            new_height =
+                                                resize_op.original_size.height + adj_height;
                                             new_x = resize_op.original_position.x - width_delta;
                                             new_y = resize_op.original_position.y - adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
                                             new_width = resize_op.original_size.width + adj_width;
-                                            new_height = resize_op.original_size.height + height_delta;
+                                            new_height =
+                                                resize_op.original_size.height + height_delta;
                                             new_x = resize_op.original_position.x - adj_width;
                                             new_y = resize_op.original_position.y - height_delta;
                                         }
@@ -825,12 +750,14 @@ impl CanvasElement {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
                                             new_width = resize_op.original_size.width + width_delta;
-                                            new_height = resize_op.original_size.height + adj_height;
+                                            new_height =
+                                                resize_op.original_size.height + adj_height;
                                             new_y = resize_op.original_position.y - adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
                                             new_width = resize_op.original_size.width + adj_width;
-                                            new_height = resize_op.original_size.height + height_delta;
+                                            new_height =
+                                                resize_op.original_size.height + height_delta;
                                             new_y = resize_op.original_position.y - height_delta;
                                         }
                                     } else {
@@ -848,12 +775,14 @@ impl CanvasElement {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
                                             new_width = resize_op.original_size.width + width_delta;
-                                            new_height = resize_op.original_size.height + adj_height;
+                                            new_height =
+                                                resize_op.original_size.height + adj_height;
                                             new_x = resize_op.original_position.x - width_delta;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
                                             new_width = resize_op.original_size.width + adj_width;
-                                            new_height = resize_op.original_size.height + height_delta;
+                                            new_height =
+                                                resize_op.original_size.height + height_delta;
                                             new_x = resize_op.original_position.x - adj_width;
                                         }
                                     } else {
@@ -870,11 +799,13 @@ impl CanvasElement {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
                                             new_width = resize_op.original_size.width + width_delta;
-                                            new_height = resize_op.original_size.height + adj_height;
+                                            new_height =
+                                                resize_op.original_size.height + adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
                                             new_width = resize_op.original_size.width + adj_width;
-                                            new_height = resize_op.original_size.height + height_delta;
+                                            new_height =
+                                                resize_op.original_size.height + height_delta;
                                         }
                                     } else {
                                         new_width = resize_op.original_size.width + width_delta;
@@ -885,10 +816,10 @@ impl CanvasElement {
 
                             // If resize from center is enabled, adjust position to keep center fixed
                             if resize_from_center {
-                                let orig_center_x =
-                                    resize_op.original_position.x + resize_op.original_size.width / 2.0;
-                                let orig_center_y =
-                                    resize_op.original_position.y + resize_op.original_size.height / 2.0;
+                                let orig_center_x = resize_op.original_position.x
+                                    + resize_op.original_size.width / 2.0;
+                                let orig_center_y = resize_op.original_position.y
+                                    + resize_op.original_size.height / 2.0;
                                 new_x = orig_center_x - new_width / 2.0;
                                 new_y = orig_center_y - new_height / 2.0;
                             }
@@ -901,10 +832,12 @@ impl CanvasElement {
                                         // Crossed right edge - fixed point switches to left
                                         new_width = -new_width;
                                         // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_position.x + resize_op.original_size.width;
+                                        new_x = resize_op.original_position.x
+                                            + resize_op.original_size.width;
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_position.x + resize_op.original_size.width
+                                        new_x = resize_op.original_position.x
+                                            + resize_op.original_size.width
                                             - new_width;
                                     }
 
@@ -913,10 +846,12 @@ impl CanvasElement {
                                         // Crossed bottom edge - fixed point switches to top
                                         new_height = -new_height;
                                         // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_position.y + resize_op.original_size.height;
+                                        new_y = resize_op.original_position.y
+                                            + resize_op.original_size.height;
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_position.y + resize_op.original_size.height
+                                        new_y = resize_op.original_position.y
+                                            + resize_op.original_size.height
                                             - new_height;
                                     }
                                 }
@@ -937,10 +872,12 @@ impl CanvasElement {
                                         // Crossed bottom edge - fixed point switches to top
                                         new_height = -new_height;
                                         // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_position.y + resize_op.original_size.height;
+                                        new_y = resize_op.original_position.y
+                                            + resize_op.original_size.height;
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_position.y + resize_op.original_size.height
+                                        new_y = resize_op.original_position.y
+                                            + resize_op.original_size.height
                                             - new_height;
                                     }
                                 }
@@ -950,10 +887,12 @@ impl CanvasElement {
                                         // Crossed right edge - fixed point switches to left
                                         new_width = -new_width;
                                         // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_position.x + resize_op.original_size.width;
+                                        new_x = resize_op.original_position.x
+                                            + resize_op.original_size.width;
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_position.x + resize_op.original_size.width
+                                        new_x = resize_op.original_position.x
+                                            + resize_op.original_size.width
                                             - new_width;
                                     }
 
@@ -1092,26 +1031,24 @@ impl CanvasElement {
             _ => return, // Don't draw for other drag types
         }
 
-        let min_x = round_to_pixel(
-            Pixels(
-                active_drag
-                    .start_position
-                    .x
-                    .min(active_drag.current_position.x)
-            ),
-        );
-        let min_y = round_to_pixel(
-            Pixels(
-                active_drag
-                    .start_position
-                    .y
-                    .min(active_drag.current_position.y)
-            ),
-        );
-        let width =
-            round_to_pixel(Pixels((active_drag.start_position.x - active_drag.current_position.x).abs()));
-        let height =
-            round_to_pixel(Pixels((active_drag.start_position.y - active_drag.current_position.y).abs()));
+        let min_x = round_to_pixel(Pixels(
+            active_drag
+                .start_position
+                .x
+                .min(active_drag.current_position.x),
+        ));
+        let min_y = round_to_pixel(Pixels(
+            active_drag
+                .start_position
+                .y
+                .min(active_drag.current_position.y),
+        ));
+        let width = round_to_pixel(Pixels(
+            (active_drag.start_position.x - active_drag.current_position.x).abs(),
+        ));
+        let height = round_to_pixel(Pixels(
+            (active_drag.start_position.y - active_drag.current_position.y).abs(),
+        ));
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             let position = rounded_point(min_x, min_y);
@@ -1155,18 +1092,18 @@ impl CanvasElement {
 
         // Get the scale factor from the window
         let scale_factor = window.scale_factor();
-        
+
         // Convert to WorldPoint and apply snapping for pixel-perfect rendering
         // We use WorldPoint here because it's the most appropriate for this operation
         let world_point = WorldPoint::new(min_x, min_y);
         let snapped_point = world_point.snapped(true, scale_factor); // Use whole-pixel snapping
-        
+
         let position = Point::new(Pixels(snapped_point.x), Pixels(snapped_point.y));
-        
+
         // Also snap the size to prevent jitter
         let world_size = WorldPoint::new(width, height);
         let snapped_size = world_size.snapped(true, scale_factor);
-        
+
         let rect_bounds = Bounds {
             origin: position,
             size: Size::new(Pixels(snapped_size.x), Pixels(snapped_size.y)),
@@ -1200,61 +1137,62 @@ impl CanvasElement {
             window.paint_quad(gpui::fill(layout.hitbox.bounds, self.style.background));
         });
     }
-    
+
     /// Paint a grid on the canvas.
     ///
     /// This draws a grid with major lines every 50px, minor lines every 10px,
     /// and a stronger line at the origin (0,0).
-    fn paint_grid(
-        &self,
-        layout: &CanvasLayout,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
+    fn paint_grid(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Get canvas state to determine current scroll position and zoom
             let canvas = self.canvas.read(cx);
             let scroll_position = canvas.get_scroll_position();
             let zoom = canvas.zoom();
-            
+
             // Determine visible area in canvas coordinates
-            use crate::coordinates::{WorldPoint, WindowPoint, PositionStore};
-            
+            use crate::coordinates::{PositionStore, WindowPoint, WorldPoint};
+
             // Get position data and zoom from canvas
             let position_data_arc = cx.position_data();
             let position_data = position_data_arc.read().unwrap();
             // No need to re-get the zoom since we already have it above
-            
+
             let bounds = layout.hitbox.bounds;
-            
+
             // Convert window points to world points
-            let top_left_window = WindowPoint::from_point(Point::new(bounds.origin.x.0, bounds.origin.y.0));
+            let top_left_window =
+                WindowPoint::from_point(Point::new(bounds.origin.x.0, bounds.origin.y.0));
             let bottom_right_window = WindowPoint::from_point(Point::new(
-                bounds.origin.x.0 + bounds.size.width.0, 
-                bounds.origin.y.0 + bounds.size.height.0));
-                
-            let top_left = position_data.window_to_world(top_left_window, zoom).to_point();
-            let bottom_right = position_data.window_to_world(bottom_right_window, zoom).to_point();
-            
+                bounds.origin.x.0 + bounds.size.width.0,
+                bounds.origin.y.0 + bounds.size.height.0,
+            ));
+
+            let top_left = position_data
+                .window_to_world(top_left_window, zoom)
+                .to_point();
+            let bottom_right = position_data
+                .window_to_world(bottom_right_window, zoom)
+                .to_point();
+
             // Calculate grid boundaries
             // Add some margin to ensure we cover the entire visible area
             let start_x = (top_left.x / 10.0).floor() * 10.0 - 10.0;
             let end_x = (bottom_right.x / 10.0).ceil() * 10.0 + 10.0;
             let start_y = (top_left.y / 10.0).floor() * 10.0 - 10.0;
             let end_y = (bottom_right.y / 10.0).ceil() * 10.0 + 10.0;
-            
+
             // Get foreground color for grid lines with different alpha values
             let theme = Theme::get_global(cx);
             let minor_color = theme.tokens.text.opacity(0.05);
             let major_color = theme.tokens.text.opacity(0.1);
             let origin_color = theme.tokens.text.opacity(0.2);
-            
+
             // Draw vertical grid lines
             for x in (start_x as i32..=end_x as i32).step_by(10) {
                 let x_pos = x as f32;
                 // Convert canvas coordinate to window coordinate
                 let window_x = (x_pos - scroll_position.x) * zoom + bounds.origin.x.0;
-                
+
                 // Get line color based on position
                 let color = if x == 0 {
                     // Origin line
@@ -1266,7 +1204,7 @@ impl CanvasElement {
                     // Minor line
                     minor_color
                 };
-                
+
                 // Draw the vertical line
                 let line_bounds = Bounds {
                     origin: Point::new(gpui::Pixels(window_x), bounds.origin.y),
@@ -1274,13 +1212,13 @@ impl CanvasElement {
                 };
                 window.paint_quad(gpui::fill(line_bounds, color));
             }
-            
+
             // Draw horizontal grid lines
             for y in (start_y as i32..=end_y as i32).step_by(10) {
                 let y_pos = y as f32;
                 // Convert canvas coordinate to window coordinate
                 let window_y = (y_pos - scroll_position.y) * zoom + bounds.origin.y.0;
-                
+
                 // Get line color based on position
                 let color = if y == 0 {
                     // Origin line
@@ -1292,7 +1230,7 @@ impl CanvasElement {
                     // Minor line
                     minor_color
                 };
-                
+
                 // Draw the horizontal line
                 let line_bounds = Bounds {
                     origin: Point::new(bounds.origin.x, gpui::Pixels(window_y)),
@@ -1300,7 +1238,7 @@ impl CanvasElement {
                 };
                 window.paint_quad(gpui::fill(line_bounds, color));
             }
-            
+
             window.request_animation_frame();
         });
     }
@@ -1594,19 +1532,31 @@ impl CanvasElement {
                             color: shadow.color,
                         })
                         .collect();
-                    
+
                     // Apply snapping for render-time only to prevent jittery shadows
                     // Convert bounds coordinates to WorldPoint, snap them, and convert back
                     let scale_factor = window.scale_factor();
-                    let origin_world = WorldPoint::new(transformed_bounds.origin.x.0, transformed_bounds.origin.y.0);
-                    let size_world = WorldPoint::new(transformed_bounds.size.width.0, transformed_bounds.size.height.0);
-                    
+                    let origin_world = WorldPoint::new(
+                        transformed_bounds.origin.x.0,
+                        transformed_bounds.origin.y.0,
+                    );
+                    let size_world = WorldPoint::new(
+                        transformed_bounds.size.width.0,
+                        transformed_bounds.size.height.0,
+                    );
+
                     let snapped_origin = origin_world.snapped(true, scale_factor); // Use whole-pixel snapping for shadows
                     let snapped_size = size_world.snapped(true, scale_factor);
-                    
+
                     let snapped_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(gpui::Pixels(snapped_origin.x), gpui::Pixels(snapped_origin.y)),
-                        size: gpui::Size::new(gpui::Pixels(snapped_size.x), gpui::Pixels(snapped_size.y)),
+                        origin: gpui::Point::new(
+                            gpui::Pixels(snapped_origin.x),
+                            gpui::Pixels(snapped_origin.y),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(snapped_size.x),
+                            gpui::Pixels(snapped_size.y),
+                        ),
                     };
 
                     // Use the dedicated shadow rendering function with snapped bounds
@@ -1623,17 +1573,29 @@ impl CanvasElement {
                     // Apply snapping for render-time only to prevent jittery fill
                     // Convert bounds coordinates to WorldPoint, snap them, and convert back
                     let scale_factor = window.scale_factor();
-                    let origin_world = WorldPoint::new(transformed_bounds.origin.x.0, transformed_bounds.origin.y.0);
-                    let size_world = WorldPoint::new(transformed_bounds.size.width.0, transformed_bounds.size.height.0);
-                    
+                    let origin_world = WorldPoint::new(
+                        transformed_bounds.origin.x.0,
+                        transformed_bounds.origin.y.0,
+                    );
+                    let size_world = WorldPoint::new(
+                        transformed_bounds.size.width.0,
+                        transformed_bounds.size.height.0,
+                    );
+
                     let snapped_origin = origin_world.snapped(true, scale_factor); // Use whole-pixel snapping
                     let snapped_size = size_world.snapped(true, scale_factor);
-                    
+
                     let snapped_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(gpui::Pixels(snapped_origin.x), gpui::Pixels(snapped_origin.y)),
-                        size: gpui::Size::new(gpui::Pixels(snapped_size.x), gpui::Pixels(snapped_size.y)),
+                        origin: gpui::Point::new(
+                            gpui::Pixels(snapped_origin.x),
+                            gpui::Pixels(snapped_origin.y),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(snapped_size.x),
+                            gpui::Pixels(snapped_size.y),
+                        ),
                     };
-                
+
                     window.paint_quad(gpui::PaintQuad {
                         bounds: snapped_bounds,
                         corner_radii: (node_info.corner_radius).into(),
@@ -1676,17 +1638,29 @@ impl CanvasElement {
                     // Apply snapping for render-time only to prevent jittery borders
                     // Convert bounds coordinates to WorldPoint, snap them, and convert back
                     let scale_factor = window.scale_factor();
-                    let origin_world = WorldPoint::new(transformed_bounds.origin.x.0, transformed_bounds.origin.y.0);
-                    let size_world = WorldPoint::new(transformed_bounds.size.width.0, transformed_bounds.size.height.0);
-                    
+                    let origin_world = WorldPoint::new(
+                        transformed_bounds.origin.x.0,
+                        transformed_bounds.origin.y.0,
+                    );
+                    let size_world = WorldPoint::new(
+                        transformed_bounds.size.width.0,
+                        transformed_bounds.size.height.0,
+                    );
+
                     let snapped_origin = origin_world.snapped(true, scale_factor); // Use whole-pixel snapping
                     let snapped_size = size_world.snapped(true, scale_factor);
-                    
+
                     let snapped_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(gpui::Pixels(snapped_origin.x), gpui::Pixels(snapped_origin.y)),
-                        size: gpui::Size::new(gpui::Pixels(snapped_size.x), gpui::Pixels(snapped_size.y)),
+                        origin: gpui::Point::new(
+                            gpui::Pixels(snapped_origin.x),
+                            gpui::Pixels(snapped_origin.y),
+                        ),
+                        size: gpui::Size::new(
+                            gpui::Pixels(snapped_size.x),
+                            gpui::Pixels(snapped_size.y),
+                        ),
                     };
-                    
+
                     window.paint_quad(gpui::PaintQuad {
                         bounds: snapped_bounds,
                         corner_radii: (node_info.corner_radius).into(),
