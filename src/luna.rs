@@ -126,11 +126,11 @@ impl Luna {
 
         cx.observe_window_bounds(window, move |_, window, cx| {
             let bounds = window.bounds();
-            let window_size = gpui::Size::new(bounds.size.width.0, bounds.size.height.0);
+            let window_size = Size::new(bounds.size.width.0, bounds.size.height.0);
 
             GlobalPosition::update_global(cx, |position, cx| {
                 position.0.write().unwrap().update_dimensions(window_size);
-            });
+            })
         })
         .detach();
 
@@ -264,6 +264,8 @@ fn init_globals(cx: &mut App) {
 
     use std::sync::RwLock;
 
+    // This will get overriden immediately, but we can't get a window
+    // before we have to initialize the global position
     let initial_position =
         PositionData::new(WorldPoint::new(0.0, 0.0), gpui::Size::new(800.0, 600.0));
     cx.set_global(GlobalPosition(Arc::new(RwLock::new(initial_position))));
