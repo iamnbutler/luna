@@ -10,12 +10,34 @@
 //! using an abstractionless design and editing experience.
 
 use gpui::{
-    actions, div, point, prelude::*, px, App, AppContext, Application, FocusHandle, Menu, MenuItem,
-    TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
+    actions, div, point, prelude::*, px, rgba, App, AppContext, Application, FocusHandle, Menu,
+    MenuItem, Rgba, TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
 };
 mod geometry;
 
 actions!(luna, [Quit]);
+
+fn hex(hex_value: impl Into<String>) -> Rgba {
+    let hex_str = hex_value.into();
+    let hex_str = hex_str.trim_start_matches('#');
+
+    let parsed_value = match hex_str.len() {
+        3 => {
+            let r = u32::from_str_radix(&hex_str[0..1], 16).unwrap_or(0);
+            let g = u32::from_str_radix(&hex_str[1..2], 16).unwrap_or(0);
+            let b = u32::from_str_radix(&hex_str[2..3], 16).unwrap_or(0);
+            (r << 20) | (r << 16) | (g << 12) | (g << 8) | (b << 4) | b | (0xFF << 24)
+        }
+        6 => {
+            let rgb = u32::from_str_radix(hex_str, 16).unwrap_or(0);
+            rgb | (0xFF << 24)
+        }
+        8 => u32::from_str_radix(hex_str, 16).unwrap_or(0),
+        _ => 0xFF0000FF,
+    };
+
+    rgba(parsed_value)
+}
 
 struct Luna {
     // The main canvas where elements are rendered and manipulated
@@ -39,6 +61,20 @@ impl Luna {
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .items_center()
+            .justify_center()
+            .id("scene-graph")
+            .key_context("Luna")
+            .track_focus(&self.focus_handle())
+            .text_xs()
+            .font_family("Berkeley Mono")
+            .flex()
+            .flex_col()
+            .relative()
+            .bg(hex("#000000"))
+            .size_full()
+            .text_color(hex("#FFFFFF"))
+            .child("Luna")
     }
 }
 
@@ -55,10 +91,9 @@ fn main() {
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: Some("Luna".into()),
-                        appears_transparent: true,
                         traffic_light_position: Some(point(px(8.0), px(8.0))),
+                        ..Default::default()
                     }),
-                    window_background: WindowBackgroundAppearance::Transparent,
                     ..Default::default()
                 },
                 |window, cx| cx.new(|cx| Luna::new(window, cx)),
