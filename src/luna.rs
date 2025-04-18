@@ -33,7 +33,7 @@ pub enum UpdateProperty {
 }
 
 pub enum InspectorEvent {
-    UpdateProperty,
+    UpdateProperty(UpdateProperty),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -200,23 +200,31 @@ impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let view = cx.entity();
         let sidebar = cx.new(|cx| Sidebar::new(view.clone(), cx));
+        let mut debug_properties = DebugProperties::default();
+        let view = cx.entity();
 
-        cx.subscribe(&sidebar, |luna, _, event, cx| match event {
-            InspectorEvent::UpdateProperty(property) => {
-                match property {
-                    UpdateProperty::Position(position) => {
-                        luna.debug_properties.position = position.clone();
-                    }
-                    UpdateProperty::Width(width) => {
-                        // Update width logic here
-                    }
-                    UpdateProperty::Height(height) => {
-                        // Update height logic here
-                    }
+        cx.subscribe(&sidebar, move |_, _, event, cx| match event {
+            InspectorEvent::UpdateProperty(property) => match property {
+                UpdateProperty::Position(position) => view.update(cx, |this, cx| {
+                    let mut debug_properties = this.debug_properties.clone();
+                    debug_properties.position = position.clone();
+                    this.update_debug_properties(debug_properties, cx);
+                }),
+                UpdateProperty::Width(width) => {
+                    view.update(cx, |this, cx| {
+                        let mut debug_properties = this.debug_properties.clone();
+                        debug_properties.width = width.clone();
+                        this.update_debug_properties(debug_properties, cx);
+                    });
                 }
-
-                cx.notify();
-            }
+                UpdateProperty::Height(height) => {
+                    view.update(cx, |this, cx| {
+                        let mut debug_properties = this.debug_properties.clone();
+                        debug_properties.height = height.clone();
+                        this.update_debug_properties(debug_properties, cx);
+                    });
+                }
+            },
             _ => {}
         })
         .detach();
@@ -224,8 +232,17 @@ impl Luna {
         Self {
             focus_handle: cx.focus_handle(),
             sidebar,
-            debug_properties: DebugProperties::default(),
+            debug_properties,
         }
+    }
+
+    fn update_debug_properties(
+        &mut self,
+        debug_properties: DebugProperties,
+        cx: &mut Context<Self>,
+    ) {
+        self.debug_properties = debug_properties;
+        cx.notify();
     }
 
     fn focus_handle(&self) -> FocusHandle {
