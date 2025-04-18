@@ -11,16 +11,84 @@
 //! That means not just pixels, but representative screens and flows
 //! using an abstractionless design and editing experience.
 
+use std::collections::HashMap;
+
 use gpui::{
-    actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, Entity,
-    FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton, MouseUpEvent, Rgba,
-    TitlebarOptions, Window, WindowOptions,
+    actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, ElementId,
+    Entity, FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton,
+    MouseUpEvent, Rgba, TitlebarOptions, Window, WindowOptions,
 };
 use input::text_input::TextInput;
 mod geometry;
 mod input;
 
 actions!(luna, [Quit]);
+
+struct InputMap {
+    map: HashMap<usize, Entity<TextInput>>,
+    next_id: usize,
+}
+
+impl InputMap {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            next_id: 0,
+        }
+    }
+
+    // pub fn new_input()
+
+    fn add_input(&mut self, input: Entity<TextInput>) {
+        self.map.insert(self.next_id, input);
+        self.next_id += 1;
+    }
+
+    pub fn get_input(&self, id: usize) -> Option<&Entity<TextInput>> {
+        self.map.get(&id)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Entity<TextInput>> {
+        self.map.values()
+    }
+}
+
+struct Sidebar {
+    input_map: InputMap,
+    focus_handle: FocusHandle,
+}
+
+impl Sidebar {
+    fn new(cx: &mut Context<Self>) -> Self {
+        Self {
+            input_map: InputMap::new(),
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    fn focus_handle(&self, _cx: &mut Context<Self>) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for Sidebar {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .w(px(240.))
+            .h_full()
+            .track_focus(&self.focus_handle(cx))
+            .gap(px(4.))
+            .children(self.input_map.iter().map(|input| input.clone()))
+    }
+}
+
+impl Focusable for Sidebar {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
 
 struct Luna {
     // The main canvas where elements are rendered and manipulated
@@ -32,17 +100,8 @@ struct Luna {
 
 impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let text_input = cx.new(|cx| TextInput {
-            focus_handle: cx.focus_handle(),
-            content: "".into(),
-            placeholder: "Type here...".into(),
-            selected_range: 0..0,
-            selection_reversed: false,
-            marked_range: None,
-            last_layout: None,
-            last_bounds: None,
-            is_selecting: false,
-        });
+        let text_input =
+            cx.new(|cx| TextInput::new(ElementId::from("luna-text-input"), "Type here...", cx));
 
         Self {
             focus_handle: cx.focus_handle(),

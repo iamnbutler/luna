@@ -2,8 +2,8 @@
 use std::ops::Range;
 
 use gpui::{
-    div, fill, hsla, point, prelude::*, px, relative, size, App, Bounds, ClipboardItem, Context,
-    CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
+    div, fill, hsla, point, prelude::*, px, relative, size, AnyElement, App, Bounds, ClipboardItem,
+    Context, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
     Focusable, GlobalElementId, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine, SharedString, Style, TextRun,
     UTF16Selection, UnderlineStyle, Window,
@@ -11,20 +11,50 @@ use gpui::{
 use unicode_segmentation::*;
 
 pub struct TextInput {
-    pub focus_handle: FocusHandle,
-    pub content: SharedString,
-    pub placeholder: SharedString,
-    pub selected_range: Range<usize>,
-    pub selection_reversed: bool,
-    pub marked_range: Option<Range<usize>>,
-    pub last_layout: Option<ShapedLine>,
-    pub last_bounds: Option<Bounds<Pixels>>,
-    pub is_selecting: bool,
+    id: ElementId,
+    content: SharedString,
+    start_slot: Option<AnyElement>,
+    focus_handle: FocusHandle,
+    is_selecting: bool,
+    last_bounds: Option<Bounds<Pixels>>,
+    last_layout: Option<ShapedLine>,
+    marked_range: Option<Range<usize>>,
+    placeholder: SharedString,
+    selected_range: Range<usize>,
+    selection_reversed: bool,
 }
 
 impl TextInput {
     const FONT_SIZE: f32 = 13.0;
     const PADDING: f32 = 4.0;
+
+    pub fn new(
+        id: ElementId,
+        placeholder: impl Into<SharedString>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self {
+            id,
+            content: "".into(),
+            start_slot: None,
+            focus_handle: cx.focus_handle(),
+            is_selecting: false,
+            last_bounds: None,
+            last_layout: None,
+            placeholder: placeholder.into(),
+            marked_range: None,
+            selected_range: 0..0,
+            selection_reversed: false,
+        }
+    }
+
+    pub fn content(&self) -> &SharedString {
+        &self.content
+    }
+
+    pub fn placeholder(&self) -> &SharedString {
+        &self.placeholder
+    }
 
     fn height(&self) -> Pixels {
         let height = Self::FONT_SIZE + Self::PADDING * 2.0;
@@ -428,7 +458,7 @@ impl Element for TextElement {
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), hsla(0., 0., 0., 0.5))
+            (input.placeholder.clone(), hsla(0., 1., 1., 0.4))
         } else {
             (content.clone(), style.color)
         };
@@ -578,7 +608,7 @@ impl Render for TextInput {
             .bg(hsla(0.0, 0.0, 0.12, 1.0))
             .border_1()
             .border_color(hsla(0.0, 1.0, 1.0, 0.2))
-            .rounded(px(2.0))
+            .rounded(px(4.0))
             .line_height(relative(1.2))
             .text_size(px(Self::FONT_SIZE))
             .child(
