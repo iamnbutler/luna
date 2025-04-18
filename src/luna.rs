@@ -12,8 +12,8 @@
 //! using an abstractionless design and editing experience.
 
 use gpui::{
-    actions, div, point, prelude::*, px, rgba, App, AppContext, Application, Entity, FocusHandle,
-    Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton, MouseUpEvent, Rgba,
+    actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, Entity,
+    FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton, MouseUpEvent, Rgba,
     TitlebarOptions, Window, WindowOptions,
 };
 use input::text_input::TextInput;
@@ -21,28 +21,6 @@ mod geometry;
 mod input;
 
 actions!(luna, [Quit]);
-
-fn hex(hex_value: impl Into<String>) -> Rgba {
-    let hex_str = hex_value.into();
-    let hex_str = hex_str.trim_start_matches('#');
-
-    let parsed_value = match hex_str.len() {
-        3 => {
-            let r = u32::from_str_radix(&hex_str[0..1], 16).unwrap_or(0);
-            let g = u32::from_str_radix(&hex_str[1..2], 16).unwrap_or(0);
-            let b = u32::from_str_radix(&hex_str[2..3], 16).unwrap_or(0);
-            (r << 20) | (r << 16) | (g << 12) | (g << 8) | (b << 4) | b | (0xFF << 24)
-        }
-        6 => {
-            let rgb = u32::from_str_radix(hex_str, 16).unwrap_or(0);
-            rgb | (0xFF << 24)
-        }
-        8 => u32::from_str_radix(hex_str, 16).unwrap_or(0),
-        _ => 0xFF0000FF,
-    };
-
-    rgba(parsed_value)
-}
 
 struct Luna {
     // The main canvas where elements are rendered and manipulated
@@ -97,9 +75,9 @@ impl Render for Luna {
             .flex()
             .flex_col()
             .relative()
-            .bg(hex("#000000"))
+            .bg(hsla(0.0, 0.0, 0.0, 1.0))
             .size_full()
-            .text_color(hex("#FFFFFF"))
+            .text_color(hsla(0.0, 1.0, 1.0, 1.0))
             .child(self.text_input.clone())
     }
 }
