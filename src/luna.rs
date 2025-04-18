@@ -13,10 +13,11 @@
 
 use std::collections::HashMap;
 
+use geometry::LocalPoint;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, ElementId,
     Entity, FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton,
-    MouseUpEvent, Rgba, SharedString, TitlebarOptions, Window, WindowOptions,
+    MouseUpEvent, Rgba, SharedString, TitlebarOptions, WeakEntity, Window, WindowOptions,
 };
 use input::text_input::TextInput;
 mod geometry;
@@ -24,39 +25,63 @@ mod input;
 
 actions!(luna, [Quit]);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum InputMapKey {
+    PositionX,
+    PositionY,
+    Width,
+    Height,
+}
+
+impl InputMapKey {
+    pub fn to_element_id(&self) -> ElementId {
+        match self {
+            InputMapKey::PositionX => ElementId::from("input-x"),
+            InputMapKey::PositionY => ElementId::from("input-y"),
+            InputMapKey::Width => ElementId::from("input-width"),
+            InputMapKey::Height => ElementId::from("input-height"),
+        }
+    }
+}
+
+impl std::fmt::Display for InputMapKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputMapKey::PositionX => write!(f, "X"),
+            InputMapKey::PositionY => write!(f, "Y"),
+            InputMapKey::Width => write!(f, "Width"),
+            InputMapKey::Height => write!(f, "Height"),
+        }
+    }
+}
+
 struct InputMap {
-    map: HashMap<usize, Entity<TextInput>>,
-    next_id: usize,
+    map: HashMap<InputMapKey, Entity<TextInput>>,
 }
 
 impl InputMap {
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),
-            next_id: 0,
         }
     }
 
-    pub fn new_input(mut self, placeholder: impl Into<SharedString>, cx: &mut App) -> Self {
-        let id = self.next_id;
-        let input = cx.new(|cx| {
-            TextInput::new(
-                ElementId::Name(format!("input-{}", id).into()),
-                placeholder,
-                cx,
-            )
-        });
-        self.add_input(input);
+    pub fn new_input(
+        mut self,
+        key: InputMapKey,
+        cx: &mut App,
+        f: impl FnOnce(&mut TextInput, &mut App),
+    ) -> Self {
+        let element_id = key.to_element_id();
+        let placeholder = key.to_string();
+        let mut input = TextInput::new(element_id, placeholder, cx);
+        f(&mut input, cx);
+        self.map.insert(key, cx.new(|cx| input));
         self
     }
 
-    fn add_input(&mut self, input: Entity<TextInput>) {
-        self.map.insert(self.next_id, input);
-        self.next_id += 1;
-    }
-
-    pub fn get_input(&self, id: usize) -> Option<&Entity<TextInput>> {
-        self.map.get(&id)
+    pub fn get_input(&self, key: InputMapKey) -> Option<&Entity<TextInput>> {
+        self.map.get(&key)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Entity<TextInput>> {
@@ -65,19 +90,36 @@ impl InputMap {
 }
 
 struct Sidebar {
+    app: Entity<Luna>,
     input_map: InputMap,
     focus_handle: FocusHandle,
 }
 
 impl Sidebar {
-    fn new(cx: &mut Context<Self>) -> Self {
+    fn new(app: Entity<Luna>, cx: &mut Context<Self>) -> Self {
+        let debug_properties = app.read(cx).debug_properties;
+
+        let x = debug_properties.position.x();
+        let y = debug_properties.position.y();
+        let width = debug_properties.width;
+        let height = debug_properties.height;
+
         let input_map = InputMap::new()
-            .new_input("x", cx)
-            .new_input("y", cx)
-            .new_input("width", cx)
-            .new_input("height", cx);
+            .new_input(InputMapKey::PositionX, cx, |input, cx| {
+                input.set_content(x.to_string());
+            })
+            .new_input(InputMapKey::PositionY, cx, |input, cx| {
+                input.set_content(y.to_string());
+            })
+            .new_input(InputMapKey::Width, cx, |input, cx| {
+                input.set_content(width.to_string());
+            })
+            .new_input(InputMapKey::Height, cx, |input, cx| {
+                input.set_content(height.to_string());
+            });
 
         Self {
+            app,
             input_map,
             focus_handle: cx.focus_handle(),
         }
@@ -115,25 +157,41 @@ impl Focusable for Sidebar {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct DebugProperties {
+    pub position: LocalPoint,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl Default for DebugProperties {
+    fn default() -> Self {
+        Self {
+            position: LocalPoint::new(0.0, 0.0, 0.0),
+            width: 0.0,
+            height: 0.0,
+        }
+    }
+}
+
 struct Luna {
     // The main canvas where elements are rendered and manipulated
     // active_canvas: Entity<LunaCanvas>,
     /// Focus handle for keyboard event routing
     focus_handle: FocusHandle,
     sidebar: Entity<Sidebar>,
-    text_input: Entity<TextInput>,
+    debug_properties: DebugProperties,
 }
 
 impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let sidebar = cx.new(|cx| Sidebar::new(cx));
-        let text_input =
-            cx.new(|cx| TextInput::new(ElementId::from("luna-text-input"), "Type here...", cx));
+        let view = cx.entity();
+        let sidebar = cx.new(|cx| Sidebar::new(view.clone(), cx));
 
         Self {
             focus_handle: cx.focus_handle(),
             sidebar,
-            text_input,
+            debug_properties: DebugProperties::default(),
         }
     }
 
@@ -151,7 +209,6 @@ impl Focusable for Luna {
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .debug_below()
             .relative()
             .track_focus(&self.focus_handle())
             .items_center()
@@ -167,7 +224,6 @@ impl Render for Luna {
             .bg(hsla(0.0, 0.0, 0.0, 1.0))
             .size_full()
             .text_color(hsla(0.0, 1.0, 1.0, 1.0))
-            .child(self.text_input.clone())
             .child(self.sidebar.clone())
     }
 }
@@ -223,13 +279,6 @@ fn main() {
                 cx.activate(true);
             })
             .unwrap();
-
-        // window
-        //     .update(cx, |view, window, cx| {
-        //         window.focus(&view.focus_handle());
-        //         cx.activate(true);
-        //     })
-        //     .unwrap();
     });
 }
 

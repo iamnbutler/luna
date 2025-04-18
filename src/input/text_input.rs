@@ -28,11 +28,7 @@ impl TextInput {
     const FONT_SIZE: f32 = 13.0;
     const PADDING: f32 = 4.0;
 
-    pub fn new(
-        id: ElementId,
-        placeholder: impl Into<SharedString>,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(id: ElementId, placeholder: impl Into<SharedString>, cx: &mut App) -> Self {
         Self {
             id,
             content: "".into(),
@@ -54,6 +50,17 @@ impl TextInput {
 
     pub fn placeholder(&self) -> &SharedString {
         &self.placeholder
+    }
+
+    pub fn set_content(&mut self, content: impl Into<SharedString>) {
+        self.content = content.into();
+        self.selected_range = 0..0;
+        self.selection_reversed = false;
+        self.marked_range = None;
+    }
+
+    pub fn set_placeholder(&mut self, placeholder: impl Into<SharedString>) {
+        self.placeholder = placeholder.into();
     }
 
     fn height(&self) -> Pixels {
@@ -603,7 +610,7 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .w(px(320.))
+            .w_full()
             .text_color(hsla(0.0, 1.0, 1.0, 1.0))
             .bg(hsla(0.0, 0.0, 0.12, 1.0))
             .border_1()
