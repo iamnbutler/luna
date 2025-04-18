@@ -16,14 +16,25 @@ use std::collections::HashMap;
 use geometry::LocalPoint;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, ElementId,
-    Entity, FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton,
-    MouseUpEvent, Rgba, SharedString, TitlebarOptions, WeakEntity, Window, WindowOptions,
+    Entity, EventEmitter, FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem,
+    MouseButton, MouseUpEvent, Rgba, SharedString, TitlebarOptions, WeakEntity, Window,
+    WindowOptions,
 };
 use input::text_input::TextInput;
 mod geometry;
 mod input;
 
 actions!(luna, [Quit]);
+
+pub enum UpdateProperty {
+    Position(LocalPoint),
+    Width(f32),
+    Height(f32),
+}
+
+pub enum InspectorEvent {
+    UpdateProperty,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum InputMapKey {
@@ -157,6 +168,8 @@ impl Focusable for Sidebar {
     }
 }
 
+impl EventEmitter<InspectorEvent> for Sidebar {}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct DebugProperties {
     pub position: LocalPoint,
@@ -187,6 +200,26 @@ impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let view = cx.entity();
         let sidebar = cx.new(|cx| Sidebar::new(view.clone(), cx));
+
+        cx.subscribe(&sidebar, |luna, _, event, cx| match event {
+            InspectorEvent::UpdateProperty(property) => {
+                match property {
+                    UpdateProperty::Position(position) => {
+                        luna.debug_properties.position = position.clone();
+                    }
+                    UpdateProperty::Width(width) => {
+                        // Update width logic here
+                    }
+                    UpdateProperty::Height(height) => {
+                        // Update height logic here
+                    }
+                }
+
+                cx.notify();
+            }
+            _ => {}
+        })
+        .detach();
 
         Self {
             focus_handle: cx.focus_handle(),
