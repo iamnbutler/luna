@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, ElementId,
     Entity, FocusHandle, Focusable, KeyBinding, Keystroke, Menu, MenuItem, MouseButton,
-    MouseUpEvent, Rgba, TitlebarOptions, Window, WindowOptions,
+    MouseUpEvent, Rgba, SharedString, TitlebarOptions, Window, WindowOptions,
 };
 use input::text_input::TextInput;
 mod geometry;
@@ -37,7 +37,18 @@ impl InputMap {
         }
     }
 
-    // pub fn new_input()
+    pub fn new_input(mut self, placeholder: impl Into<SharedString>, cx: &mut App) -> Self {
+        let id = self.next_id;
+        let input = cx.new(|cx| {
+            TextInput::new(
+                ElementId::Name(format!("input-{}", id).into()),
+                placeholder,
+                cx,
+            )
+        });
+        self.add_input(input);
+        self
+    }
 
     fn add_input(&mut self, input: Entity<TextInput>) {
         self.map.insert(self.next_id, input);
@@ -60,8 +71,14 @@ struct Sidebar {
 
 impl Sidebar {
     fn new(cx: &mut Context<Self>) -> Self {
+        let input_map = InputMap::new()
+            .new_input("x", cx)
+            .new_input("y", cx)
+            .new_input("width", cx)
+            .new_input("height", cx);
+
         Self {
-            input_map: InputMap::new(),
+            input_map,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -74,13 +91,21 @@ impl Sidebar {
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .absolute()
+            .top(px(0.))
+            .right(px(0.))
             .flex()
             .flex_col()
             .w(px(240.))
             .h_full()
             .track_focus(&self.focus_handle(cx))
             .gap(px(4.))
-            .children(self.input_map.iter().map(|input| input.clone()))
+            .overflow_hidden()
+            .children(
+                self.input_map
+                    .iter()
+                    .map(|input| div().w_full().p(px(2.)).child(input.clone())),
+            )
     }
 }
 
@@ -95,16 +120,19 @@ struct Luna {
     // active_canvas: Entity<LunaCanvas>,
     /// Focus handle for keyboard event routing
     focus_handle: FocusHandle,
+    sidebar: Entity<Sidebar>,
     text_input: Entity<TextInput>,
 }
 
 impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let sidebar = cx.new(|cx| Sidebar::new(cx));
         let text_input =
             cx.new(|cx| TextInput::new(ElementId::from("luna-text-input"), "Type here...", cx));
 
         Self {
             focus_handle: cx.focus_handle(),
+            sidebar,
             text_input,
         }
     }
@@ -123,6 +151,8 @@ impl Focusable for Luna {
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .debug_below()
+            .relative()
             .track_focus(&self.focus_handle())
             .items_center()
             .justify_center()
@@ -138,6 +168,7 @@ impl Render for Luna {
             .size_full()
             .text_color(hsla(0.0, 1.0, 1.0, 1.0))
             .child(self.text_input.clone())
+            .child(self.sidebar.clone())
     }
 }
 
