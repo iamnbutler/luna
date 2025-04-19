@@ -1,6 +1,9 @@
 use gpui::actions;
 
-pub mod text_input;
+mod input_map;
+mod text_input;
+pub use input_map::*;
+pub use text_input::*;
 
 actions!(
     text_input,
