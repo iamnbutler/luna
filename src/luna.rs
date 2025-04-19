@@ -91,8 +91,8 @@ impl InputMap {
         self
     }
 
-    pub fn get_input(&self, key: InputMapKey) -> Option<&Entity<TextInput>> {
-        self.map.get(&key)
+    pub fn get_input(&self, key: InputMapKey) -> Option<Entity<TextInput>> {
+        self.map.get(&key).cloned()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Entity<TextInput>> {
@@ -129,6 +129,11 @@ impl Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let x_input = self.input_map.get_input(InputMapKey::PositionX);
+        let y_input = self.input_map.get_input(InputMapKey::PositionY);
+        let width_input = self.input_map.get_input(InputMapKey::Width);
+        let height_input = self.input_map.get_input(InputMapKey::Height);
+
         div()
             .absolute()
             .top(px(0.))
@@ -140,10 +145,25 @@ impl Render for Sidebar {
             .track_focus(&self.focus_handle(cx))
             .gap(px(4.))
             .overflow_hidden()
-            .children(
-                self.input_map
-                    .iter()
-                    .map(|input| div().w_full().p(px(2.)).child(input.clone())),
+            .py_1()
+            .px_1p5()
+            .child(
+                div()
+                    .flex()
+                    .w_full()
+                    .overflow_hidden()
+                    .gap(px(6.))
+                    .children(x_input)
+                    .children(y_input),
+            )
+            .child(
+                div()
+                    .flex()
+                    .w_full()
+                    .overflow_hidden()
+                    .gap(px(6.))
+                    .children(width_input)
+                    .children(height_input),
             )
     }
 }
@@ -155,23 +175,6 @@ impl Focusable for Sidebar {
 }
 
 impl EventEmitter<InspectorEvent> for Sidebar {}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct DebugProperties {
-    pub position: LocalPoint,
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Default for DebugProperties {
-    fn default() -> Self {
-        Self {
-            position: LocalPoint::new(0.0, 0.0, 0.0),
-            width: 0.0,
-            height: 0.0,
-        }
-    }
-}
 
 struct Luna {
     // The main canvas where elements are rendered and manipulated

@@ -629,6 +629,7 @@ impl Render for TextInput {
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .w_full()
+            .flex_1()
             .text_color(hsla(0.0, 1.0, 1.0, 1.0))
             .bg(hsla(0.0, 0.0, 0.12, 1.0))
             .border_1()
