@@ -10,6 +10,9 @@ pub enum InputMapKey {
     PositionY,
     Width,
     Height,
+    Rotation,
+    CornerRadius,
+    Opacity,
 }
 
 impl InputMapKey {
@@ -19,6 +22,9 @@ impl InputMapKey {
             InputMapKey::PositionY => ElementId::from("input-y"),
             InputMapKey::Width => ElementId::from("input-width"),
             InputMapKey::Height => ElementId::from("input-height"),
+            InputMapKey::Rotation => ElementId::from("input-rotation"),
+            InputMapKey::CornerRadius => ElementId::from("input-corner-radius"),
+            InputMapKey::Opacity => ElementId::from("input-opacity"),
         }
     }
 }
@@ -30,6 +36,9 @@ impl std::fmt::Display for InputMapKey {
             InputMapKey::PositionY => write!(f, "Y"),
             InputMapKey::Width => write!(f, "Width"),
             InputMapKey::Height => write!(f, "Height"),
+            InputMapKey::Rotation => write!(f, "Rotation"),
+            InputMapKey::CornerRadius => write!(f, "Corner Radius"),
+            InputMapKey::Opacity => write!(f, "Opacity"),
         }
     }
 }

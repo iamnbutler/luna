@@ -21,109 +21,27 @@ use gpui::{
     WindowOptions,
 };
 use input::{InputMap, InputMapKey, TextInput};
+use sidebar::inspector::SidebarInspector;
+
 mod geometry;
 mod input;
+mod sidebar;
+mod typography;
 
 actions!(luna, [Quit]);
-
-pub enum UpdatePropertyEvent {
-    Position(LocalPoint),
-    Width(f32),
-    Height(f32),
-}
-
-pub enum InspectorEvent {
-    UpdateProperty(UpdatePropertyEvent),
-}
-
-struct Sidebar {
-    app: Entity<Luna>,
-    input_map: InputMap,
-    focus_handle: FocusHandle,
-}
-
-impl Sidebar {
-    fn new(app: Entity<Luna>, cx: &mut Context<Self>) -> Self {
-        // Use default values initially to avoid circular dependency
-        let input_map = InputMap::new()
-            .new_input(InputMapKey::PositionX, cx, |input, cx| {})
-            .new_input(InputMapKey::PositionY, cx, |input, cx| {})
-            .new_input(InputMapKey::Width, cx, |input, cx| {})
-            .new_input(InputMapKey::Height, cx, |input, cx| {});
-
-        Self {
-            app,
-            input_map,
-            focus_handle: cx.focus_handle(),
-        }
-    }
-
-    fn focus_handle(&self, _cx: &mut Context<Self>) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl Render for Sidebar {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let x_input = self.input_map.get_input(InputMapKey::PositionX);
-        let y_input = self.input_map.get_input(InputMapKey::PositionY);
-        let width_input = self.input_map.get_input(InputMapKey::Width);
-        let height_input = self.input_map.get_input(InputMapKey::Height);
-
-        div()
-            .absolute()
-            .top(px(0.))
-            .right(px(0.))
-            .flex()
-            .flex_col()
-            .w(px(240.))
-            .h_full()
-            .track_focus(&self.focus_handle(cx))
-            .gap(px(4.))
-            .overflow_hidden()
-            .py_1()
-            .px_1p5()
-            .child(
-                div()
-                    .flex()
-                    .w_full()
-                    .overflow_hidden()
-                    .gap(px(6.))
-                    .children(x_input)
-                    .children(y_input),
-            )
-            .child(
-                div()
-                    .flex()
-                    .w_full()
-                    .overflow_hidden()
-                    .gap(px(6.))
-                    .children(width_input)
-                    .children(height_input),
-            )
-    }
-}
-
-impl Focusable for Sidebar {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl EventEmitter<InspectorEvent> for Sidebar {}
 
 struct Luna {
     // The main canvas where elements are rendered and manipulated
     // active_canvas: Entity<LunaCanvas>,
     /// Focus handle for keyboard event routing
     focus_handle: FocusHandle,
-    sidebar: Entity<Sidebar>,
+    sidebar: Entity<SidebarInspector>,
 }
 
 impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let view = cx.entity();
-        let sidebar = cx.new(|cx| Sidebar::new(view.clone(), cx));
+        let sidebar = cx.new(|cx| SidebarInspector::new(view.clone(), cx));
         let view = cx.entity();
 
         let mut luna = Self {
