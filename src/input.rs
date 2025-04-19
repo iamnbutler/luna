@@ -18,5 +18,6 @@ actions!(
         Paste,
         Cut,
         Copy,
+        Enter,
     ]
 );

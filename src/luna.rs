@@ -108,26 +108,12 @@ struct Sidebar {
 
 impl Sidebar {
     fn new(app: Entity<Luna>, cx: &mut Context<Self>) -> Self {
-        let debug_properties = app.read(cx).debug_properties;
-
-        let x = debug_properties.position.x();
-        let y = debug_properties.position.y();
-        let width = debug_properties.width;
-        let height = debug_properties.height;
-
+        // Use default values initially to avoid circular dependency
         let input_map = InputMap::new()
-            .new_input(InputMapKey::PositionX, cx, |input, cx| {
-                input.set_content(x.to_string());
-            })
-            .new_input(InputMapKey::PositionY, cx, |input, cx| {
-                input.set_content(y.to_string());
-            })
-            .new_input(InputMapKey::Width, cx, |input, cx| {
-                input.set_content(width.to_string());
-            })
-            .new_input(InputMapKey::Height, cx, |input, cx| {
-                input.set_content(height.to_string());
-            });
+            .new_input(InputMapKey::PositionX, cx, |input, cx| {})
+            .new_input(InputMapKey::PositionY, cx, |input, cx| {})
+            .new_input(InputMapKey::Width, cx, |input, cx| {})
+            .new_input(InputMapKey::Height, cx, |input, cx| {});
 
         Self {
             app,
@@ -193,56 +179,20 @@ struct Luna {
     /// Focus handle for keyboard event routing
     focus_handle: FocusHandle,
     sidebar: Entity<Sidebar>,
-    debug_properties: DebugProperties,
 }
 
 impl Luna {
     fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let view = cx.entity();
         let sidebar = cx.new(|cx| Sidebar::new(view.clone(), cx));
-        let mut debug_properties = DebugProperties::default();
         let view = cx.entity();
 
-        cx.subscribe(&sidebar, move |_, _, event, cx| match event {
-            InspectorEvent::UpdateProperty(property) => match property {
-                UpdateProperty::Position(position) => view.update(cx, |this, cx| {
-                    let mut debug_properties = this.debug_properties.clone();
-                    debug_properties.position = position.clone();
-                    this.update_debug_properties(debug_properties, cx);
-                }),
-                UpdateProperty::Width(width) => {
-                    view.update(cx, |this, cx| {
-                        let mut debug_properties = this.debug_properties.clone();
-                        debug_properties.width = width.clone();
-                        this.update_debug_properties(debug_properties, cx);
-                    });
-                }
-                UpdateProperty::Height(height) => {
-                    view.update(cx, |this, cx| {
-                        let mut debug_properties = this.debug_properties.clone();
-                        debug_properties.height = height.clone();
-                        this.update_debug_properties(debug_properties, cx);
-                    });
-                }
-            },
-            _ => {}
-        })
-        .detach();
-
-        Self {
+        let mut luna = Self {
             focus_handle: cx.focus_handle(),
             sidebar,
-            debug_properties,
-        }
-    }
+        };
 
-    fn update_debug_properties(
-        &mut self,
-        debug_properties: DebugProperties,
-        cx: &mut Context<Self>,
-    ) {
-        self.debug_properties = debug_properties;
-        cx.notify();
+        luna
     }
 
     fn focus_handle(&self) -> FocusHandle {
@@ -299,6 +249,7 @@ fn main() {
             KeyBinding::new("cmd-x", input::Cut, None),
             KeyBinding::new("home", input::Home, None),
             KeyBinding::new("end", input::End, None),
+            KeyBinding::new("enter", input::Enter, None),
             KeyBinding::new("ctrl-cmd-space", input::ShowCharacterPalette, None),
         ]);
 

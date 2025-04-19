@@ -3,12 +3,21 @@ use std::ops::Range;
 
 use gpui::{
     div, fill, hsla, point, prelude::*, px, relative, size, AnyElement, App, Bounds, ClipboardItem,
-    Context, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
-    Focusable, GlobalElementId, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
+    Context, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, GlobalElementId, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, PaintQuad, Pixels, Point, ShapedLine, SharedString, Style, TextRun,
     UTF16Selection, UnderlineStyle, Window,
 };
 use unicode_segmentation::*;
+
+pub enum TextInputEvent {
+    /// Emitted when the content of the text input changes
+    ContentChanged(SharedString),
+    /// Emitted when the user submits the content (presses Enter)
+    Submit(SharedString),
+}
+
+impl EventEmitter<TextInputEvent> for TextInput {}
 
 pub struct TextInput {
     id: ElementId,
@@ -52,11 +61,15 @@ impl TextInput {
         &self.placeholder
     }
 
-    pub fn set_content(&mut self, content: impl Into<SharedString>) {
-        self.content = content.into();
-        self.selected_range = 0..0;
-        self.selection_reversed = false;
-        self.marked_range = None;
+    pub fn set_content(&mut self, content: impl Into<SharedString>, cx: &mut Context<Self>) {
+        let new_content = content.into();
+        if self.content != new_content {
+            self.content = new_content.clone();
+            self.selected_range = 0..0;
+            self.selection_reversed = false;
+            self.marked_range = None;
+            cx.emit(TextInputEvent::ContentChanged(new_content));
+        }
     }
 
     pub fn set_placeholder(&mut self, placeholder: impl Into<SharedString>) {
@@ -103,6 +116,10 @@ impl TextInput {
 
     pub fn end(&mut self, _: &super::End, _: &mut Window, cx: &mut Context<Self>) {
         self.move_to(self.content.len(), cx);
+    }
+
+    pub fn enter(&mut self, _: &super::Enter, _: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(TextInputEvent::Submit(self.content.clone()));
     }
 
     pub fn backspace(&mut self, _: &super::Backspace, window: &mut Window, cx: &mut Context<Self>) {
@@ -602,6 +619,7 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
+            .on_action(cx.listener(Self::enter))
             .on_action(cx.listener(Self::show_character_palette))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
