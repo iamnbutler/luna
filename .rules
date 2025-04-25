@@ -18,6 +18,7 @@ Organize code with these Luna-specific principles in mind:
 - Don't shy away from larger files when it makes sense—a well-organized 3000-line file is preferable to many small, fragmented files
 - Leverage existing libraries for well-solved problems (like the Palette crate for color operations) while keeping the scene graph custom
 - Use available tools to fetch up-to-date documentation when needed (e.g., from docs.rs)
+- Don't write code comments. Write code in a self-documenting manner. In extreme cases, such as magic numbers, use constants with descriptive names or a consise comment.
 
 After completing each logical step successfully, document your changes with clear, comprehensive commit messages. When correcting previous issues, explicitly explain what went wrong and how it was addressed. Prioritize clarity over brevity in your documentation.
 

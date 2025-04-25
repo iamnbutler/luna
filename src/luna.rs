@@ -12,11 +12,11 @@
 //! using an abstractionless design and editing experience.
 
 use std::{
-    collections::HashMap,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
+use canvas::{CanvasData, CanvasElement, CanvasId, CanvasPages};
 use geometry::LocalPoint;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, rgba, App, AppContext, Application, ElementId,
@@ -27,6 +27,7 @@ use gpui::{
 use input::{InputMap, InputMapKey, TextInput};
 use sidebar::inspector::SidebarInspector;
 
+mod canvas;
 mod geometry;
 mod input;
 mod sidebar;
@@ -86,21 +87,28 @@ impl ActiveTheme for App {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewCanvas;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchCanvas(pub CanvasId);
+
 struct Luna {
-    // The main canvas where elements are rendered and manipulated
-    // active_canvas: Entity<LunaCanvas>,
-    /// Focus handle for keyboard event routing
+    canvas_pages: CanvasPages,
     focus_handle: FocusHandle,
     sidebar: Entity<SidebarInspector>,
 }
 
 impl Luna {
-    fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let view = cx.entity();
         let sidebar = cx.new(|cx| SidebarInspector::new(view.clone(), cx));
         let view = cx.entity();
+        let mut canvas_pages = CanvasPages::new();
+        canvas_pages.add_canvas(cx);
 
         let mut luna = Self {
+            canvas_pages,
             focus_handle: cx.focus_handle(),
             sidebar,
         };
@@ -110,6 +118,27 @@ impl Luna {
 
     fn focus_handle(&self) -> FocusHandle {
         self.focus_handle.clone()
+    }
+
+    fn active_canvas(&self) -> Option<&Entity<CanvasData>> {
+        self.canvas_pages.active_canvas()
+    }
+
+    fn active_canvas_id(&self) -> Option<CanvasId> {
+        self.canvas_pages.active_id()
+    }
+
+    fn new_canvas(&mut self, _: &NewCanvas, cx: &mut Context<Self>) {
+        let new_id = self.canvas_pages.add_canvas(cx);
+
+        self.canvas_pages.set_active_canvas(new_id);
+        cx.notify();
+    }
+
+    fn switch_canvas(&mut self, action: &SwitchCanvas, cx: &mut Context<Self>) {
+        if self.canvas_pages.set_active_canvas(action.0) {
+            cx.notify();
+        }
     }
 }
 
@@ -121,23 +150,41 @@ impl Focusable for Luna {
 
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let active_canvas_id = self.active_canvas_id();
+
         div()
             .relative()
             .track_focus(&self.focus_handle())
             .items_center()
             .justify_center()
-            .id("scene-graph")
+            .id("app")
             .key_context("Luna")
             .track_focus(&self.focus_handle())
             .text_xs()
             .font_family("Berkeley Mono")
             .flex()
-            .flex_col()
+            .flex_row()
             .relative()
             .size_full()
             .text_color(cx.theme().fg)
             .bg(cx.theme().bg)
-            .child(self.sidebar.clone())
+            .when_some(active_canvas_id.clone(), |this, id| {
+                this.child(CanvasElement::new(id, cx))
+            })
+            .when(active_canvas_id.is_none(), |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .text_center()
+                        .items_center()
+                        .child("No active canvas"),
+                )
+            })
+            .children([
+                // Sidebar
+                self.sidebar.clone(),
+                // Canvas area
+            ])
     }
 }
 
@@ -193,6 +240,8 @@ fn main() {
             .update(cx, |view, window, cx| {
                 window.focus(&view.focus_handle());
                 cx.activate(true);
+
+                view.new_canvas(&NewCanvas, cx);
             })
             .unwrap();
     });
