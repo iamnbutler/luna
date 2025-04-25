@@ -20,8 +20,6 @@ impl NodeId {
 pub enum ShapeType {
     /// A rectangular shape
     Rectangle { width: f32, height: f32 },
-    /// Origin marker (small plus sign)
-    OriginMarker { size: f32 },
 }
 
 /// A node in the scene graph
@@ -56,17 +54,6 @@ impl Node {
         Self::rectangle(position, size, size)
     }
 
-    /// Create an origin marker node
-    pub fn origin_marker(size: f32) -> Self {
-        Self {
-            id: NodeId::next(),
-            shape: ShapeType::OriginMarker { size },
-            position: LocalPoint::origin(), // Always at origin
-            fill_color: gpui::hsla(0.0, 0.0, 0.0, 1.0),
-            border_color: gpui::hsla(0.0, 0.0, 0.0, 1.0),
-        }
-    }
-
     /// Set the fill color
     pub fn with_fill(mut self, color: gpui::Hsla) -> Self {
         self.fill_color = color;
@@ -86,26 +73,15 @@ pub struct SceneGraph {
     canvas_id: CanvasId,
     /// All nodes in the scene
     nodes: HashMap<NodeId, Node>,
-    /// Special node for the origin marker
-    origin_marker: Option<NodeId>,
 }
 
 impl SceneGraph {
     /// Create a new scene graph for a canvas
     pub fn new(canvas_id: CanvasId) -> Self {
-        let mut graph = Self {
+        Self {
             canvas_id,
             nodes: HashMap::new(),
-            origin_marker: None,
-        };
-
-        // Add the origin marker by default
-        let marker = Node::origin_marker(5.0);
-        let id = marker.id;
-        graph.nodes.insert(id, marker);
-        graph.origin_marker = Some(id);
-
-        graph
+        }
     }
 
     /// Add a node to the scene graph
@@ -137,9 +113,8 @@ impl SceneGraph {
 
     /// Set up a scene with four squares in the quadrants
     pub fn setup_demo_scene(&mut self) {
-        // Clear any existing nodes except the origin marker
-        let origin_id = self.origin_marker;
-        self.nodes.retain(|id, _| Some(*id) == origin_id);
+        // Clear any existing nodes
+        self.nodes.clear();
 
         // Add four 100px squares, one in each quadrant
         // Top-left quadrant (negative x, positive y)
@@ -220,34 +195,6 @@ impl SceneGraph {
                     rect_bounds,
                     node.border_color,
                     gpui::BorderStyle::Solid,
-                ));
-            }
-            ShapeType::OriginMarker { size } => {
-                // Paint a small plus sign at the origin
-                let half_size = size / 2.0;
-
-                // Horizontal line
-                window.paint_quad(gpui::fill(
-                    gpui::Bounds {
-                        origin: gpui::Point::new(
-                            center_x - gpui::px(half_size),
-                            center_y - gpui::px(0.5),
-                        ),
-                        size: gpui::Size::new(gpui::px(size), gpui::px(1.0)),
-                    },
-                    node.fill_color,
-                ));
-
-                // Vertical line
-                window.paint_quad(gpui::fill(
-                    gpui::Bounds {
-                        origin: gpui::Point::new(
-                            center_x - gpui::px(0.5),
-                            center_y - gpui::px(half_size),
-                        ),
-                        size: gpui::Size::new(gpui::px(1.0), gpui::px(size)),
-                    },
-                    node.fill_color,
                 ));
             }
         }
