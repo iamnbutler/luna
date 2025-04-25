@@ -1,17 +1,26 @@
-use gpui::{App, AppContext, Context, Entity, Global, IntoElement, Window};
+use gpui::{App, AppContext, Context, ElementId, Entity, Global, IntoElement, Window};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-// Unique identifier for canvas pages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CanvasId(pub u64);
 
 impl CanvasId {
     pub fn next() -> Self {
-        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-        CanvasId(NEXT_ID.fetch_add(1, Ordering::Relaxed))
+        static NEXT_CANVAS_ID: AtomicU64 = AtomicU64::new(1);
+        CanvasId(NEXT_CANVAS_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CanvasElementId(pub u64);
+
+impl CanvasElementId {
+    pub fn next() -> Self {
+        static NEXT_CANVAS_ELEMENT_ID: AtomicU64 = AtomicU64::new(1);
+        CanvasElementId(NEXT_CANVAS_ELEMENT_ID.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -57,18 +66,18 @@ pub struct CanvasLayout {
 
 // The canvas element for rendering
 pub struct CanvasElement {
-    id: CanvasId,
+    id: ElementId,
     style: CanvasStyle,
+    data: Entity<CanvasData>,
 }
 
 impl CanvasElement {
-    pub fn new(id: CanvasId, cx: &mut App) -> Self {
-        let style = CanvasStyle::new(cx);
-        Self { id, style }
-    }
-
-    pub fn id(&self) -> CanvasId {
-        self.id
+    pub fn new(canvas_data: &Entity<CanvasData>, cx: &mut App) -> Self {
+        Self {
+            id: ElementId::Integer(CanvasElementId::next().0 as usize),
+            style: CanvasStyle::new(cx),
+            data: canvas_data.clone(),
+        }
     }
 
     /// Paint the background layer of the canvas.
@@ -85,30 +94,9 @@ impl CanvasElement {
 
     /// Paint a simple square on the canvas
     pub fn paint_square(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
-        window.paint_layer(layout.hitbox.bounds, |window| {
-            // Calculate square position in the center of the canvas
-            let bounds = layout.hitbox.bounds;
-            let square_size = gpui::px(150.0);
-
-            let square_bounds = gpui::Bounds {
-                origin: gpui::Point::new(
-                    bounds.origin.x + (bounds.size.width - square_size) / 2.0,
-                    bounds.origin.y + (bounds.size.height - square_size) / 2.0,
-                ),
-                size: gpui::Size::new(square_size, square_size),
-            };
-
-            // Paint the square with fill
-            window.paint_quad(gpui::fill(square_bounds, self.style.fill_color));
-
-            // Paint the square border
-            window.paint_quad(gpui::outline(
-                square_bounds,
-                self.style.border_color,
-                gpui::BorderStyle::Solid,
-            ));
-
-            window.request_animation_frame();
+        self.data.update(cx, |canvas, cx| {
+            let scene_graph = canvas.scene_graph();
+            scene_graph.paint_nodes(window, cx, layout.hitbox.bounds);
         });
     }
 }
@@ -118,7 +106,7 @@ impl gpui::Element for CanvasElement {
     type PrepaintState = CanvasLayout;
 
     fn id(&self) -> Option<gpui::ElementId> {
-        None
+        Some(self.id.clone())
     }
 
     fn request_layout(
@@ -194,13 +182,34 @@ impl IntoElement for CanvasElement {
 
 pub struct CanvasData {
     id: CanvasId,
+    scene_graph: crate::scene_graph::SceneGraph,
 }
 
 impl CanvasData {
     pub fn new(id: CanvasId, _cx: &mut App) -> Self {
-        Self { id }
+        // Create a new scene graph for this canvas
+        let mut scene_graph = crate::scene_graph::SceneGraph::new(id);
+
+        // Set up the demo scene with 4 squares
+        scene_graph.setup_demo_scene();
+
+        Self { id, scene_graph }
+    }
+
+    pub fn scene_graph(&self) -> &crate::scene_graph::SceneGraph {
+        &self.scene_graph
+    }
+
+    pub fn id(&self) -> CanvasId {
+        self.id
+    }
+
+    pub fn scene_graph_mut(&mut self) -> &mut crate::scene_graph::SceneGraph {
+        &mut self.scene_graph
     }
 }
+
+impl Global for CanvasPages {}
 
 // A collection of canvas pages
 pub struct CanvasPages {
@@ -269,5 +278,3 @@ impl CanvasPages {
         self.pages.keys()
     }
 }
-
-

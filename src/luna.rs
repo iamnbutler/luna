@@ -30,6 +30,7 @@ use sidebar::inspector::SidebarInspector;
 mod canvas;
 mod geometry;
 mod input;
+mod scene_graph;
 mod sidebar;
 mod typography;
 
@@ -150,8 +151,7 @@ impl Focusable for Luna {
 
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let active_canvas_id = self.active_canvas_id();
-
+        let active_canvas = self.canvas_pages.active_canvas();
         div()
             .relative()
             .track_focus(&self.focus_handle())
@@ -168,10 +168,10 @@ impl Render for Luna {
             .size_full()
             .text_color(cx.theme().fg)
             .bg(cx.theme().bg)
-            .when_some(active_canvas_id.clone(), |this, id| {
-                this.child(CanvasElement::new(id, cx))
+            .when_some(active_canvas.clone(), |this, active_canvas| {
+                this.child(CanvasElement::new(active_canvas, cx))
             })
-            .when(active_canvas_id.is_none(), |this| {
+            .when(active_canvas.is_none(), |this| {
                 this.child(
                     div()
                         .flex()
@@ -180,11 +180,7 @@ impl Render for Luna {
                         .child("No active canvas"),
                 )
             })
-            .children([
-                // Sidebar
-                self.sidebar.clone(),
-                // Canvas area
-            ])
+            .children([self.sidebar.clone()])
     }
 }
 

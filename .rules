@@ -70,6 +70,8 @@ When  `read_with`, `update`, or `update_in` are used with an async context, the 
 
 `WeakEntity<T>` is a weak handle. It has `read_with`, `update`, and `update_in` methods that work the same, but always return an `anyhow::Result` so that they can fail if the entity no longer exists. This can be useful to avoid memory leaks - if entities have mutually recursive handles to eachother they will never be dropped.
 
+When you have a `WeakEntity<T>` and want to update the entity it points to, you first need to attempt to upgrade it to a strong handle using the `upgrade` method. Handle or log the error if the upgrade fails.
+
 ## Concurrency
 
 All use of entities and UI rendering occurs on a single foreground thread.
