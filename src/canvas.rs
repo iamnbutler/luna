@@ -147,24 +147,82 @@ impl CanvasElement {
             let center_x = bounds.origin.x + bounds.size.width / 2.0;
             let center_y = bounds.origin.y + bounds.size.height / 2.0;
 
-            // Define grid spacing and grid color
-            let grid_spacing = gpui::px(100.0);
-            let grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.1);
+            // Define grid spacing and colors
+            let major_grid_spacing = gpui::px(100.0);
+            let minor_grid_spacing = gpui::px(10.0);
+            let minor_grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.03); // Very subtle
+            let major_grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.1);
+            let axes_color = gpui::hsla(0.0, 0.0, 0.5, 0.2);
             let origin_color = gpui::hsla(0.0, 0.0, 0.0, 1.0);
-            let grid_thickness = gpui::px(1.0);
+            
+            let minor_grid_thickness = gpui::px(1.0);
+            let major_grid_thickness = gpui::px(1.0);
             let origin_thickness = gpui::px(1.0);
             let origin_size = gpui::px(15.0); // Size of the plus sign
+            
+            // 1. Paint minor gridlines (subgrid) first
+            // Horizontal minor gridlines
+            let mut y_offset = minor_grid_spacing;
+            while y_offset < bounds.size.height / 2.0 {
+                // Skip if this line would overlap with a major gridline
+                if (y_offset.0 % major_grid_spacing.0).abs() > 0.1 {
+                    // Positive Y direction (up from origin)
+                    self.paint_line(
+                        gpui::Point::new(bounds.origin.x, center_y - y_offset),
+                        gpui::Point::new(bounds.origin.x + bounds.size.width, center_y - y_offset),
+                        minor_grid_thickness,
+                        minor_grid_color,
+                        window,
+                    );
+                    
+                    // Negative Y direction (down from origin)
+                    self.paint_line(
+                        gpui::Point::new(bounds.origin.x, center_y + y_offset),
+                        gpui::Point::new(bounds.origin.x + bounds.size.width, center_y + y_offset),
+                        minor_grid_thickness,
+                        minor_grid_color,
+                        window,
+                    );
+                }
+                y_offset += minor_grid_spacing;
+            }
+            
+            // Vertical minor gridlines
+            let mut x_offset = minor_grid_spacing;
+            while x_offset < bounds.size.width / 2.0 {
+                // Skip if this line would overlap with a major gridline
+                if (x_offset.0 % major_grid_spacing.0).abs() > 0.1 {
+                    // Positive X direction (right from origin)
+                    self.paint_line(
+                        gpui::Point::new(center_x + x_offset, bounds.origin.y),
+                        gpui::Point::new(center_x + x_offset, bounds.origin.y + bounds.size.height),
+                        minor_grid_thickness,
+                        minor_grid_color,
+                        window,
+                    );
+                    
+                    // Negative X direction (left from origin)
+                    self.paint_line(
+                        gpui::Point::new(center_x - x_offset, bounds.origin.y),
+                        gpui::Point::new(center_x - x_offset, bounds.origin.y + bounds.size.height),
+                        minor_grid_thickness,
+                        minor_grid_color,
+                        window,
+                    );
+                }
+                x_offset += minor_grid_spacing;
+            }
 
-            // Paint gridlines in both directions
-            // Horizontal gridlines
-            let mut y_offset = grid_spacing;
+            // 2. Paint major gridlines second
+            // Horizontal major gridlines
+            let mut y_offset = major_grid_spacing;
             while y_offset < bounds.size.height / 2.0 {
                 // Positive Y direction (up from origin)
                 self.paint_line(
                     gpui::Point::new(bounds.origin.x, center_y - y_offset),
                     gpui::Point::new(bounds.origin.x + bounds.size.width, center_y - y_offset),
-                    grid_thickness,
-                    grid_color,
+                    major_grid_thickness,
+                    major_grid_color,
                     window,
                 );
 
@@ -172,23 +230,23 @@ impl CanvasElement {
                 self.paint_line(
                     gpui::Point::new(bounds.origin.x, center_y + y_offset),
                     gpui::Point::new(bounds.origin.x + bounds.size.width, center_y + y_offset),
-                    grid_thickness,
-                    grid_color,
+                    major_grid_thickness,
+                    major_grid_color,
                     window,
                 );
 
-                y_offset += grid_spacing;
+                y_offset += major_grid_spacing;
             }
 
-            // Vertical gridlines
-            let mut x_offset = grid_spacing;
+            // Vertical major gridlines
+            let mut x_offset = major_grid_spacing;
             while x_offset < bounds.size.width / 2.0 {
                 // Positive X direction (right from origin)
                 self.paint_line(
                     gpui::Point::new(center_x + x_offset, bounds.origin.y),
                     gpui::Point::new(center_x + x_offset, bounds.origin.y + bounds.size.height),
-                    grid_thickness,
-                    grid_color,
+                    major_grid_thickness,
+                    major_grid_color,
                     window,
                 );
 
@@ -196,15 +254,34 @@ impl CanvasElement {
                 self.paint_line(
                     gpui::Point::new(center_x - x_offset, bounds.origin.y),
                     gpui::Point::new(center_x - x_offset, bounds.origin.y + bounds.size.height),
-                    grid_thickness,
-                    grid_color,
+                    major_grid_thickness,
+                    major_grid_color,
                     window,
                 );
 
-                x_offset += grid_spacing;
+                x_offset += major_grid_spacing;
             }
+            
+            // 3. Draw the main coordinate axes
+            // X-axis
+            self.paint_line(
+                gpui::Point::new(bounds.origin.x, center_y),
+                gpui::Point::new(bounds.origin.x + bounds.size.width, center_y),
+                major_grid_thickness,
+                axes_color,
+                window,
+            );
+            
+            // Y-axis
+            self.paint_line(
+                gpui::Point::new(center_x, bounds.origin.y),
+                gpui::Point::new(center_x, bounds.origin.y + bounds.size.height),
+                major_grid_thickness,
+                axes_color,
+                window,
+            );
 
-            // Paint the origin marker (plus sign)
+            // 4. Paint the origin marker (plus sign) last so it's on top
             // Horizontal line of the plus sign
             self.paint_line(
                 gpui::Point::new(center_x - origin_size / 2.0, center_y),
@@ -220,27 +297,6 @@ impl CanvasElement {
                 gpui::Point::new(center_x, center_y + origin_size / 2.0),
                 origin_thickness,
                 origin_color,
-                window,
-            );
-            
-            // Draw the main coordinate axes with a more subtle color
-            let axes_color = gpui::hsla(0.0, 0.0, 0.5, 0.2);
-            
-            // X-axis
-            self.paint_line(
-                gpui::Point::new(bounds.origin.x, center_y),
-                gpui::Point::new(bounds.origin.x + bounds.size.width, center_y),
-                grid_thickness,
-                axes_color,
-                window,
-            );
-            
-            // Y-axis
-            self.paint_line(
-                gpui::Point::new(center_x, bounds.origin.y),
-                gpui::Point::new(center_x, bounds.origin.y + bounds.size.height),
-                grid_thickness,
-                axes_color,
                 window,
             );
         });
