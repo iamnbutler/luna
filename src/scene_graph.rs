@@ -1,5 +1,5 @@
 use crate::canvas::CanvasId;
-use crate::geometry::{space, LocalPoint, Transform, WorldPoint};
+use crate::geometry::{LocalPoint, LocalToWorld, WorldPoint, space};
 use gpui::{App, Window};
 use std::collections::HashMap;
 
@@ -73,6 +73,10 @@ pub struct SceneGraph {
     canvas_id: CanvasId,
     /// All nodes in the scene
     nodes: HashMap<NodeId, Node>,
+    /// The center point of the canvas, used for coordinate transformation
+    canvas_center: Option<(gpui::Pixels, gpui::Pixels)>,
+    /// The transformation from local to world coordinates
+    local_to_world: Option<LocalToWorld>,
 }
 
 impl SceneGraph {
@@ -81,7 +85,49 @@ impl SceneGraph {
         Self {
             canvas_id,
             nodes: HashMap::new(),
+            canvas_center: None,
+            local_to_world: None,
         }
+    }
+    
+    /// Set the canvas center point which defines the transform between local and world space
+    pub fn set_canvas_center(&mut self, center_x: gpui::Pixels, center_y: gpui::Pixels) {
+        self.canvas_center = Some((center_x, center_y));
+        
+        // Create a transform that converts from local coordinates to world (screen) coordinates
+        // 1. Translate to center the origin (0,0) at the canvas center
+        // 2. Invert Y-axis because in local space Y increases upward, in screen space Y increases downward
+        let translation = glam::Mat4::from_translation(glam::Vec3::new(center_x.0, center_y.0, 0.0));
+        let y_inversion = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0));
+        
+        self.local_to_world = Some(LocalToWorld::new(translation * y_inversion));
+    }
+    
+    /// Get the local-to-world transform for this scene graph
+    pub fn local_to_world_transform(&self) -> Option<&LocalToWorld> {
+        self.local_to_world.as_ref()
+    }
+    
+    /// Calculate the world bounds for a rectangular node at the given local position with dimensions
+    pub fn calculate_world_bounds(
+        &self,
+        local_position: LocalPoint,
+        width: f32,
+        height: f32,
+    ) -> Option<gpui::Bounds<gpui::Pixels>> {
+        let transform = self.local_to_world_transform()?;
+        
+        // Convert the local center position to world space
+        let world_center = local_position.to_world(transform);
+        
+        // Create the world bounds centered at the world position
+        Some(gpui::Bounds {
+            origin: gpui::Point::new(
+                gpui::px(world_center.x() - width / 2.0),
+                gpui::px(world_center.y() - height / 2.0),
+            ),
+            size: gpui::Size::new(gpui::px(width), gpui::px(height)),
+        })
     }
 
     /// Add a node to the scene graph
@@ -149,44 +195,42 @@ impl SceneGraph {
         cx: &mut App,
         world_bounds: gpui::Bounds<gpui::Pixels>,
     ) {
+        // Calculate the center of the canvas
+        let center_x = world_bounds.origin.x + world_bounds.size.width / 2.0;
+        let center_y = world_bounds.origin.y + world_bounds.size.height / 2.0;
+        
+        // Create the local-to-world transform directly without modifying self
+        let translation = glam::Mat4::from_translation(glam::Vec3::new(center_x.0, center_y.0, 0.0));
+        let y_inversion = glam::Mat4::from_scale(glam::Vec3::new(1.0, -1.0, 1.0));
+        let transform = LocalToWorld::new(translation * y_inversion);
+        
         window.paint_layer(world_bounds, |window| {
-            // Calculate the center of the canvas as our origin
-            let center_x = world_bounds.origin.x + world_bounds.size.width / 2.0;
-            let center_y = world_bounds.origin.y + world_bounds.size.height / 2.0;
-
             // Paint each node
             for node in self.nodes() {
-                self.paint_node(node, center_x, center_y, window);
+                self.paint_node_with_transform(node, &transform, window);
             }
 
             // Request next frame for animations (if needed later)
             window.request_animation_frame();
         });
     }
-
-    /// Paint a single node
-    fn paint_node(
-        &self,
-        node: &Node,
-        center_x: gpui::Pixels,
-        center_y: gpui::Pixels,
-        window: &mut gpui::Window,
-    ) {
-        // Convert local position to world space (centered on canvas)
-        let world_x = center_x + gpui::px(node.position.x());
-        let world_y = center_y - gpui::px(node.position.y()); // Invert y-axis for screen space
-
+    
+    /// Paint a single node using the provided transform
+    fn paint_node_with_transform(&self, node: &Node, transform: &LocalToWorld, window: &mut gpui::Window) {
         match node.shape {
             ShapeType::Rectangle { width, height } => {
-                // Calculate rectangle bounds
+                // Convert the local center position to world space
+                let world_center = node.position.to_world(transform);
+                
+                // Create the world bounds centered at the world position
                 let rect_bounds = gpui::Bounds {
                     origin: gpui::Point::new(
-                        world_x - gpui::px(width / 2.0),
-                        world_y - gpui::px(height / 2.0),
+                        gpui::px(world_center.x() - width / 2.0),
+                        gpui::px(world_center.y() - height / 2.0),
                     ),
                     size: gpui::Size::new(gpui::px(width), gpui::px(height)),
                 };
-
+                
                 // Paint fill
                 window.paint_quad(gpui::fill(rect_bounds, node.fill_color));
 

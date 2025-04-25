@@ -4,6 +4,14 @@ When making code changes to the Luna design tool, embrace a thoughtful and delib
 
 If uncertainty arises, explore multiple potential solutions rather than fixating on a single approach. Trust your expertise to select the most promising option without needing external validation for every decision.
 
+## THE MOST IMPORTANT THINGS:
+
+When writing code for Luna, these are the most important things to know. Never break these.
+
+- NEVER WRITE CUSTOM CONVERSIONS BETWEEN POINT TYPES OR SPACE TYPES. ALWAYS USE THE PROVIDED LOCALPOINT, SCREENPOINT, AND WORLDPOINT TYPES.
+- NEVER DEFINE POSITION DATA IN ANY WAY BUT LOCAL, SCREEN OR WORLD SPACES.
+- ONLY USE PX FOR POSITION DATA WHEN CONSTRUCTING BOUNDS FOR GPUI.
+
 ## Implementation Approach
 
 Before implementation, develop a concrete plan and consider whether test-driven development makes sense for your particular scenario. Ask yourself if the tests will provide genuine value in catching issues or if they're being added merely for the sake of process.

@@ -400,6 +400,59 @@ impl<A: space::Space, B: space::Space, C: space::Space> Mul<Transform<B, C>> for
     }
 }
 
+/// A trait for point operations that invert coordinates
+pub trait PointInversion: Sized {
+    /// Create a new point with the x-coordinate inverted
+    fn invert_x(self) -> Self;
+    
+    /// Create a new point with the y-coordinate inverted
+    fn invert_y(self) -> Self;
+    
+    /// Create a new point with the z-coordinate inverted
+    fn invert_z(self) -> Self;
+}
+
+impl<S: space::Space> PointInversion for Point<S> {
+    fn invert_x(self) -> Self {
+        Self::new(-self.x(), self.y(), self.z())
+    }
+    
+    fn invert_y(self) -> Self {
+        Self::new(self.x(), -self.y(), self.z())
+    }
+    
+    fn invert_z(self) -> Self {
+        Self::new(self.x(), self.y(), -self.z())
+    }
+}
+
+// Implement direct conversion methods for each point type
+impl LocalPoint {
+    /// Convert this local point to world space using the provided transform
+    pub fn to_world(self, transform: &LocalToWorld) -> WorldPoint {
+        transform.transform_point(self)
+    }
+}
+
+impl WorldPoint {
+    /// Convert this world point to local space using the provided transform
+    pub fn to_local(self, transform: &WorldToLocal) -> LocalPoint {
+        transform.transform_point(self)
+    }
+    
+    /// Convert this world point to screen space using the provided transform
+    pub fn to_screen(self, transform: &WorldToScreen) -> ScreenPoint {
+        transform.transform_point(self)
+    }
+}
+
+impl ScreenPoint {
+    /// Convert this screen point to world space using the provided transform
+    pub fn to_world(self, transform: &ScreenToWorld) -> WorldPoint {
+        transform.transform_point(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
