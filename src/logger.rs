@@ -5,11 +5,16 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use dirs::home_dir;
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use std::env;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+// Environment variable names
+const ENV_LOG_LEVEL: &str = "LOG_LEVEL";
 
 // Thread-local storage to hold the current run ID and log path
 thread_local! {
@@ -75,8 +80,22 @@ impl LunaLogger {
         Ok(home.join(".luna").join("logs").join(run_id))
     }
 
+    /// Get the log level from the environment variable or use the default
+    pub fn get_log_level_from_env(default: LevelFilter) -> LevelFilter {
+        env::var(ENV_LOG_LEVEL)
+            .ok()
+            .and_then(|val| LevelFilter::from_str(&val).ok())
+            .unwrap_or(default)
+    }
+
     /// Initialize the logger with the specified log level
-    pub fn init(level: LevelFilter) -> Result<()> {
+    ///
+    /// If the environment variable LOG_LEVEL is set, it will override
+    /// the provided level. The valid values are: off, error, warn, info, debug, trace
+    pub fn init(default_level: LevelFilter) -> Result<()> {
+        // Check for environment variable override
+        let level = Self::get_log_level_from_env(default_level);
+
         let logger = Self::new(level)?;
         let run_id = logger.run_id.clone();
         let log_path = logger.log_path.clone();
@@ -87,6 +106,9 @@ impl LunaLogger {
 
         log::info!("Luna logger initialized. Run ID: {}", run_id);
         log::info!("Log file: {}", log_path.display());
+        if level != default_level {
+            log::info!("Log level set from environment variable to: {}", level);
+        }
         Ok(())
     }
 
