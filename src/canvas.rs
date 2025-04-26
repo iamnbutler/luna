@@ -80,7 +80,6 @@ impl CanvasElement {
         }
     }
 
-    /// Helper method to paint a line using paint_quad
     fn paint_line(
         &self,
         start: gpui::Point<gpui::Pixels>,
@@ -89,37 +88,25 @@ impl CanvasElement {
         color: gpui::Hsla,
         window: &mut gpui::Window,
     ) {
-        // For horizontal lines
         if start.y == end.y {
             let bounds = gpui::Bounds {
-                origin: gpui::Point::new(
-                    start.x.min(end.x),
-                    start.y - thickness / 2.0,
-                ),
+                origin: gpui::Point::new(start.x.min(end.x), start.y - thickness / 2.0),
                 size: gpui::Size::new((end.x - start.x).abs(), thickness),
             };
             window.paint_quad(gpui::fill(bounds, color));
             return;
         }
 
-        // For vertical lines
         if start.x == end.x {
             let bounds = gpui::Bounds {
-                origin: gpui::Point::new(
-                    start.x - thickness / 2.0,
-                    start.y.min(end.y),
-                ),
+                origin: gpui::Point::new(start.x - thickness / 2.0, start.y.min(end.y)),
                 size: gpui::Size::new(thickness, (end.y - start.y).abs()),
             };
             window.paint_quad(gpui::fill(bounds, color));
             return;
         }
-
-        // For other lines, we would need more complex handling
-        // but we're only using horizontal and vertical lines in our implementation
     }
 
-    /// Paint the background layer of the canvas.
     pub fn paint_canvas_background(
         &self,
         layout: &CanvasLayout,
@@ -131,42 +118,59 @@ impl CanvasElement {
         });
     }
 
-    /// Paint a simple square on the canvas
     pub fn paint_square(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         self.data.update(cx, |canvas, cx| {
-            let scene_graph = canvas.scene_graph();
-            scene_graph.paint_nodes(window, cx, layout.hitbox.bounds);
-        });
-    }
+            let scene_graph = canvas.scene_graph_mut();
 
-    /// Paint the origin marker and gridlines
-    pub fn paint_origin_and_gridlines(&self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
-        window.paint_layer(layout.hitbox.bounds, |window| {
-            // Calculate the center of the canvas as our origin
             let bounds = layout.hitbox.bounds;
             let center_x = bounds.origin.x + bounds.size.width / 2.0;
             let center_y = bounds.origin.y + bounds.size.height / 2.0;
 
-            // Define grid spacing and colors
+            scene_graph.set_canvas_center(center_x, center_y);
+
+            scene_graph.paint_nodes(window, cx, layout.hitbox.bounds);
+        });
+    }
+
+    pub fn paint_origin_and_gridlines(
+        &self,
+        layout: &CanvasLayout,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.paint_layer(layout.hitbox.bounds, |window| {
+            let bounds = layout.hitbox.bounds;
+            let center_x = bounds.origin.x + bounds.size.width / 2.0;
+            let center_y = bounds.origin.y + bounds.size.height / 2.0;
+
+            log::debug!(
+                "Drawing origin marker at canvas center: ({}, {})",
+                center_x.0,
+                center_y.0
+            );
+            log::debug!(
+                "Canvas bounds: origin: ({}, {}), size: ({}, {})",
+                bounds.origin.x.0,
+                bounds.origin.y.0,
+                bounds.size.width.0,
+                bounds.size.height.0
+            );
+
             let major_grid_spacing = gpui::px(100.0);
             let minor_grid_spacing = gpui::px(10.0);
-            let minor_grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.03); // Very subtle
+            let minor_grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.03);
             let major_grid_color = gpui::hsla(0.0, 0.0, 1.0, 0.1);
             let axes_color = gpui::hsla(0.0, 0.0, 0.5, 0.2);
-            let origin_color = gpui::hsla(0.0, 0.0, 0.0, 1.0);
-            
+            let origin_color = gpui::hsla(0.0, 1.0, 1.0, 1.0);
+
             let minor_grid_thickness = gpui::px(1.0);
             let major_grid_thickness = gpui::px(1.0);
             let origin_thickness = gpui::px(1.0);
-            let origin_size = gpui::px(15.0); // Size of the plus sign
-            
-            // 1. Paint minor gridlines (subgrid) first
-            // Horizontal minor gridlines
+            let origin_size = gpui::px(10.0);
+
             let mut y_offset = minor_grid_spacing;
             while y_offset < bounds.size.height / 2.0 {
-                // Skip if this line would overlap with a major gridline
                 if (y_offset.0 % major_grid_spacing.0).abs() > 0.1 {
-                    // Positive Y direction (up from origin)
                     self.paint_line(
                         gpui::Point::new(bounds.origin.x, center_y - y_offset),
                         gpui::Point::new(bounds.origin.x + bounds.size.width, center_y - y_offset),
@@ -174,8 +178,7 @@ impl CanvasElement {
                         minor_grid_color,
                         window,
                     );
-                    
-                    // Negative Y direction (down from origin)
+
                     self.paint_line(
                         gpui::Point::new(bounds.origin.x, center_y + y_offset),
                         gpui::Point::new(bounds.origin.x + bounds.size.width, center_y + y_offset),
@@ -186,13 +189,10 @@ impl CanvasElement {
                 }
                 y_offset += minor_grid_spacing;
             }
-            
-            // Vertical minor gridlines
+
             let mut x_offset = minor_grid_spacing;
             while x_offset < bounds.size.width / 2.0 {
-                // Skip if this line would overlap with a major gridline
                 if (x_offset.0 % major_grid_spacing.0).abs() > 0.1 {
-                    // Positive X direction (right from origin)
                     self.paint_line(
                         gpui::Point::new(center_x + x_offset, bounds.origin.y),
                         gpui::Point::new(center_x + x_offset, bounds.origin.y + bounds.size.height),
@@ -200,8 +200,7 @@ impl CanvasElement {
                         minor_grid_color,
                         window,
                     );
-                    
-                    // Negative X direction (left from origin)
+
                     self.paint_line(
                         gpui::Point::new(center_x - x_offset, bounds.origin.y),
                         gpui::Point::new(center_x - x_offset, bounds.origin.y + bounds.size.height),
@@ -213,11 +212,8 @@ impl CanvasElement {
                 x_offset += minor_grid_spacing;
             }
 
-            // 2. Paint major gridlines second
-            // Horizontal major gridlines
             let mut y_offset = major_grid_spacing;
             while y_offset < bounds.size.height / 2.0 {
-                // Positive Y direction (up from origin)
                 self.paint_line(
                     gpui::Point::new(bounds.origin.x, center_y - y_offset),
                     gpui::Point::new(bounds.origin.x + bounds.size.width, center_y - y_offset),
@@ -226,7 +222,6 @@ impl CanvasElement {
                     window,
                 );
 
-                // Negative Y direction (down from origin)
                 self.paint_line(
                     gpui::Point::new(bounds.origin.x, center_y + y_offset),
                     gpui::Point::new(bounds.origin.x + bounds.size.width, center_y + y_offset),
@@ -238,10 +233,8 @@ impl CanvasElement {
                 y_offset += major_grid_spacing;
             }
 
-            // Vertical major gridlines
             let mut x_offset = major_grid_spacing;
             while x_offset < bounds.size.width / 2.0 {
-                // Positive X direction (right from origin)
                 self.paint_line(
                     gpui::Point::new(center_x + x_offset, bounds.origin.y),
                     gpui::Point::new(center_x + x_offset, bounds.origin.y + bounds.size.height),
@@ -250,7 +243,6 @@ impl CanvasElement {
                     window,
                 );
 
-                // Negative X direction (left from origin)
                 self.paint_line(
                     gpui::Point::new(center_x - x_offset, bounds.origin.y),
                     gpui::Point::new(center_x - x_offset, bounds.origin.y + bounds.size.height),
@@ -261,9 +253,7 @@ impl CanvasElement {
 
                 x_offset += major_grid_spacing;
             }
-            
-            // 3. Draw the main coordinate axes
-            // X-axis
+
             self.paint_line(
                 gpui::Point::new(bounds.origin.x, center_y),
                 gpui::Point::new(bounds.origin.x + bounds.size.width, center_y),
@@ -271,8 +261,7 @@ impl CanvasElement {
                 axes_color,
                 window,
             );
-            
-            // Y-axis
+
             self.paint_line(
                 gpui::Point::new(center_x, bounds.origin.y),
                 gpui::Point::new(center_x, bounds.origin.y + bounds.size.height),
@@ -281,8 +270,6 @@ impl CanvasElement {
                 window,
             );
 
-            // 4. Paint the origin marker (plus sign) last so it's on top
-            // Horizontal line of the plus sign
             self.paint_line(
                 gpui::Point::new(center_x - origin_size / 2.0, center_y),
                 gpui::Point::new(center_x + origin_size / 2.0, center_y),
@@ -290,8 +277,7 @@ impl CanvasElement {
                 origin_color,
                 window,
             );
-            
-            // Vertical line of the plus sign
+
             self.paint_line(
                 gpui::Point::new(center_x, center_y - origin_size / 2.0),
                 gpui::Point::new(center_x, center_y + origin_size / 2.0),

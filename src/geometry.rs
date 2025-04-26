@@ -381,7 +381,18 @@ impl<From: space::Space, To: space::Space> Transform<From, To> {
             std::any::type_name::<To>(),
             point
         );
+        
+        // Extract the matrix components to understand what's happening
+        let m = self.matrix;
+        log::debug!("Transform matrix: Scale X: {}, Y: {}, Z: {}", 
+                     m.x_axis.x, m.y_axis.y, m.z_axis.z);
+        log::debug!("Transform matrix: Translation X: {}, Y: {}, Z: {}", 
+                     m.w_axis.x, m.w_axis.y, m.w_axis.z);
+        
+        log::debug!("Input point: ({}, {}, {})", point.x(), point.y(), point.z());
         let result = self.matrix.transform_point3(point.vec);
+        log::debug!("Output point: ({}, {}, {})", result.x, result.y, result.z);
+        
         let transformed = Point {
             vec: result,
             _space: PhantomData,
