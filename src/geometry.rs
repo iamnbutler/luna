@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use log::trace;
 
 /// Marker traits representing different coordinate spaces.
 /// These are used with `Point<S>` for type-level space tracking.
@@ -150,10 +151,18 @@ impl<S: space::Space> Point<S> {
     /// Normally, you should use explicit transform operations to convert between spaces.
     #[inline]
     pub fn into_space<T: space::Space>(self) -> Point<T> {
-        Point {
+        trace!(
+            "WARNING: Direct space conversion from {:?} to {:?}: {:?}", 
+            std::any::type_name::<S>(),
+            std::any::type_name::<T>(),
+            self
+        );
+        let result = Point {
             vec: self.vec,
             _space: PhantomData,
-        }
+        };
+        trace!("Direct conversion result: {:?}", result);
+        result
     }
 
     /// Create a point at the origin (0, 0, 0)
@@ -366,11 +375,19 @@ impl<From: space::Space, To: space::Space> Transform<From, To> {
     /// Apply this transformation to a point in the source space,
     /// returning a point in the destination space
     pub fn transform_point(&self, point: Point<From>) -> Point<To> {
+        trace!(
+            "Transforming point from {:?} to {:?} space: {:?}", 
+            std::any::type_name::<From>(),
+            std::any::type_name::<To>(),
+            point
+        );
         let result = self.matrix.transform_point3(point.vec);
-        Point {
+        let transformed = Point {
             vec: result,
             _space: PhantomData,
-        }
+        };
+        trace!("Transformation result: {:?}", transformed);
+        transformed
     }
 
     /// Get the inverse of this transformation
@@ -430,26 +447,38 @@ impl<S: space::Space> PointInversion for Point<S> {
 impl LocalPoint {
     /// Convert this local point to world space using the provided transform
     pub fn to_world(self, transform: &LocalToWorld) -> WorldPoint {
-        transform.transform_point(self)
+        trace!("Converting LocalPoint to WorldPoint: {:?}", self);
+        let result = transform.transform_point(self);
+        trace!("Conversion result: {:?}", result);
+        result
     }
 }
 
 impl WorldPoint {
     /// Convert this world point to local space using the provided transform
     pub fn to_local(self, transform: &WorldToLocal) -> LocalPoint {
-        transform.transform_point(self)
+        trace!("Converting WorldPoint to LocalPoint: {:?}", self);
+        let result = transform.transform_point(self);
+        trace!("Conversion result: {:?}", result);
+        result
     }
     
     /// Convert this world point to screen space using the provided transform
     pub fn to_screen(self, transform: &WorldToScreen) -> ScreenPoint {
-        transform.transform_point(self)
+        trace!("Converting WorldPoint to ScreenPoint: {:?}", self);
+        let result = transform.transform_point(self);
+        trace!("Conversion result: {:?}", result);
+        result
     }
 }
 
 impl ScreenPoint {
     /// Convert this screen point to world space using the provided transform
     pub fn to_world(self, transform: &ScreenToWorld) -> WorldPoint {
-        transform.transform_point(self)
+        trace!("Converting ScreenPoint to WorldPoint: {:?}", self);
+        let result = transform.transform_point(self);
+        trace!("Conversion result: {:?}", result);
+        result
     }
 }
 
