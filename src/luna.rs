@@ -25,11 +25,13 @@ use gpui::{
     WindowOptions,
 };
 use input::{InputMap, InputMapKey, TextInput};
+use log::{debug, error, info, warn, LevelFilter};
 use sidebar::inspector::SidebarInspector;
 
 mod canvas;
 mod geometry;
 mod input;
+mod logger;
 mod scene_graph;
 mod sidebar;
 mod typography;
@@ -185,6 +187,13 @@ impl Render for Luna {
 }
 
 fn main() {
+    // Initialize the logger
+    if let Err(e) = logger::LunaLogger::init(LevelFilter::Info) {
+        eprintln!("Failed to initialize logger: {}", e);
+    }
+    
+    info!("Starting Luna application");
+    
     Application::new().run(|cx: &mut App| {
         cx.on_action(quit);
         cx.set_menus(vec![Menu {
@@ -232,17 +241,22 @@ fn main() {
         })
         .detach();
 
+        info!("Opening main window");
         window
             .update(cx, |view, window, cx| {
                 window.focus(&view.focus_handle());
                 cx.activate(true);
 
                 view.new_canvas(&NewCanvas, cx);
+                info!("Created new canvas");
             })
             .unwrap();
     });
+    
+    info!("Luna application shutdown complete");
 }
 
 fn quit(_: &Quit, cx: &mut App) {
+    info!("Quit action triggered");
     cx.quit();
 }

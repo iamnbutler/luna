@@ -28,6 +28,9 @@ quadtree_rs = "0.1.3"
 simplecss = "0.2.2"
 regex = "1.11.1"
 unicode-segmentation = "1.12.0"
+log = "0.4.20"
+chrono = "0.4.31"
+dirs = "5.0.1"
 
 [dependencies.glam]
 version = "=0.30.2"
