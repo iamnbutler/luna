@@ -10,8 +10,8 @@ use crate::{
 };
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
-    Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
-    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
+    Entity, Hitbox, HitboxBehavior, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, Bounds, Point, Size};
 use smallvec::SmallVec;
@@ -1778,9 +1778,14 @@ impl Element for CanvasElement {
         None
     }
 
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
     fn request_layout(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         window: &mut gpui::Window,
         cx: &mut gpui::App,
     ) -> (gpui::LayoutId, ()) {
@@ -1806,6 +1811,7 @@ impl Element for CanvasElement {
     fn prepaint(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: gpui::Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut gpui::Window,
@@ -1825,7 +1831,7 @@ impl Element for CanvasElement {
                 // todo: we probably need somethink like zed::editor::EditorSnapshot here
 
                 let style = self.style.clone();
-                let hitbox = window.insert_hitbox(bounds, false);
+                let hitbox = window.insert_hitbox(bounds, HitboxBehavior::default());
 
                 // Check for active drags in the canvas itself
                 let has_active_drag = {
@@ -1846,6 +1852,7 @@ impl Element for CanvasElement {
     fn paint(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: gpui::Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         layout: &mut Self::PrepaintState,

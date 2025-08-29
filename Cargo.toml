@@ -9,15 +9,16 @@ name = "Luna"
 path = "src/luna.rs"
 
 [dependencies]
-# gpui = { git = "https://github.com/zed-industries/zed", rev = "c04c5812b6295ab683fbf1900499330cbc2b3058",  features = ['test-support']}
-gpui = { path = "../zed/crates/gpui", features = ['test-support']}
+gpui = { git = "https://github.com/zed-industries/zed", rev = "a790e514af4d6957aa1a14cc8190b2ff24a0484c", features = [
+    "test-support",
+] }
 anyhow = "1.0.97"
 schemars = "0.8.22"
 schemars_derive = "0.8.22"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 smallvec = "1.14.0"
-uuid = { version ="1.16.0", features = ["v4"] }
+uuid = { version = "1.16.0", features = ["v4"] }
 strum = { version = "0.24", features = ["derive", "strum_macros"] }
 strum_macros = "0.24"
 palette = "0.7.6"
