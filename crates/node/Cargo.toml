@@ -9,6 +9,7 @@ name = "node"
 path = "src/node.rs"
 
 [dependencies]
+glam = { workspace = true }
 gpui = { workspace = true }
 smallvec = { workspace = true }
 slotmap = { workspace = true }

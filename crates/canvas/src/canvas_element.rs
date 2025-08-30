@@ -9,6 +9,7 @@ use gpui::{
     TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
 use gpui::{point, Bounds, Point, Size};
+use luna_core::interactivity::DragPosition;
 use luna_core::{
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
     util::{round_to_pixel, rounded_point},
@@ -419,10 +420,10 @@ impl CanvasElement {
                     let start_pos = active_drag.start_position;
                     let end_pos = active_drag.current_position;
 
-                    let min_x = start_pos.x.0.min(end_pos.x.0);
-                    let min_y = start_pos.y.0.min(end_pos.y.0);
-                    let width = (start_pos.x.0 - end_pos.x.0).abs();
-                    let height = (start_pos.y.0 - end_pos.y.0).abs();
+                    let min_x = start_pos.x().min(end_pos.x());
+                    let min_y = start_pos.y().min(end_pos.y());
+                    let width = (start_pos.x() - end_pos.x()).abs();
+                    let height = (start_pos.y() - end_pos.y()).abs();
 
                     // Only create a rectangle if it has meaningful dimensions
                     if width >= 2.0 && height >= 2.0 {
@@ -593,32 +594,30 @@ impl CanvasElement {
         let active_tool = *cx.active_tool().clone();
 
         // Handle active drag operations
-        if let Some(active_drag) = canvas.active_drag().take() {
+        if let Some(mut active_drag) = canvas.active_drag().take() {
             // Update the drag with new position
-            let new_drag = ActiveDrag {
-                start_position: active_drag.start_position,
-                current_position: position,
-                drag_type: active_drag.drag_type.clone(),
-            };
-            canvas.set_active_drag(new_drag.clone());
+            active_drag.update_position(position);
+            canvas.set_active_drag(active_drag.clone());
 
             // For any non-Selection tool, only allow specific drag types
-            if active_tool != Tool::Selection && matches!(new_drag.drag_type, DragType::Selection) {
+            if active_tool != Tool::Selection
+                && matches!(active_drag.drag_type, DragType::Selection)
+            {
                 // If using a non-Selection tool but having a Selection drag, cancel it
                 canvas.clear_active_drag();
                 return;
             }
 
-            match new_drag.drag_type {
+            match &active_drag.drag_type {
                 DragType::Selection => {
                     // Handle selection rectangle
                     if active_tool == Tool::Selection {
                         // Calculate the selection rectangle in canvas coordinates
                         let start_pos = active_drag.start_position;
-                        let min_x = start_pos.x.0.min(position.x.0);
-                        let min_y = start_pos.y.0.min(position.y.0);
-                        let max_x = start_pos.x.0.max(position.x.0);
-                        let max_y = start_pos.y.0.max(position.y.0);
+                        let min_x = start_pos.x().min(position.x.0);
+                        let min_y = start_pos.y().min(position.y.0);
+                        let max_x = start_pos.x().max(position.x.0);
+                        let max_y = start_pos.y().max(position.y.0);
 
                         // Convert to canvas coordinates
                         let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
@@ -660,7 +659,7 @@ impl CanvasElement {
                     // Move selected elements based on drag delta
                     if !canvas.selected_nodes().is_empty() {
                         // Calculate the drag delta in canvas coordinates
-                        let delta = new_drag.delta();
+                        let delta = active_drag.delta();
 
                         // Get current canvas point to check for potential parent frames
                         let canvas_point =
@@ -689,7 +688,7 @@ impl CanvasElement {
                 DragType::CreateElement => {
                     // Nothing to do here - handled in the rectangle drawing code below
                 }
-                DragType::Resize(mut resize_op) => {
+                DragType::Resize(resize_op) => {
                     // Handle resize operation
                     if canvas.selected_nodes().len() == 1 {
                         // Get the zoom value before any mutable borrows
@@ -700,33 +699,34 @@ impl CanvasElement {
                         if let Some(node) = canvas.get_node_mut(selected_node_id) {
                             // Convert window delta to canvas delta
                             let delta = Point::new(
-                                (position.x.0 - active_drag.start_position.x.0) / zoom,
-                                (position.y.0 - active_drag.start_position.y.0) / zoom,
+                                (position.x.0 - active_drag.start_position.x()) / zoom,
+                                (position.y.0 - active_drag.start_position.y()) / zoom,
                             );
 
                             // Check modifiers: shift for aspect ratio, option (alt) for resize from center
                             let preserve_aspect_ratio = event.modifiers.shift;
                             let resize_from_center = event.modifiers.alt;
 
-                            // Update resize config
-                            resize_op.config.preserve_aspect_ratio = preserve_aspect_ratio;
-                            resize_op.config.resize_from_center = resize_from_center;
+                            // Create a new resize_op with updated configuration
+                            let mut new_resize_op = resize_op.clone();
+                            new_resize_op.config.preserve_aspect_ratio = preserve_aspect_ratio;
+                            new_resize_op.config.resize_from_center = resize_from_center;
 
                             // Calculate new dimensions based on resize handle and modifiers
-                            let mut new_x = resize_op.original_x;
-                            let mut new_y = resize_op.original_y;
-                            let mut new_width = resize_op.original_width;
-                            let mut new_height = resize_op.original_height;
+                            let mut new_x = new_resize_op.original_x();
+                            let mut new_y = new_resize_op.original_y();
+                            let mut new_width = new_resize_op.original_width();
+                            let mut new_height = new_resize_op.original_height();
 
                             // Calculate aspect ratio if needed
                             let aspect_ratio = if preserve_aspect_ratio {
-                                resize_op.original_width / resize_op.original_height
+                                new_resize_op.original_width() / new_resize_op.original_height()
                             } else {
                                 0.0 // Not used when not preserving aspect ratio
                             };
 
                             // Adjust dimensions based on which handle is being dragged
-                            match resize_op.handle {
+                            match new_resize_op.handle {
                                 ResizeHandle::TopLeft => {
                                     // Width/height change is negative of delta for top-left
                                     let width_delta = -delta.x;
@@ -736,23 +736,28 @@ impl CanvasElement {
                                         // Use whichever delta would make the shape larger
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
-                                            new_width = resize_op.original_width + width_delta;
-                                            new_height = resize_op.original_height + adj_height;
-                                            new_x = resize_op.original_x - width_delta;
-                                            new_y = resize_op.original_y - adj_height;
+                                            new_width =
+                                                new_resize_op.original_width() + width_delta;
+                                            new_height =
+                                                new_resize_op.original_height() + adj_height;
+                                            new_x = new_resize_op.original_x() - width_delta;
+                                            new_y = new_resize_op.original_y() - adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
-                                            new_width = resize_op.original_width + adj_width;
-                                            new_height = resize_op.original_height + height_delta;
-                                            new_x = resize_op.original_x - adj_width;
-                                            new_y = resize_op.original_y - height_delta;
+                                            new_width = new_resize_op.original_width() + adj_width;
+                                            new_height =
+                                                new_resize_op.original_height() + height_delta;
+                                            new_x = new_resize_op.original_x() - adj_width;
+                                            new_y = new_resize_op.original_y() - height_delta;
                                         }
                                     } else {
                                         // Standard resize without aspect ratio constraint
-                                        new_width = resize_op.original_width + width_delta;
-                                        new_height = resize_op.original_height + height_delta;
-                                        new_x = resize_op.original_x - width_delta;
-                                        new_y = resize_op.original_y - height_delta;
+                                        new_width =
+                                            new_resize_op.original_width() + 2.0 * width_delta;
+                                        new_height =
+                                            new_resize_op.original_height() + 2.0 * height_delta;
+                                        new_x = new_resize_op.original_x() - width_delta;
+                                        new_y = new_resize_op.original_y() - height_delta;
                                     }
                                 }
                                 ResizeHandle::TopRight => {
@@ -763,19 +768,22 @@ impl CanvasElement {
                                     if preserve_aspect_ratio {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
-                                            new_width = resize_op.original_width + width_delta;
-                                            new_height = resize_op.original_height + adj_height;
-                                            new_y = resize_op.original_y - adj_height;
+                                            new_width =
+                                                new_resize_op.original_width() + width_delta;
+                                            new_height =
+                                                new_resize_op.original_height() - adj_height;
+                                            new_y = new_resize_op.original_y() + adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
-                                            new_width = resize_op.original_width + adj_width;
-                                            new_height = resize_op.original_height + height_delta;
-                                            new_y = resize_op.original_y - height_delta;
+                                            new_width = new_resize_op.original_width() + adj_width;
+                                            new_height =
+                                                new_resize_op.original_height() + height_delta;
+                                            new_y = new_resize_op.original_y() - height_delta;
                                         }
                                     } else {
-                                        new_width = resize_op.original_width + width_delta;
-                                        new_height = resize_op.original_height + height_delta;
-                                        new_y = resize_op.original_y - height_delta;
+                                        new_width = new_resize_op.original_width() + width_delta;
+                                        new_height = new_resize_op.original_height() + height_delta;
+                                        new_y = new_resize_op.original_y() - height_delta;
                                     }
                                 }
                                 ResizeHandle::BottomLeft => {
@@ -786,19 +794,22 @@ impl CanvasElement {
                                     if preserve_aspect_ratio {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
-                                            new_width = resize_op.original_width + width_delta;
-                                            new_height = resize_op.original_height + adj_height;
-                                            new_x = resize_op.original_x - width_delta;
+                                            new_width =
+                                                new_resize_op.original_width() - width_delta;
+                                            new_height =
+                                                new_resize_op.original_height() + adj_height;
+                                            new_x = new_resize_op.original_x() + width_delta;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
-                                            new_width = resize_op.original_width + adj_width;
-                                            new_height = resize_op.original_height + height_delta;
-                                            new_x = resize_op.original_x - adj_width;
+                                            new_width = new_resize_op.original_width() + adj_width;
+                                            new_height =
+                                                new_resize_op.original_height() + height_delta;
+                                            new_x = new_resize_op.original_x() - adj_width;
                                         }
                                     } else {
-                                        new_width = resize_op.original_width + width_delta;
-                                        new_height = resize_op.original_height + height_delta;
-                                        new_x = resize_op.original_x - width_delta;
+                                        new_width = new_resize_op.original_width() + width_delta;
+                                        new_height = new_resize_op.original_height() + height_delta;
+                                        new_x = new_resize_op.original_x() - width_delta;
                                     }
                                 }
                                 ResizeHandle::BottomRight => {
@@ -808,26 +819,29 @@ impl CanvasElement {
                                     if preserve_aspect_ratio {
                                         if width_delta.abs() / aspect_ratio > height_delta.abs() {
                                             let adj_height = width_delta / aspect_ratio;
-                                            new_width = resize_op.original_width + width_delta;
-                                            new_height = resize_op.original_height + adj_height;
+                                            new_width =
+                                                new_resize_op.original_width() + width_delta;
+                                            new_height =
+                                                new_resize_op.original_height() + adj_height;
                                         } else {
                                             let adj_width = height_delta * aspect_ratio;
-                                            new_width = resize_op.original_width + adj_width;
-                                            new_height = resize_op.original_height + height_delta;
+                                            new_width = new_resize_op.original_width() + adj_width;
+                                            new_height =
+                                                new_resize_op.original_height() + height_delta;
                                         }
                                     } else {
-                                        new_width = resize_op.original_width + width_delta;
-                                        new_height = resize_op.original_height + height_delta;
+                                        new_width = new_resize_op.original_width() + width_delta;
+                                        new_height = new_resize_op.original_height() + height_delta;
                                     }
                                 }
                             }
 
                             // If resize from center is enabled, adjust position to keep center fixed
                             if resize_from_center {
-                                let orig_center_x =
-                                    resize_op.original_x + resize_op.original_width / 2.0;
-                                let orig_center_y =
-                                    resize_op.original_y + resize_op.original_height / 2.0;
+                                let orig_center_x = new_resize_op.original_x()
+                                    + new_resize_op.original_width() / 2.0;
+                                let orig_center_y = new_resize_op.original_y()
+                                    + new_resize_op.original_height() / 2.0;
                                 new_x = orig_center_x - new_width / 2.0;
                                 new_y = orig_center_y - new_height / 2.0;
                             }
@@ -840,10 +854,12 @@ impl CanvasElement {
                                         // Crossed right edge - fixed point switches to left
                                         new_width = -new_width;
                                         // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_x + resize_op.original_width;
+                                        new_x = new_resize_op.original_x()
+                                            + new_resize_op.original_width();
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width
+                                        new_x = new_resize_op.original_x()
+                                            + new_resize_op.original_width()
                                             - new_width;
                                     }
 
@@ -852,10 +868,12 @@ impl CanvasElement {
                                         // Crossed bottom edge - fixed point switches to top
                                         new_height = -new_height;
                                         // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_y + resize_op.original_height;
+                                        new_y = new_resize_op.original_y()
+                                            + new_resize_op.original_height();
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height
+                                        new_y = new_resize_op.original_y()
+                                            + new_resize_op.original_height()
                                             - new_height;
                                     }
                                 }
@@ -865,10 +883,10 @@ impl CanvasElement {
                                         // Crossed left edge - fixed point switches to right
                                         new_width = -new_width;
                                         // Keep the original x, width grows to the left
-                                        new_x = resize_op.original_x - new_width;
+                                        new_x = new_resize_op.original_x() - new_width;
                                     } else {
                                         // Normal case - left edge stays fixed at original x
-                                        new_x = resize_op.original_x;
+                                        new_x = new_resize_op.original_x();
                                     }
 
                                     // Handle vertical resizing (top edge)
@@ -876,10 +894,12 @@ impl CanvasElement {
                                         // Crossed bottom edge - fixed point switches to top
                                         new_height = -new_height;
                                         // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_y + resize_op.original_height;
+                                        new_y = new_resize_op.original_y()
+                                            + new_resize_op.original_height();
                                     } else {
                                         // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height
+                                        new_y = new_resize_op.original_y()
+                                            + new_resize_op.original_height()
                                             - new_height;
                                     }
                                 }
@@ -889,10 +909,12 @@ impl CanvasElement {
                                         // Crossed right edge - fixed point switches to left
                                         new_width = -new_width;
                                         // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_x + resize_op.original_width;
+                                        new_x = new_resize_op.original_x()
+                                            + new_resize_op.original_width();
                                     } else {
                                         // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width
+                                        new_x = new_resize_op.original_x()
+                                            + new_resize_op.original_width()
                                             - new_width;
                                     }
 
@@ -901,10 +923,10 @@ impl CanvasElement {
                                         // Crossed top edge - fixed point switches to bottom
                                         new_height = -new_height;
                                         // Keep original y, height grows upward
-                                        new_y = resize_op.original_y - new_height;
+                                        new_y = new_resize_op.original_y() - new_height;
                                     } else {
                                         // Normal case - top edge stays fixed at original y
-                                        new_y = resize_op.original_y;
+                                        new_y = new_resize_op.original_y();
                                     }
                                 }
                                 ResizeHandle::BottomRight => {
@@ -913,10 +935,10 @@ impl CanvasElement {
                                         // Crossed left edge - fixed point switches to right
                                         new_width = -new_width;
                                         // Keep the original x, width grows to the left
-                                        new_x = resize_op.original_x - new_width;
+                                        new_x = new_resize_op.original_x() - new_width;
                                     } else {
                                         // Normal case - left edge stays fixed at original x
-                                        new_x = resize_op.original_x;
+                                        new_x = new_resize_op.original_x();
                                     }
 
                                     // Handle vertical resizing (bottom edge)
@@ -924,10 +946,10 @@ impl CanvasElement {
                                         // Crossed top edge - fixed point switches to bottom
                                         new_height = -new_height;
                                         // Keep original y, height grows upward
-                                        new_y = resize_op.original_y - new_height;
+                                        new_y = new_resize_op.original_y() - new_height;
                                     } else {
                                         // Normal case - top edge stays fixed at original y
-                                        new_y = resize_op.original_y;
+                                        new_y = new_resize_op.original_y();
                                     }
                                 }
                             }
@@ -965,11 +987,9 @@ impl CanvasElement {
                             }
 
                             // Update the resize operation in the drag
-                            let updated_drag = ActiveDrag {
-                                start_position: active_drag.start_position,
-                                current_position: position,
-                                drag_type: DragType::Resize(resize_op),
-                            };
+                            let mut updated_drag = active_drag.clone();
+                            updated_drag.update_position(position);
+                            updated_drag.drag_type = DragType::Resize(new_resize_op);
                             canvas.set_active_drag(updated_drag);
                         }
                     }
@@ -985,7 +1005,7 @@ impl CanvasElement {
                 Tool::Frame => {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
-                        current_position: position,
+                        current_position: DragPosition::from_point_pixels(position),
                         drag_type: DragType::CreateElement,
                     };
                     canvas.set_active_element_draw((active_draw.0, active_draw.1, new_drag));
@@ -1031,22 +1051,24 @@ impl CanvasElement {
             _ => return, // Don't draw for other drag types
         }
 
-        let min_x = round_to_pixel(
+        let min_x = round_to_pixel(Pixels(
             active_drag
                 .start_position
-                .x
-                .min(active_drag.current_position.x),
-        );
-        let min_y = round_to_pixel(
+                .x()
+                .min(active_drag.current_position.x()),
+        ));
+        let min_y = round_to_pixel(Pixels(
             active_drag
                 .start_position
-                .y
-                .min(active_drag.current_position.y),
-        );
-        let width =
-            round_to_pixel((active_drag.start_position.x - active_drag.current_position.x).abs());
-        let height =
-            round_to_pixel((active_drag.start_position.y - active_drag.current_position.y).abs());
+                .y()
+                .min(active_drag.current_position.y()),
+        ));
+        let width = round_to_pixel(Pixels(
+            (active_drag.start_position.x() - active_drag.current_position.x()).abs(),
+        ));
+        let height = round_to_pixel(Pixels(
+            (active_drag.start_position.y() - active_drag.current_position.y()).abs(),
+        ));
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             let position = rounded_point(min_x, min_y);
@@ -1083,17 +1105,17 @@ impl CanvasElement {
 
         // Calculate rectangle bounds in window coordinates
         // Don't round yet to avoid accumulating rounding errors
-        let min_x = start_pos.x.min(current_pos.x);
-        let min_y = start_pos.y.min(current_pos.y);
-        let width = (start_pos.x - current_pos.x).abs();
-        let height = (start_pos.y - current_pos.y).abs();
+        let min_x = start_pos.x().min(current_pos.x());
+        let min_y = start_pos.y().min(current_pos.y());
+        let width = (start_pos.x() - current_pos.x()).abs();
+        let height = (start_pos.y() - current_pos.y()).abs();
 
         // Round once after all coordinate conversions for pixel-perfect rendering
-        let position = rounded_point(min_x, min_y);
+        let position = rounded_point(Pixels(min_x), Pixels(min_y));
 
         let rect_bounds = Bounds {
             origin: position,
-            size: Size::new(width, height),
+            size: Size::new(Pixels(width), Pixels(height)),
         };
 
         // Read canvas and app_state separately to avoid multiple borrows
@@ -1406,8 +1428,8 @@ impl CanvasElement {
                         .iter()
                         .map(|shadow| gpui::BoxShadow {
                             offset: gpui::Point::new(
-                                gpui::Pixels(shadow.offset.x),
-                                gpui::Pixels(shadow.offset.y),
+                                gpui::Pixels(shadow.offset.x()),
+                                gpui::Pixels(shadow.offset.y()),
                             ),
                             blur_radius: gpui::Pixels(shadow.blur_radius),
                             spread_radius: gpui::Pixels(shadow.spread_radius),

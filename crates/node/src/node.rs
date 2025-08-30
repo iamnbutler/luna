@@ -14,7 +14,8 @@
 //! the scene graph handles spatial relationships and transformations. This separation
 //! allows for efficient data management independent of visual representation.
 
-use gpui::{point, Bounds, Hsla, Point, Size};
+use glam::Vec2;
+use gpui::{Bounds, Hsla, Point, Size};
 use smallvec::SmallVec;
 
 pub mod frame;
@@ -69,13 +70,54 @@ impl NodeLayout {
     }
 }
 
+/// Offset for shadow positioning using Vec2 internally
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowOffset(Vec2);
+
+impl ShadowOffset {
+    /// Create a new shadow offset
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y))
+    }
+
+    /// Create from a Vec2
+    pub fn from_vec2(vec: Vec2) -> Self {
+        Self(vec)
+    }
+
+    /// Get the underlying Vec2
+    pub fn as_vec2(&self) -> Vec2 {
+        self.0
+    }
+
+    /// Get x offset
+    pub fn x(&self) -> f32 {
+        self.0.x
+    }
+
+    /// Get y offset
+    pub fn y(&self) -> f32 {
+        self.0.y
+    }
+
+    /// Convert to a GPUI Point
+    pub fn to_point(&self) -> Point<f32> {
+        Point::new(self.0.x, self.0.y)
+    }
+
+    /// Create from a GPUI Point
+    pub fn from_point(point: Point<f32>) -> Self {
+        Self(Vec2::new(point.x, point.y))
+    }
+}
+
 /// Layout information for a node
 #[derive(Debug, Clone)]
 pub struct Shadow {
     /// What color should the shadow have?
     pub color: Hsla,
     /// How should it be offset from its element?
-    pub offset: Point<f32>,
+    pub offset: ShadowOffset,
     /// How much should the shadow be blurred?
     pub blur_radius: f32,
     /// How much should the shadow spread?
@@ -86,7 +128,7 @@ impl From<gpui::BoxShadow> for Shadow {
     fn from(value: gpui::BoxShadow) -> Self {
         Shadow {
             color: value.color,
-            offset: point(value.offset.x.0, value.offset.y.0),
+            offset: ShadowOffset::new(value.offset.x.0, value.offset.y.0),
             blur_radius: value.blur_radius.0,
             spread_radius: value.spread_radius.0,
         }

@@ -2664,6 +2664,7 @@ dependencies = [
 name = "luna_core"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "gpui",
  "palette",
  "serde",
@@ -2888,6 +2889,7 @@ dependencies = [
 name = "node"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "gpui",
  "slotmap",
  "smallvec",

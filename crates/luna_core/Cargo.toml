@@ -9,6 +9,7 @@ name = "luna_core"
 path = "src/luna_core.rs"
 
 [dependencies]
+glam = { workspace = true }
 gpui = { workspace = true }
 palette = { workspace = true }
 serde = { workspace = true }

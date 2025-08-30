@@ -1,5 +1,5 @@
-use gpui::{point, Hsla};
-use node::{frame::FrameNode, NodeCommon, NodeFactory, Shadow};
+use gpui::Hsla;
+use node::{frame::FrameNode, NodeCommon, NodeFactory, Shadow, ShadowOffset};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 
@@ -358,7 +358,7 @@ fn parse_box_shadows(value: &str) -> Option<SmallVec<[Shadow; 1]>> {
         // Create the shadow
         let shadow = Shadow {
             color,
-            offset: point(x_offset, y_offset),
+            offset: ShadowOffset::new(x_offset, y_offset),
             blur_radius,
             spread_radius,
         };
@@ -455,15 +455,15 @@ mod tests {
         assert_eq!(shadows.len(), 2);
 
         // First shadow
-        assert_eq!(shadows[0].offset.x, 0.0);
-        assert_eq!(shadows[0].offset.y, 1.0);
+        assert_eq!(shadows[0].offset.x(), 0.0);
+        assert_eq!(shadows[0].offset.y(), 1.0);
         assert_eq!(shadows[0].blur_radius, 1.0);
         assert_eq!(shadows[0].spread_radius, 0.0);
         assert!(shadows[0].color.a > 0.3 && shadows[0].color.a < 0.33); // Around 0.32
 
         // Second shadow
-        assert_eq!(shadows[1].offset.x, 0.0);
-        assert_eq!(shadows[1].offset.y, 4.0);
+        assert_eq!(shadows[1].offset.x(), 0.0);
+        assert_eq!(shadows[1].offset.y(), 4.0);
         assert_eq!(shadows[1].blur_radius, 6.0);
         assert_eq!(shadows[1].spread_radius, 0.0);
         assert!(shadows[1].color.a > 0.07 && shadows[1].color.a < 0.09); // Around 0.08
