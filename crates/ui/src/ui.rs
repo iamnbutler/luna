@@ -16,8 +16,13 @@
 //! and reactive updates based on application state changes.
 
 #![allow(unused, dead_code)]
-use crate::canvas_element::CanvasElement;
-use crate::{canvas::LunaCanvas, theme::Theme};
+
+pub mod inspector;
+pub mod layer_list;
+pub mod property;
+pub mod sidebar;
+
+use canvas::{canvas_element::CanvasElement, LunaCanvas};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -26,11 +31,7 @@ use gpui::{
 };
 use std::{fs, path::PathBuf};
 use strum::Display;
-
-pub mod inspector;
-pub mod layer_list;
-mod property;
-pub mod sidebar;
+use theme::Theme;
 
 pub struct Titlebar {}
 impl Titlebar {

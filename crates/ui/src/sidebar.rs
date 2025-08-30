@@ -3,13 +3,14 @@
 //! The sidebar renders the primary tool selection interface and
 //! other controls for interacting with the canvas.
 
-use crate::{canvas::LunaCanvas, theme::Theme, tools::ToolStrip};
+use canvas::{tools::ToolStrip, LunaCanvas};
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
     MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
     Window, WindowBackgroundAppearance, WindowOptions,
 };
+use theme::Theme;
 
 use super::{layer_list::LayerList, Titlebar};
 

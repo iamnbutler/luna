@@ -10,11 +10,9 @@ use gpui::{
 
 use std::collections::HashSet;
 
-use crate::{
-    canvas::LunaCanvas,
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeType},
-    theme::Theme,
-};
+use canvas::LunaCanvas;
+use node::{frame::FrameNode, NodeCommon, NodeId, NodeType};
+use theme::Theme;
 
 /// Individual item in the layer list representing a canvas element
 #[derive(IntoElement)]

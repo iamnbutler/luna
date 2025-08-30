@@ -16,8 +16,11 @@
 //! and relationships while the scene graph handles coordinate systems and transformations.
 
 #![allow(unused, dead_code)]
-use crate::node::NodeId;
+
+pub mod scene_node;
+
 use gpui::{Bounds, Point, Size, TransformationMatrix};
+use node::NodeId;
 use slotmap::{KeyData, SlotMap};
 use std::{
     collections::HashMap,
@@ -303,7 +306,11 @@ impl SceneGraph {
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
         // First collect the data we need
         let (transform, local_bounds, children) = match self.nodes.get(node_id) {
-            Some(node) => (node.world_transform, node.local_bounds, node.children.clone()),
+            Some(node) => (
+                node.world_transform,
+                node.local_bounds,
+                node.children.clone(),
+            ),
             None => return,
         };
 
@@ -364,7 +371,7 @@ impl SceneGraph {
                 size: Size::new(max_x - min_x, max_y - min_y),
             };
         }
-        
+
         // Recursively update all children's world bounds
         for child_id in children {
             self.update_world_bounds(child_id);

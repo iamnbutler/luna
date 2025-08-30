@@ -615,6 +615,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "canvas"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "luna_core",
+ "node",
+ "scene_graph",
+ "simplecss",
+ "smallvec",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "theme",
+]
+
+[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2620,12 +2635,16 @@ name = "luna"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "canvas",
  "glam",
  "gpui",
+ "luna_core",
+ "node",
  "palette",
  "quadtree_rs",
  "rand 0.9.0",
  "regex",
+ "scene_graph",
  "schemars",
  "schemars_derive",
  "serde",
@@ -2636,7 +2655,20 @@ dependencies = [
  "strum 0.24.1",
  "strum_macros 0.24.3",
  "taffy",
+ "theme",
+ "ui",
  "uuid",
+]
+
+[[package]]
+name = "luna_core"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "palette",
+ "serde",
+ "serde_json",
+ "smallvec",
 ]
 
 [[package]]
@@ -2850,6 +2882,15 @@ dependencies = [
  "cfg_aliases 0.2.1",
  "libc",
  "memoffset",
+]
+
+[[package]]
+name = "node"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "slotmap",
+ "smallvec",
 ]
 
 [[package]]
@@ -4077,6 +4118,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "scene_graph"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "node",
+ "slotmap",
+]
+
+[[package]]
 name = "schemars"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4669,6 +4719,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "theme"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4886,6 +4945,20 @@ dependencies = [
  "memoffset",
  "tempfile",
  "winapi",
+]
+
+[[package]]
+name = "ui"
+version = "0.1.0"
+dependencies = [
+ "canvas",
+ "gpui",
+ "luna_core",
+ "node",
+ "regex",
+ "smallvec",
+ "strum 0.24.1",
+ "theme",
 ]
 
 [[package]]

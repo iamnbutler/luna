@@ -1,5 +1,5 @@
-use crate::node::{frame::FrameNode, NodeCommon, NodeFactory, Shadow};
 use gpui::{point, Hsla};
+use node::{frame::FrameNode, NodeCommon, NodeFactory, Shadow};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 
@@ -18,6 +18,9 @@ use std::collections::HashMap;
 /// # Example
 ///
 /// ```
+/// use node::NodeFactory;
+/// use canvas::css_parser::parse_rectangle_from_css;
+///
 /// let css = r#"
 ///     width: 100px;
 ///     height: 50px;
@@ -137,7 +140,7 @@ fn parse_length(value: &str) -> Option<f32> {
 /// - HSLA format (hsla(h,s%,l%,a))
 /// - Named colors (red, green, blue, transparent, etc.)
 fn parse_color(value: &str) -> Option<Hsla> {
-    crate::color::parse_color(value)
+    luna_core::color::parse_color(value)
 }
 
 /// Parse RGB or RGBA components from a string

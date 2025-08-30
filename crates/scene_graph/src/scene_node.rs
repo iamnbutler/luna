@@ -7,7 +7,7 @@
 //! ## Architecture
 //!
 //! Scene nodes form the backbone of Luna's spatial organization:
-//! 
+//!
 //! - They track parent-child relationships in the scene hierarchy
 //! - They maintain both local and world transformation matrices
 //! - They store both local and world bounds for efficient spatial operations
@@ -16,9 +16,9 @@
 //! Scene nodes provide the spatial organization layer, while data nodes (NodeId)
 //! contain the actual element properties.
 
-use crate::node::NodeId;
-use crate::scene_graph::SceneNodeId;
+use crate::SceneNodeId;
 use gpui::{Bounds, TransformationMatrix};
+use node::NodeId;
 use std::fmt::Debug;
 
 /// Primary structural component of the scene graph hierarchy

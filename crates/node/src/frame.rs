@@ -4,7 +4,7 @@
 //! Frames are the core building blocks of the Luna canvas system, serving as containers
 //! for other visual elements with configurable styling properties.
 
-use crate::node::{NodeCommon, NodeId, NodeLayout, NodeType};
+use crate::{NodeCommon, NodeId, NodeLayout, NodeType};
 use gpui::Hsla;
 use smallvec::{smallvec, SmallVec};
 

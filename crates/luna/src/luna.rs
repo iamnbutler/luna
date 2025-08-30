@@ -18,35 +18,31 @@
 //! for efficient spatial operations and a component-based architecture for the UI.
 
 use assets::Assets;
-use canvas::LunaCanvas;
-use canvas_element::CanvasElement;
+use canvas::{
+    canvas_element::CanvasElement,
+    tools::{ActiveTool, GlobalTool, Tool},
+    AppState, LunaCanvas,
+};
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
-    IntoElement, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
-    WindowOptions,
+    IntoElement, KeyBinding, Menu, MenuItem, Modifiers, TitlebarOptions, Window,
+    WindowBackgroundAppearance, WindowOptions,
 };
-use keymap::init_keymap;
+use luna_core::keymap::StandardKeymaps;
 use scene_graph::SceneGraph;
 use std::{path::PathBuf, sync::Arc};
 use theme::{ActiveTheme, GlobalTheme, Theme};
-use tools::{ActiveTool, GlobalTool, Tool};
 use ui::{inspector::Inspector, sidebar::Sidebar};
 
 mod assets;
-mod canvas;
-mod canvas_element;
-mod color;
-mod coordinates;
-mod css_parser;
-mod interactivity;
-mod keymap;
-mod node;
-mod scene_graph;
-mod scene_node;
-mod theme;
-mod tools;
-mod ui;
-mod util;
+
+// Re-export commonly used items from external crates
+pub use canvas::{canvas_element, tools};
+pub use luna_core::{color, coordinates, interactivity, keymap, util};
+pub use node;
+pub use scene_graph;
+pub use theme;
+pub use ui;
 
 actions!(
     luna,
@@ -67,21 +63,6 @@ actions!(
         ToggleUI,
     ]
 );
-
-/// Core application state shared between components
-///
-/// Unlike GlobalState, AppState is an Entity that can be updated and observed
-/// through GPUI's reactive update mechanism. Components can subscribe to changes
-/// in this state to update their rendering accordingly.
-///
-/// This state includes the currently active tool and the current element styling
-/// properties that will be applied to newly created elements.
-pub struct AppState {
-    /// Current border color for new elements
-    pub current_border_color: Hsla,
-    /// Current background color for new elements
-    pub current_background_color: Hsla,
-}
 
 /// Main application component that orchestrates the Luna design application
 ///
@@ -243,6 +224,30 @@ impl Focusable for Luna {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
+}
+
+fn init_keymap(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("h", HandTool, None),
+        KeyBinding::new("a", SelectionTool, None),
+        KeyBinding::new("r", RectangleTool, None),
+        KeyBinding::new("f", FrameTool, None),
+        KeyBinding::new("escape", Cancel, None),
+        KeyBinding::new("cmd-a", SelectAll, None),
+        KeyBinding::new("cmd-v", Paste, None),
+        KeyBinding::new("cmd-c", Copy, None),
+        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-\\", ToggleUI, None),
+        KeyBinding::new("x", SwapCurrentColors, None),
+        KeyBinding::new("d", ResetCurrentColors, None),
+        // Canvas
+        KeyBinding::new("delete", Delete, None),
+        KeyBinding::new("backspace", Delete, None),
+        // Layer List
+        KeyBinding::new("delete", Delete, Some("LayerList")),
+        KeyBinding::new("backspace", Delete, Some("LayerList")),
+    ]);
 }
 
 fn init_globals(cx: &mut App) {

@@ -1,5 +1,13 @@
 [workspace]
-members = ["crates/luna"]
+members = [
+    "crates/luna_core",
+    "crates/node",
+    "crates/luna",
+    "crates/theme",
+    "crates/ui",
+    "crates/canvas",
+    "crates/scene_graph",
+]
 resolver = "2"
 
 [workspace.package]

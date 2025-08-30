@@ -16,7 +16,7 @@
 
 #![allow(unused, dead_code)]
 use crate::canvas_element::CanvasElement;
-use crate::{canvas::LunaCanvas, theme::Theme};
+use crate::LunaCanvas;
 use gpui::{
     actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
     ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, Keystroke, Menu,
@@ -26,7 +26,8 @@ use gpui::{
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fs, path::PathBuf};
-use strum::Display;
+use strum_macros::Display;
+use theme::Theme;
 
 #[derive(Default, Debug, Display, Clone, Copy, PartialEq)]
 pub enum Tool {

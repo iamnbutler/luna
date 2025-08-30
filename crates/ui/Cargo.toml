@@ -1,0 +1,19 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ui"
+path = "src/ui.rs"
+
+[dependencies]
+gpui = { workspace = true }
+canvas = { path = "../canvas" }
+node = { path = "../node" }
+theme = { path = "../theme" }
+luna_core = { path = "../luna_core" }
+smallvec = { workspace = true }
+strum = { workspace = true }
+regex = { workspace = true }

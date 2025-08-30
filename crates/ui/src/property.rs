@@ -10,11 +10,8 @@ use gpui::{
     SharedString, Styled, Window,
 };
 
-use crate::{
-    canvas::LunaCanvas,
-    theme::{ActiveTheme, Theme},
-    AppState,
-};
+use canvas::{AppState, LunaCanvas};
+use theme::{ActiveTheme, Theme};
 
 /// Creates a new property input field with the given value and icon
 pub fn float_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
@@ -105,7 +102,7 @@ impl ColorInput {
 
     pub fn parse_color(&self) -> Option<Hsla> {
         if let Some(color_str) = &self.value {
-            crate::color::parse_color(color_str)
+            luna_core::color::parse_color(color_str)
         } else {
             None
         }
