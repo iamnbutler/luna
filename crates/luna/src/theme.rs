@@ -35,7 +35,7 @@ impl Default for ThemeVariant {
 
 /// Atom One palette colors for both themes
 #[derive(Debug, Clone)]
-pub struct Palette {
+pub struct ThemePalette {
     // Accent colors
     pub rosewater: Hsla,
     pub flamingo: Hsla,
@@ -67,8 +67,8 @@ pub struct Palette {
     pub crust: Hsla,
 }
 
-pub fn one_dark() -> Palette {
-    Palette {
+pub fn one_dark() -> ThemePalette {
+    ThemePalette {
         // Accent colors
         rosewater: hsla(0.0 / 360.0, 0.50, 0.70, 1.0), // Cursor color
         flamingo: hsla(5.0 / 360.0, 0.48, 0.67, 1.0),  // #e06c75 (red variant)
@@ -101,8 +101,8 @@ pub fn one_dark() -> Palette {
     }
 }
 
-pub fn one_light() -> Palette {
-    Palette {
+pub fn one_light() -> ThemePalette {
+    ThemePalette {
         // Accent colors
         rosewater: hsla(220.0 / 360.0, 1.00, 0.66, 1.0), // #526eff (cursor)
         flamingo: hsla(5.0 / 360.0, 0.70, 0.59, 1.0),    // #e45649 (red)
@@ -276,7 +276,7 @@ pub struct ThemeTokens {
 #[derive(Debug, Clone)]
 pub struct Theme {
     pub name: SharedString,
-    pub palette: Palette,
+    pub palette: ThemePalette,
     pub tokens: ThemeTokens,
 }
 
@@ -315,7 +315,7 @@ impl Theme {
         Self::from_palette("Atom One Dark", one_dark())
     }
 
-    pub fn from_palette(name: &str, palette: Palette) -> Self {
+    pub fn from_palette(name: &str, palette: ThemePalette) -> Self {
         // Create tokens that map to Atom One theme colors
         let tokens = ThemeTokens {
             // Background colors
