@@ -521,7 +521,7 @@ impl LunaCanvas {
     }
 
     /// Find the parent node of a child node
-    fn find_parent(&self, child_id: NodeId) -> Option<NodeId> {
+    pub fn find_parent(&self, child_id: NodeId) -> Option<NodeId> {
         for (node_id, node) in &self.nodes {
             if node.children().contains(&child_id) {
                 return Some(*node_id);

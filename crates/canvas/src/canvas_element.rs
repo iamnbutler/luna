@@ -257,32 +257,75 @@ impl CanvasElement {
         register_canvas_action(canvas, window, LunaCanvas::clear_selection);
     }
 
-    // handle_mouse_down, etc
-    // Helper function to find the top node at a given point using scene graph for efficiency
+    // Helper function to get the depth of a node in the hierarchy
+    fn get_node_depth(canvas: &LunaCanvas, node_id: NodeId) -> usize {
+        let mut depth = 0;
+        let mut current_id = node_id;
+
+        // Walk up the parent chain counting levels
+        while let Some(parent_id) = canvas.find_parent(current_id) {
+            depth += 1;
+            current_id = parent_id;
+        }
+
+        depth
+    }
+
+    // Helper function to find all nodes at a given point
+    fn find_all_nodes_at_point(canvas: &LunaCanvas, canvas_point: Point<f32>) -> Vec<NodeId> {
+        let mut nodes_at_point = Vec::new();
+
+        // Test each node to see if it contains this point
+        for node in canvas.nodes().values() {
+            let node_bounds = node.bounds();
+            if node_bounds.contains(&canvas_point) {
+                nodes_at_point.push(node.id());
+            }
+        }
+
+        nodes_at_point
+    }
+
+    // Helper function to find the top node at a given point with selection rules
     fn find_top_node_at_point(
         canvas: &LunaCanvas,
         window_point: Point<f32>,
+        deep_selection: bool,
         cx: &Context<LunaCanvas>,
     ) -> Option<NodeId> {
         // Convert window coordinate to canvas coordinate
         let canvas_point = canvas.window_to_canvas_point(window_point);
 
-        // Direct node testing with 1x1 selection point for hit detection
-        let select_point_bounds = Bounds {
-            origin: canvas_point,
-            size: Size::new(1.0, 1.0),
-        };
+        // Find all nodes at this point
+        let nodes_at_point = Self::find_all_nodes_at_point(canvas, canvas_point);
 
-        // Test each node to see if it contains this point
-        // TODO: Once we have proper z-ordering, iterate in reverse z-order
-        for node in canvas.nodes().values() {
-            let node_bounds = node.bounds();
-            if node_bounds.contains(&canvas_point) {
-                return Some(node.id());
+        if nodes_at_point.is_empty() {
+            return None;
+        }
+
+        // If deep selection is enabled (Cmd/Super held), find the deepest node
+        if deep_selection {
+            return nodes_at_point
+                .into_iter()
+                .max_by_key(|&node_id| Self::get_node_depth(canvas, node_id));
+        }
+
+        // Default behavior: prefer immediate children over parents (one level only)
+        // First, find if any of the nodes at point have a parent that's also at the point
+        for &node_id in &nodes_at_point {
+            if let Some(parent_id) = canvas.find_parent(node_id) {
+                // Check if the parent is also at this point
+                if nodes_at_point.contains(&parent_id) {
+                    // We found a child whose parent is also under the cursor
+                    // Return the child (this implements the one-level preference)
+                    return Some(node_id);
+                }
             }
         }
 
-        None
+        // If no parent-child relationship exists at the point, return any node
+        // (preferably the top-most one, but without z-ordering we just return the first)
+        nodes_at_point.into_iter().next()
     }
 
     fn handle_left_mouse_down(
@@ -340,7 +383,12 @@ impl CanvasElement {
 
                 // If we didn't hit a resize handle, proceed with normal selection behavior
                 // Attempt to find a node at the clicked point
-                if let Some(node_id) = Self::find_top_node_at_point(canvas, canvas_point, cx) {
+                // Check if Cmd/Super is held for deep selection
+                let deep_selection = event.modifiers.platform;
+
+                if let Some(node_id) =
+                    Self::find_top_node_at_point(canvas, canvas_point, deep_selection, cx)
+                {
                     // Check if we clicked on a node that's already selected
                     let already_selected = canvas.is_node_selected(node_id);
 
@@ -1038,7 +1086,7 @@ impl CanvasElement {
         let canvas_point = point(position.x.0, position.y.0);
 
         // Find node under cursor for hover effect
-        let hovered = Self::find_top_node_at_point(canvas, canvas_point, cx);
+        let hovered = Self::find_top_node_at_point(canvas, canvas_point, false, cx);
 
         // Only update and redraw if hover state changed
         if canvas.hovered_node() != hovered {
