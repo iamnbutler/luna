@@ -9,6 +9,7 @@ name = "canvas"
 path = "src/canvas.rs"
 
 [dependencies]
+glam = { workspace = true }
 gpui = { workspace = true }
 node = { path = "../node" }
 scene_graph = { path = "../scene_graph" }

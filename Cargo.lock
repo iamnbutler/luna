@@ -618,6 +618,7 @@ dependencies = [
 name = "canvas"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "gpui",
  "luna_core",
  "node",
@@ -4123,7 +4124,9 @@ dependencies = [
 name = "scene_graph"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "gpui",
+ "luna_core",
  "node",
  "slotmap",
 ]

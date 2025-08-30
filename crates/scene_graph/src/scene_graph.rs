@@ -19,8 +19,9 @@
 
 pub mod scene_node;
 
-use gpui::{Bounds, Point, Size, TransformationMatrix};
-use node::NodeId;
+use gpui::{Bounds, Point, Size};
+use luna_core::bounds::Bounds as LunaBounds;
+use node::{frame::FrameNode, NodeId};
 use slotmap::{KeyData, SlotMap};
 use std::{
     collections::HashMap,
@@ -87,10 +88,6 @@ impl SceneGraph {
         let root_node = SceneNode {
             parent: None,
             children: Vec::new(),
-            local_transform: TransformationMatrix::unit(),
-            world_transform: TransformationMatrix::unit(),
-            local_bounds: Bounds::default(),
-            world_bounds: Bounds::default(),
             data_node_id: None,
             visible: true,
         };
@@ -122,10 +119,6 @@ impl SceneGraph {
         let node = SceneNode {
             parent: Some(parent_id),
             children: Vec::new(),
-            local_transform: TransformationMatrix::unit(),
-            world_transform: TransformationMatrix::unit(),
-            local_bounds: Bounds::default(),
-            world_bounds: Bounds::default(),
             data_node_id,
             visible: true,
         };
@@ -142,9 +135,6 @@ impl SceneGraph {
         if let Some(data_id) = data_node_id {
             self.node_mapping.insert(data_id, node_id);
         }
-
-        // Update the world transform and bounds
-        self.update_world_transform(node_id);
 
         node_id
     }
@@ -177,9 +167,6 @@ impl SceneGraph {
         if let Some(parent) = self.nodes.get_mut(parent_id) {
             parent.children.push(child_id);
         }
-
-        // Update transforms
-        self.update_world_transform(child_id);
 
         true
     }
@@ -228,154 +215,55 @@ impl SceneGraph {
     }
 
     /// Gets the scene node ID associated with a data node
-    pub fn get_scene_node_id(&self, data_node_id: NodeId) -> Option<SceneNodeId> {
+    pub fn get_scene_node_from_data_node(&self, data_node_id: NodeId) -> Option<SceneNodeId> {
         self.node_mapping.get(&data_node_id).copied()
     }
 
-    /// Sets the local transform for a node
-    #[allow(dead_code)]
-    pub fn set_local_transform(&mut self, node_id: SceneNodeId, transform: TransformationMatrix) {
-        if let Some(node) = self.nodes.get_mut(node_id) {
-            node.local_transform = transform;
-            // Update world transform for this node and all its children
-            self.update_world_transform(node_id);
+    /// Calculate the world position of a node by traversing up the parent hierarchy
+    /// and summing local positions from FrameNodes
+    pub fn get_world_position(
+        &self,
+        node_id: SceneNodeId,
+        get_frame: impl Fn(NodeId) -> Option<FrameNode>,
+    ) -> glam::Vec2 {
+        let node = match self.nodes.get(node_id) {
+            Some(n) => n,
+            None => return glam::Vec2::ZERO,
+        };
+
+        // Get the local position from the frame node
+        let local_pos = node
+            .data_node_id
+            .and_then(|id| get_frame(id))
+            .map(|frame| glam::Vec2::new(frame.layout.x, frame.layout.y))
+            .unwrap_or(glam::Vec2::ZERO);
+
+        // If there's a parent, add its world position
+        if let Some(parent_id) = node.parent {
+            self.get_world_position(parent_id, get_frame) + local_pos
+        } else {
+            local_pos
         }
     }
 
-    /// Updates the world transform for a node and all its children recursively
-    ///
-    /// This method recalculates the absolute (world) transformation matrix for the specified node
-    /// by composing its local transformation with its parent's world transformation. The update
-    /// propagates to all child nodes to maintain transformation hierarchy integrity.
-    ///
-    /// The implementation carefully manages borrowing to avoid conflicts when recursively
-    /// processing the node hierarchy, first collecting necessary information before modifying
-    /// any nodes.
-    fn update_world_transform(&mut self, node_id: SceneNodeId) {
-        // First gather all the information we need to avoid borrowing issues
-        let (parent_transform, local_transform, children) = {
-            let node = self.nodes.get(node_id);
-            if node.is_none() {
-                return;
-            }
-            let node = node.unwrap();
+    /// Calculate the world bounds of a node
+    pub fn get_world_bounds(
+        &self,
+        node_id: SceneNodeId,
+        get_frame: impl Fn(NodeId) -> Option<FrameNode>,
+    ) -> LunaBounds {
+        let pos = self.get_world_position(node_id, &get_frame);
 
-            // Get parent's world transform
-            let parent_transform = node
-                .parent
-                .and_then(|parent_id| self.nodes.get(parent_id))
-                .map(|parent| parent.world_transform)
-                .unwrap_or_else(TransformationMatrix::unit);
+        // Get size from frame node
+        let size = self
+            .nodes
+            .get(node_id)
+            .and_then(|node| node.data_node_id)
+            .and_then(|id| get_frame(id))
+            .map(|frame| glam::Vec2::new(frame.layout.width, frame.layout.height))
+            .unwrap_or(glam::Vec2::ZERO);
 
-            // Get node's local transform and children
-            let local_transform = node.local_transform;
-            let children = node.children.clone();
-
-            (parent_transform, local_transform, children)
-        };
-
-        // Calculate world transform
-        let world_transform = parent_transform.compose(local_transform);
-
-        // Update node's world transform
-        if let Some(node) = self.nodes.get_mut(node_id) {
-            node.world_transform = world_transform;
-        }
-
-        // Update world bounds
-        self.update_world_bounds(node_id);
-
-        // Update all children
-        for child_id in children {
-            self.update_world_transform(child_id);
-        }
-    }
-
-    /// Computes the axis-aligned bounding box (AABB) in world space
-    ///
-    /// This method transforms the four corners of a node's local bounds using its world
-    /// transformation matrix, then calculates the minimum axis-aligned rectangle that
-    /// contains all transformed points. This is essential for efficient spatial queries
-    /// like hit testing and visibility culling.
-    ///
-    /// The algorithm:
-    /// 1. Extracts the local bounds and world transform
-    /// 2. Transforms each corner of the local bounds to world space
-    /// 3. Computes the min/max coordinates to form an AABB
-    /// 4. Updates the node's world_bounds property
-    fn update_world_bounds(&mut self, node_id: SceneNodeId) {
-        // First collect the data we need
-        let (transform, local_bounds, children) = match self.nodes.get(node_id) {
-            Some(node) => (
-                node.world_transform,
-                node.local_bounds,
-                node.children.clone(),
-            ),
-            None => return,
-        };
-
-        // Transform the four corners of the bounds to create an axis-aligned bounding box
-        let origin_x = local_bounds.origin.x;
-        let origin_y = local_bounds.origin.y;
-        let width = local_bounds.size.width;
-        let height = local_bounds.size.height;
-
-        // Create points for the four corners in gpui::Pixels format
-        let top_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y));
-        let top_right = gpui::Point::new(gpui::Pixels(origin_x + width), gpui::Pixels(origin_y));
-        let bottom_left = gpui::Point::new(gpui::Pixels(origin_x), gpui::Pixels(origin_y + height));
-        let bottom_right = gpui::Point::new(
-            gpui::Pixels(origin_x + width),
-            gpui::Pixels(origin_y + height),
-        );
-
-        // Apply the transformation
-        let top_left_transformed = transform.apply(top_left);
-        let top_right_transformed = transform.apply(top_right);
-        let bottom_left_transformed = transform.apply(bottom_left);
-        let bottom_right_transformed = transform.apply(bottom_right);
-
-        // Calculate the extremes to create an axis-aligned bounding box
-        let min_x = top_left_transformed
-            .x
-            .0
-            .min(top_right_transformed.x.0)
-            .min(bottom_left_transformed.x.0)
-            .min(bottom_right_transformed.x.0);
-
-        let min_y = top_left_transformed
-            .y
-            .0
-            .min(top_right_transformed.y.0)
-            .min(bottom_left_transformed.y.0)
-            .min(bottom_right_transformed.y.0);
-
-        let max_x = top_left_transformed
-            .x
-            .0
-            .max(top_right_transformed.x.0)
-            .max(bottom_left_transformed.x.0)
-            .max(bottom_right_transformed.x.0);
-
-        let max_y = top_left_transformed
-            .y
-            .0
-            .max(top_right_transformed.y.0)
-            .max(bottom_left_transformed.y.0)
-            .max(bottom_right_transformed.y.0);
-
-        // Update world bounds
-        if let Some(node) = self.nodes.get_mut(node_id) {
-            node.world_bounds = Bounds {
-                origin: Point::new(min_x, min_y),
-                size: Size::new(max_x - min_x, max_y - min_y),
-            };
-        }
-
-        // Recursively update all children's world bounds
-        for child_id in children {
-            self.update_world_bounds(child_id);
-        }
+        LunaBounds::from_origin_size(pos, size)
     }
 
     /// Get a reference to a node by its ID
@@ -383,33 +271,10 @@ impl SceneGraph {
         self.nodes.get(node_id)
     }
 
-    /// Get the world transform for a node
-    pub fn get_world_transform(&self, node_id: SceneNodeId) -> Option<TransformationMatrix> {
-        self.nodes.get(node_id).map(|node| node.world_transform)
-    }
-
-    /// Get the local bounds for a node
-    pub fn get_local_bounds(&self, node_id: SceneNodeId) -> Option<Bounds<f32>> {
-        self.nodes.get(node_id).map(|node| node.local_bounds)
-    }
-
-    /// Get the world bounds for a node
-    pub fn get_world_bounds(&self, node_id: SceneNodeId) -> Option<Bounds<f32>> {
-        self.nodes.get(node_id).map(|node| node.world_bounds)
-    }
-
     /// Sets the visibility of a node
-    pub fn set_node_visibility(&mut self, node_id: SceneNodeId, visible: bool) {
+    pub fn set_visible(&mut self, node_id: SceneNodeId, visible: bool) {
         if let Some(node) = self.nodes.get_mut(node_id) {
             node.visible = visible;
-        }
-    }
-
-    /// Sets the local bounds for a node
-    pub fn set_local_bounds(&mut self, node_id: SceneNodeId, bounds: Bounds<f32>) {
-        if let Some(node) = self.nodes.get_mut(node_id) {
-            node.local_bounds = bounds;
-            self.update_world_bounds(node_id);
         }
     }
 
@@ -449,25 +314,6 @@ pub struct SceneNode {
     /// References to all child nodes of this node
     children: Vec<SceneNodeId>,
 
-    /// The transformation matrix relative to the parent node
-    ///
-    /// Example: translate(10, 20) or scale(2.0)
-    local_transform: TransformationMatrix,
-
-    /// The absolute transformation matrix in world space
-    ///
-    /// Example: If parent has translate(10,0) and node has scale(2.0), world is translate(10,0).scale(2.0)
-    world_transform: TransformationMatrix,
-
-    /// The bounding box of this node in its local coordinate space
-    ///
-    /// Example: a 100x100 rectangle at local position (0,0)
-    local_bounds: Bounds<f32>,
-
-    /// The bounding box of this node in world space
-    /// Example: A 100x100 rectangle with scale(2.0) becomes a 200x200 rectangle in world space
-    world_bounds: Bounds<f32>,
-
     /// Reference to the associated data node in the flat data model, if any
     /// Structural nodes like the canvas root may not have a data node
     data_node_id: Option<NodeId>,
@@ -483,23 +329,13 @@ impl SceneNode {
         &self.children
     }
 
-    /// Returns a reference to the node's local bounds
-    pub fn local_bounds(&self) -> &Bounds<f32> {
-        &self.local_bounds
-    }
-
-    /// Returns a reference to the node's world bounds
-    pub fn world_bounds(&self) -> &Bounds<f32> {
-        &self.world_bounds
-    }
-
-    /// Returns the node's data node ID, if any
+    /// Returns the data node ID associated with this scene node
     pub fn data_node_id(&self) -> Option<NodeId> {
         self.data_node_id
     }
 
     /// Returns whether the node is visible
-    pub fn visible(&self) -> bool {
+    pub fn is_visible(&self) -> bool {
         self.visible
     }
 }
@@ -616,11 +452,11 @@ mod tests {
 
         // Verify mapping works both ways
         assert_eq!(graph.get_data_node_id(scene_id), Some(data_id));
-        assert_eq!(graph.get_scene_node_id(data_id), Some(scene_id));
+        assert_eq!(graph.get_scene_node_from_data_node(data_id), Some(scene_id));
 
         // Removing the scene node should remove the mapping
         graph.remove_node(scene_id);
-        assert_eq!(graph.get_scene_node_id(data_id), None);
+        assert_eq!(graph.get_scene_node_from_data_node(data_id), None);
     }
 
     #[test]
@@ -634,11 +470,11 @@ mod tests {
         assert!(graph.get_node(node).unwrap().visible);
 
         // Change visibility to false
-        graph.set_node_visibility(node, false);
+        graph.set_visible(node, false);
         assert!(!graph.get_node(node).unwrap().visible);
 
         // Change visibility back to true
-        graph.set_node_visibility(node, true);
+        graph.set_visible(node, true);
         assert!(graph.get_node(node).unwrap().visible);
     }
 }

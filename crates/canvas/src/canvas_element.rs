@@ -6,7 +6,7 @@ use crate::{
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
     Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
-    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
+    TextStyle, TextStyleRefinement, Window,
 };
 use gpui::{point, Bounds, Point, Size};
 use luna_core::interactivity::DragPosition;
@@ -537,18 +537,11 @@ impl CanvasElement {
                                 canvas.scene_graph().update(cx, |sg, _cx| {
                                     // Get scene node IDs for parent and child
                                     if let (Some(parent_scene_id), Some(child_scene_id)) = (
-                                        sg.get_scene_node_id(parent_info.id),
-                                        sg.get_scene_node_id(node_id),
+                                        sg.get_scene_node_from_data_node(parent_info.id),
+                                        sg.get_scene_node_from_data_node(node_id),
                                     ) {
                                         // Update child bounds to be parent-relative
-                                        if let Some(child_node) = canvas.get_node(node_id) {
-                                            let layout = child_node.layout();
-                                            let bounds = Bounds {
-                                                origin: Point::new(layout.x, layout.y),
-                                                size: Size::new(layout.width, layout.height),
-                                            };
-                                            sg.set_local_bounds(child_scene_id, bounds);
-                                        }
+                                        // Position is stored in FrameNode, no need to update scene graph bounds
 
                                         // Make child a child of parent in scene graph
                                         sg.add_child(parent_scene_id, child_scene_id);
@@ -964,19 +957,12 @@ impl CanvasElement {
                                 layout.height = new_height;
 
                                 // Update scene graph
-                                if let Some(scene_node_id) = canvas
-                                    .scene_graph()
-                                    .update(cx, |sg, _cx| sg.get_scene_node_id(selected_node_id))
-                                {
+                                if let Some(scene_node_id) =
                                     canvas.scene_graph().update(cx, |sg, _cx| {
-                                        sg.set_local_bounds(
-                                            scene_node_id,
-                                            Bounds {
-                                                origin: Point::new(new_x, new_y),
-                                                size: Size::new(new_width, new_height),
-                                            },
-                                        );
-                                    });
+                                        sg.get_scene_node_from_data_node(selected_node_id)
+                                    })
+                                {
+                                    // Position is stored in FrameNode, no need to update scene graph bounds
 
                                     // Update child node layouts to reflect parent's resize
                                     canvas.update_child_layouts_after_parent_resize(
@@ -1327,28 +1313,41 @@ impl CanvasElement {
                 for node in visible_nodes {
                     let node_id = node.id();
 
-                    if let Some(scene_node_id) = scene_graph.get_scene_node_id(node_id) {
-                        if let Some(world_bounds) = scene_graph.get_world_bounds(scene_node_id) {
-                            nodes_to_render.push(NodeRenderInfo {
-                                node_id,
-                                bounds: gpui::Bounds {
-                                    origin: gpui::Point::new(
-                                        gpui::Pixels(world_bounds.origin.x),
-                                        gpui::Pixels(world_bounds.origin.y),
-                                    ),
-                                    size: gpui::Size::new(
-                                        gpui::Pixels(world_bounds.size.width),
-                                        gpui::Pixels(world_bounds.size.height),
-                                    ),
-                                },
-                                fill_color: node.fill(),
-                                border_color: node.border_color(),
-                                border_width: node.border_width(),
-                                corner_radius: node.corner_radius(),
-                                shadows: node.shadows(),
-                                children: node.children().clone(),
-                            });
-                        }
+                    if let Some(scene_node_id) = scene_graph.get_scene_node_from_data_node(node_id)
+                    {
+                        // Calculate world bounds on demand
+                        let world_bounds = scene_graph.get_world_bounds(scene_node_id, |id| {
+                            canvas.nodes().iter().find(|n| n.id == id).cloned()
+                        });
+
+                        // Convert to window coordinates using canvas transform
+                        let canvas_pos = glam::Vec2::new(world_bounds.min.x, world_bounds.min.y);
+                        let canvas_size = world_bounds.size();
+                        let window_pos = canvas
+                            .canvas_to_window_point(gpui::Point::new(canvas_pos.x, canvas_pos.y));
+
+                        // Apply zoom to size
+                        let window_size = gpui::Size::new(
+                            gpui::Pixels(canvas_size.x * canvas.zoom()),
+                            gpui::Pixels(canvas_size.y * canvas.zoom()),
+                        );
+
+                        nodes_to_render.push(NodeRenderInfo {
+                            node_id,
+                            bounds: gpui::Bounds {
+                                origin: gpui::Point::new(
+                                    gpui::Pixels(window_pos.x),
+                                    gpui::Pixels(window_pos.y),
+                                ),
+                                size: window_size,
+                            },
+                            fill_color: node.fill(),
+                            border_color: node.border_color(),
+                            border_width: node.border_width(),
+                            corner_radius: node.corner_radius(),
+                            shadows: node.shadows(),
+                            children: node.children().clone(),
+                        });
                     }
                 }
 
@@ -1373,51 +1372,11 @@ impl CanvasElement {
                 hovered_node: &Option<NodeId>,
                 potential_parent_frame: &Option<NodeId>,
                 has_active_drag: bool,
-                parent_transform: Option<TransformationMatrix>,
                 theme: &Theme,
                 window: &mut gpui::Window,
             ) {
-                // Get coordinates in parent space
-                let (frame_x, frame_y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
-                let (frame_width, frame_height) = (
-                    node_info.bounds.size.width.0,
-                    node_info.bounds.size.height.0,
-                );
-
-                // Apply parent's transform if available, or use node's bounds directly
-                let transformed_bounds = if let Some(transform) = parent_transform {
-                    // Convert to gpui Points and apply the transformation
-                    let top_left = transform.apply(gpui::Point::new(
-                        gpui::Pixels(frame_x),
-                        gpui::Pixels(frame_y),
-                    ));
-
-                    let bottom_right = transform.apply(gpui::Point::new(
-                        gpui::Pixels(frame_x + frame_width),
-                        gpui::Pixels(frame_y + frame_height),
-                    ));
-
-                    // Create bounds from transformed points
-                    gpui::Bounds {
-                        origin: top_left,
-                        size: gpui::Size::new(
-                            gpui::Pixels(bottom_right.x.0 - top_left.x.0),
-                            gpui::Pixels(bottom_right.y.0 - top_left.y.0),
-                        ),
-                    }
-                } else {
-                    // No parent transform, use bounds directly
-                    node_info.bounds
-                };
-
-                // Create a transformation matrix for children
-                // This creates a new coordinate system relative to this frame
-                let child_transform = TransformationMatrix::unit()
-                    .compose(parent_transform.unwrap_or_else(TransformationMatrix::unit))
-                    .translate(point(
-                        gpui::Pixels(frame_x).scale(1.0),
-                        gpui::Pixels(frame_y).scale(1.0),
-                    ));
+                // Use the already-calculated world bounds directly
+                let transformed_bounds = node_info.bounds;
 
                 // FIRST: Paint any shadows behind the node
                 // Shadows need to be rendered before the node itself
@@ -1476,7 +1435,6 @@ impl CanvasElement {
                                     hovered_node,
                                     potential_parent_frame,
                                     has_active_drag,
-                                    Some(child_transform),
                                     theme,
                                     window,
                                 );
@@ -1574,106 +1532,23 @@ impl CanvasElement {
                     &hovered_node,
                     &potential_parent_frame,
                     has_active_drag,
-                    None, // No parent transform for root nodes
                     &theme,
                     window,
-                );
-            }
-
-            // SECOND PASS: Paint all selection outlines and resize handles
-            // ===========================================================
-
-            // Build a map of node ID to parent transform
-            let mut node_transforms: HashMap<NodeId, TransformationMatrix> = HashMap::new();
-
-            // Helper function to compute the absolute transform for a node
-            fn compute_node_transform(
-                node_id: NodeId,
-                node_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
-                transforms: &mut HashMap<NodeId, TransformationMatrix>,
-                all_nodes: &[NodeRenderInfo],
-            ) -> TransformationMatrix {
-                // If we've already computed this node's transform, return it
-                if let Some(transform) = transforms.get(&node_id) {
-                    return *transform;
-                }
-
-                // Find this node's information
-                if let Some(node_info) = all_nodes.iter().find(|n| n.node_id == node_id) {
-                    // Find this node's parent (if any)
-                    let mut parent_id = None;
-                    for (pid, children) in node_map {
-                        if children.iter().any(|c| c.node_id == node_id) {
-                            parent_id = Some(*pid);
-                            break;
-                        }
-                    }
-
-                    // Get the parent's transform if it exists
-                    let parent_transform = if let Some(pid) = parent_id {
-                        compute_node_transform(pid, node_map, transforms, all_nodes)
-                    } else {
-                        TransformationMatrix::unit()
-                    };
-
-                    // Apply this node's local transform to the parent's transform
-                    let (x, y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
-                    let transform =
-                        parent_transform.compose(TransformationMatrix::unit().translate(point(
-                            gpui::Pixels(x).scale(1.0),
-                            gpui::Pixels(y).scale(1.0),
-                        )));
-
-                    // Cache and return the combined transform
-                    transforms.insert(node_id, transform);
-                    transform
-                } else {
-                    // If node not found, return identity transform
-                    TransformationMatrix::unit()
-                }
-            }
-
-            // Compute transforms for all selected nodes
-            for node_id in selected_node_ids.iter() {
-                compute_node_transform(
-                    *node_id,
-                    &children_map,
-                    &mut node_transforms,
-                    &nodes_to_render,
                 );
             }
 
             // First draw individual selection outlines
             for node_info in &nodes_to_render {
                 if selected_node_ids.contains(&node_info.node_id) {
-                    // Get the absolute transform for this node
-                    let transform = node_transforms
-                        .get(&node_info.node_id)
-                        .cloned()
-                        .unwrap_or_else(TransformationMatrix::unit);
-
-                    // Get the bounds in local space (no parent translation)
-                    let (width, height) = (
-                        node_info.bounds.size.width.0,
-                        node_info.bounds.size.height.0,
-                    );
-
-                    // Transform the corners to get absolute position
-                    let top_left =
-                        transform.apply(gpui::Point::new(gpui::Pixels(0.0), gpui::Pixels(0.0)));
-
-                    let bottom_right = transform
-                        .apply(gpui::Point::new(gpui::Pixels(width), gpui::Pixels(height)));
-
-                    // Create selection bounds from transformed corners
+                    // Use the already calculated world bounds directly
                     let selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            top_left.x - gpui::Pixels(2.0),
-                            top_left.y - gpui::Pixels(2.0),
+                            node_info.bounds.origin.x - gpui::Pixels(2.0),
+                            node_info.bounds.origin.y - gpui::Pixels(2.0),
                         ),
                         size: gpui::Size::new(
-                            gpui::Pixels(bottom_right.x.0 - top_left.x.0) + gpui::Pixels(4.0),
-                            gpui::Pixels(bottom_right.y.0 - top_left.y.0) + gpui::Pixels(4.0),
+                            node_info.bounds.size.width + gpui::Pixels(4.0),
+                            node_info.bounds.size.height + gpui::Pixels(4.0),
                         ),
                     };
 

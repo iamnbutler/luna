@@ -22,7 +22,7 @@ use gpui::{
     actions, canvas as gpui_canvas, div, hsla, point, prelude::*, px, size, Action, App, Bounds,
     Context, ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle,
     Focusable, InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Pixels,
-    Point, Render, ScaledPixels, Size, Styled, TransformationMatrix, Window,
+    Point, Render, ScaledPixels, Size, Styled, Window,
 };
 use std::{
     any::TypeId,
@@ -356,7 +356,8 @@ impl LunaCanvas {
 
                     // Get parent's scene node ID
                     self.scene_graph.update(cx, |sg, _| {
-                        sg.get_scene_node_id(parent).unwrap_or(self.canvas_node)
+                        sg.get_scene_node_from_data_node(parent)
+                            .unwrap_or(self.canvas_node)
                     })
                 } else {
                     self.canvas_node
@@ -380,7 +381,7 @@ impl LunaCanvas {
                 size: Size::new(layout.width, layout.height),
             };
 
-            sg.set_local_bounds(scene_node, bounds);
+            // Position is stored in FrameNode, no need to set bounds in scene graph
         });
 
         self.dirty = true;
@@ -436,8 +437,8 @@ impl LunaCanvas {
 
         // 5. Update scene graph - move child node to be under parent node
         let scene_updated = self.scene_graph.update(cx, |sg, _| {
-            let parent_scene_id = sg.get_scene_node_id(parent_id);
-            let child_scene_id = sg.get_scene_node_id(child_id);
+            let parent_scene_id = sg.get_scene_node_from_data_node(parent_id);
+            let child_scene_id = sg.get_scene_node_from_data_node(child_id);
 
             match (parent_scene_id, child_scene_id) {
                 (Some(parent_scene), Some(child_scene)) => sg.add_child(parent_scene, child_scene),
@@ -480,7 +481,7 @@ impl LunaCanvas {
 
             // Update scene graph - move child to canvas root
             let scene_updated = self.scene_graph.update(cx, |sg, _| {
-                let child_scene_id = sg.get_scene_node_id(child_id);
+                let child_scene_id = sg.get_scene_node_from_data_node(child_id);
 
                 match child_scene_id {
                     Some(child_scene) => sg.add_child(self.canvas_node, child_scene),
@@ -597,7 +598,7 @@ impl LunaCanvas {
         // Remove from scene graph if it exists there
         let scene_node_id = self
             .scene_graph
-            .update(cx, |sg, _cx| sg.get_scene_node_id(node_id));
+            .update(cx, |sg, _cx| sg.get_scene_node_from_data_node(node_id));
         if let Some(scene_node_id) = scene_node_id {
             self.scene_graph.update(cx, |sg, _cx| {
                 sg.remove_node(scene_node_id);
@@ -869,20 +870,7 @@ impl LunaCanvas {
                     let height = layout.height;
 
                     // Update the scene graph bounds
-                    if let Some(scene_node_id) = self
-                        .scene_graph
-                        .update(cx, |sg, _cx| sg.get_scene_node_id(node_id))
-                    {
-                        self.scene_graph.update(cx, |sg, _cx| {
-                            sg.set_local_bounds(
-                                scene_node_id,
-                                Bounds {
-                                    origin: Point::new(new_x, new_y),
-                                    size: Size::new(width, height),
-                                },
-                            );
-                        });
-                    }
+                    // Position is updated directly in the FrameNode, no need to update scene graph
                 }
             }
         }
@@ -897,61 +885,14 @@ impl LunaCanvas {
     }
 
     /// Set scroll position
-    pub fn set_scroll_position(&mut self, position: Point<f32>, cx: &mut Context<Self>) {
+    pub fn set_scroll_position(&mut self, position: Point<f32>, _cx: &mut Context<Self>) {
         self.scroll_position = position;
-
-        self.scene_graph.update(cx, |sg, _cx| {
-            // Calculate viewport center for centered coordinate system
-            let center_x = self.viewport.size.width / 2.0;
-            let center_y = self.viewport.size.height / 2.0;
-
-            // Use a single transformation matrix that combines all operations
-            // This ensures consistent transformation for all nodes
-            let transform = TransformationMatrix::unit()
-                // The order of operations: first translate to center, then scale, then apply scroll
-                .translate(point(
-                    Pixels(center_x).scale(1.0),
-                    Pixels(center_y).scale(1.0),
-                ))
-                .scale(size(self.zoom, self.zoom))
-                .translate(point(
-                    Pixels(-self.scroll_position.x).scale(1.0),
-                    Pixels(-self.scroll_position.y).scale(1.0),
-                ));
-
-            sg.set_local_transform(self.canvas_node, transform);
-        });
-
         self.dirty = true;
     }
 
     /// Set zoom level
-    pub fn set_zoom(&mut self, zoom: f32, cx: &mut Context<Self>) {
+    pub fn set_zoom(&mut self, zoom: f32, _cx: &mut Context<Self>) {
         self.zoom = zoom.max(0.1).min(10.0); // Limit zoom range
-
-        // Update canvas root transform
-        self.scene_graph.update(cx, |sg, _cx| {
-            // Calculate viewport center for centered coordinate system
-            let center_x = self.viewport.size.width / 2.0;
-            let center_y = self.viewport.size.height / 2.0;
-
-            // Use a single transformation matrix that combines all operations
-            // This ensures consistent transformation for all nodes
-            let transform = TransformationMatrix::unit()
-                // The order of operations: first translate to center, then scale, then apply scroll
-                .translate(point(
-                    Pixels(center_x).scale(1.0),
-                    Pixels(center_y).scale(1.0),
-                ))
-                .scale(size(self.zoom, self.zoom))
-                .translate(point(
-                    Pixels(-self.scroll_position.x).scale(1.0),
-                    Pixels(-self.scroll_position.y).scale(1.0),
-                ));
-
-            sg.set_local_transform(self.canvas_node, transform);
-        });
-
         self.dirty = true;
     }
 
@@ -1039,28 +980,27 @@ impl LunaCanvas {
             // Get child's scene graph node and its world bounds
             let child_scene_id = match self
                 .scene_graph
-                .update(cx, |sg, _cx| sg.get_scene_node_id(child_id))
+                .update(cx, |sg, _cx| sg.get_scene_node_from_data_node(child_id))
             {
                 Some(id) => id,
                 None => continue,
             };
 
-            // Get world bounds from scene graph
-            let world_bounds = match self
-                .scene_graph
-                .update(cx, |sg, _cx| sg.get_world_bounds(child_scene_id))
-            {
-                Some(bounds) => bounds,
-                None => continue,
-            };
+            // Get the child's world bounds before parent resize
+            let nodes = self.nodes.clone();
+            let world_bounds = self.scene_graph.update(cx, |sg, _cx| {
+                sg.get_world_bounds(child_scene_id, |id| {
+                    nodes.iter().find(|n| n.id == id).cloned()
+                })
+            });
 
             // Update the child's layout to maintain its position relative to parent
             if let Some(child_node) = self.get_node_mut(child_id) {
                 let child_layout = child_node.layout_mut();
 
                 // Convert from world coordinates to coordinates relative to parent
-                child_layout.x = world_bounds.origin.x - parent_x;
-                child_layout.y = world_bounds.origin.y - parent_y;
+                child_layout.x = world_bounds.min.x - parent_x;
+                child_layout.y = world_bounds.min.y - parent_y;
 
                 // Recursively update this child's children
                 self.update_child_layouts_after_parent_resize(child_id, cx);
