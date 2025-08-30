@@ -149,6 +149,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "assets"
+version = "0.1.0"
+dependencies = [
+ "rust-embed",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -618,6 +625,7 @@ dependencies = [
 name = "canvas"
 version = "0.1.0"
 dependencies = [
+ "assets",
  "glam",
  "gpui",
  "luna_core",
@@ -2636,6 +2644,7 @@ name = "luna"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assets",
  "canvas",
  "glam",
  "gpui",

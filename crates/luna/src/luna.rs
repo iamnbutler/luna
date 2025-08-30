@@ -30,7 +30,7 @@ use gpui::{
 };
 use luna_core::keymap::StandardKeymaps;
 use scene_graph::SceneGraph;
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use theme::{ActiveTheme, GlobalTheme, Theme};
 use ui::{inspector::Inspector, sidebar::Sidebar};
 
@@ -261,49 +261,45 @@ fn init_globals(cx: &mut App) {
 /// and opens the main application window. This function is the starting point
 /// for the entire Luna application.
 fn main() {
-    Application::new()
-        .with_assets(Assets {
-            base: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"),
+    Application::new().with_assets(Assets).run(|cx: &mut App| {
+        cx.on_action(quit);
+        cx.set_menus(vec![Menu {
+            name: "Luna".into(),
+            items: vec![MenuItem::action("Quit", Quit)],
+        }]);
+
+        init_keymap(cx);
+        init_globals(cx);
+
+        let window = cx
+            .open_window(
+                WindowOptions {
+                    titlebar: Some(TitlebarOptions {
+                        title: Some("Luna".into()),
+                        appears_transparent: true,
+                        traffic_light_position: Some(point(px(8.0), px(8.0))),
+                    }),
+                    window_background: WindowBackgroundAppearance::Transparent,
+                    ..Default::default()
+                },
+                |window, cx| cx.new(|cx| Luna::new(window, cx)),
+            )
+            .unwrap();
+
+        cx.on_keyboard_layout_change({
+            move |cx| {
+                window.update(cx, |_, _, cx| cx.notify()).ok();
+            }
         })
-        .run(|cx: &mut App| {
-            cx.on_action(quit);
-            cx.set_menus(vec![Menu {
-                name: "Luna".into(),
-                items: vec![MenuItem::action("Quit", Quit)],
-            }]);
+        .detach();
 
-            init_keymap(cx);
-            init_globals(cx);
-
-            let window = cx
-                .open_window(
-                    WindowOptions {
-                        titlebar: Some(TitlebarOptions {
-                            title: Some("Luna".into()),
-                            appears_transparent: true,
-                            traffic_light_position: Some(point(px(8.0), px(8.0))),
-                        }),
-                        window_background: WindowBackgroundAppearance::Transparent,
-                        ..Default::default()
-                    },
-                    |window, cx| cx.new(|cx| Luna::new(window, cx)),
-                )
-                .unwrap();
-
-            cx.on_keyboard_layout_change({
-                move |cx| {
-                    window.update(cx, |_, _, cx| cx.notify()).ok();
-                }
+        window
+            .update(cx, |view, window, cx| {
+                window.focus(&view.focus_handle(cx));
+                cx.activate(true);
             })
-            .detach();
-
-            window
-                .update(cx, |view, window, cx| {
-                    window.focus(&view.focus_handle(cx));
-                    cx.activate(true);
-                })
-                .unwrap();
-        });
+            .unwrap();
+    });
 }
 
 fn quit(_: &Quit, cx: &mut App) {

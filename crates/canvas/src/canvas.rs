@@ -172,7 +172,7 @@ impl LunaCanvas {
         // Try to load the CSS file from assets
         let mut node_to_select = None;
 
-        if let Ok(css_content) = std::fs::read_to_string("assets/css/buttons.css") {
+        if let Some(css_content) = assets::Assets::get_css("buttons") {
             // Use our CSS parser to create rectangle nodes
             let mut factory = node::NodeFactory::default();
             let frames = css_parser::parse_frames_from_css_file(&css_content, &mut factory);

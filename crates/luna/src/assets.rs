@@ -2,33 +2,43 @@
 
 use anyhow::Result;
 use gpui::{AssetSource, SharedString};
-use std::{fs, path::PathBuf};
 
-/// Filesystem-based asset provider implementing [`AssetSource`]
-pub struct Assets {
-    /// Base directory path where assets are located
-    pub base: PathBuf,
-}
+/// Embedded asset provider implementing [`AssetSource`]
+///
+/// This struct bridges between GPUI's AssetSource trait and our
+/// embedded assets from the assets crate.
+pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
-        fs::read(self.base.join(path))
-            .map(|data| Some(std::borrow::Cow::Owned(data)))
-            .map_err(|err| err.into())
+        Ok(assets::Assets::get_asset(path))
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        fs::read_dir(self.base.join(path))
-            .map(|entries| {
-                entries
-                    .filter_map(|entry| {
-                        entry
-                            .ok()
-                            .and_then(|entry| entry.file_name().into_string().ok())
-                            .map(SharedString::from)
-                    })
-                    .collect()
+        // Filter assets that start with the given path
+        let prefix = if path.is_empty() {
+            String::new()
+        } else if path.ends_with('/') {
+            path.to_string()
+        } else {
+            format!("{}/", path)
+        };
+
+        let items: Vec<SharedString> = assets::Assets::list()
+            .filter(|asset_path| asset_path.starts_with(&prefix))
+            .map(|asset_path| {
+                // Get just the filename after the prefix
+                let path_str = asset_path.to_string();
+                path_str[prefix.len()..]
+                    .split('/')
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+                    .into()
             })
-            .map_err(|err| err.into())
+            .filter(|name: &SharedString| !name.is_empty())
+            .collect();
+
+        Ok(items)
     }
 }
