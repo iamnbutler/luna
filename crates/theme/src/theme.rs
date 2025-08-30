@@ -280,12 +280,6 @@ pub struct Theme {
     pub tokens: ThemeTokens,
 }
 
-#[derive(Debug, Clone)]
-pub struct ThemeRegistry {
-    themes: Vec<Theme>,
-    active_theme: Arc<Theme>,
-}
-
 /// Application-wide access point for the current theme
 ///
 /// The ActiveTheme trait provides a standardized mechanism for components to access
