@@ -254,6 +254,42 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
     None
 }
 
+/// Split shadow definitions by commas, but not commas inside parentheses
+fn split_shadow_definitions(value: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth = 0;
+
+    for ch in value.chars() {
+        match ch {
+            '(' => {
+                paren_depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                paren_depth -= 1;
+                current.push(ch);
+            }
+            ',' if paren_depth == 0 => {
+                if !current.trim().is_empty() {
+                    result.push(current.trim().to_string());
+                }
+                current.clear();
+            }
+            _ => {
+                current.push(ch);
+            }
+        }
+    }
+
+    // Don't forget the last shadow definition
+    if !current.trim().is_empty() {
+        result.push(current.trim().to_string());
+    }
+
+    result
+}
+
 /// Parse CSS box-shadow value into a collection of Shadow objects
 ///
 /// Supports multiple shadow definitions separated by commas.
@@ -265,9 +301,10 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
 fn parse_box_shadows(value: &str) -> Option<SmallVec<[Shadow; 1]>> {
     let mut result = SmallVec::new();
 
-    // Split by commas to handle multiple shadow definitions
-    for shadow_def in value.split(',') {
-        let shadow_def = shadow_def.trim();
+    // Split by commas to handle multiple shadow definitions, but not commas inside parentheses
+    let shadow_defs = split_shadow_definitions(value);
+    for shadow_def in &shadow_defs {
+        let shadow_def = shadow_def.as_str();
         if shadow_def.is_empty() {
             continue;
         }
