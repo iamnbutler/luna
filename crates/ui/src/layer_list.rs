@@ -8,7 +8,7 @@ use gpui::{
     Window,
 };
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use canvas::LunaCanvas;
 use node::{frame::FrameNode, NodeCommon, NodeId, NodeType};
@@ -101,10 +101,10 @@ impl LayerList {
     }
 
     // Helper method to find the parent of a node
-    fn find_parent(&self, nodes: &[FrameNode], node_id: NodeId) -> Option<NodeId> {
-        for node in nodes {
-            if node.children().contains(&node_id) {
-                return Some(node.id());
+    fn find_parent(&self, nodes: &HashMap<NodeId, FrameNode>, child_id: NodeId) -> Option<NodeId> {
+        for (node_id, node) in nodes {
+            if node.children().contains(&child_id) {
+                return Some(*node_id);
             }
         }
         None
@@ -114,7 +114,7 @@ impl LayerList {
     fn build_items(
         &self,
         weak_canvas_handle: WeakEntity<LunaCanvas>,
-        nodes: &[FrameNode],
+        nodes: &HashMap<NodeId, FrameNode>,
         parent_id: Option<NodeId>,
         nesting_level: usize,
         selected_nodes: &HashSet<NodeId>,
@@ -124,18 +124,18 @@ impl LayerList {
         let children = if let Some(parent) = parent_id {
             nodes
                 .iter()
-                .filter(|node| self.find_parent(nodes, node.id()) == Some(parent))
+                .filter(|(node_id, _)| self.find_parent(nodes, **node_id) == Some(parent))
                 .collect::<Vec<_>>()
         } else {
             // root nodes
             nodes
                 .iter()
-                .filter(|node| self.find_parent(nodes, node.id()).is_none())
+                .filter(|(node_id, _)| self.find_parent(nodes, **node_id).is_none())
                 .collect::<Vec<_>>()
         };
 
-        for node in children {
-            let node_id = node.id();
+        for (node_id, node) in children {
+            let node_id = *node_id;
             let name = format!("Frame {}", node_id.0);
             let selected = selected_nodes.contains(&node_id);
 

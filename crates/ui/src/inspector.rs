@@ -119,7 +119,9 @@ impl Inspector {
             }
             NodeSelection::Single(node_id) => {
                 let canvas_read = canvas.read(cx);
-                if let Some(node) = canvas_read.nodes().iter().find(|node| node.id() == node_id) {
+                if let Some((_id, node)) =
+                    canvas_read.nodes().iter().find(|(id, _)| **id == node_id)
+                {
                     // Round position and size values to one decimal place
                     self.properties.x.push(node.layout().x);
                     self.properties.y.push(node.layout().y);
@@ -164,7 +166,8 @@ impl Inspector {
                     if let Some(node) = canvas_read
                         .nodes()
                         .iter()
-                        .find(|node| node.id() == *node_id)
+                        .find(|(id, _)| **id == *node_id)
+                        .map(|(_, node)| node)
                     {
                         all_x.push(node.layout().x);
                         all_y.push(node.layout().y);

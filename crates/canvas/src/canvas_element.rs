@@ -274,8 +274,8 @@ impl CanvasElement {
         };
 
         // Test each node to see if it contains this point
-        // Iterate in reverse order to match the painting order (last node is visually on top)
-        for node in canvas.nodes().iter().rev() {
+        // TODO: Once we have proper z-ordering, iterate in reverse z-order
+        for node in canvas.nodes().values() {
             let node_bounds = node.bounds();
             if node_bounds.contains(&canvas_point) {
                 return Some(node.id());
@@ -306,7 +306,7 @@ impl CanvasElement {
                 if canvas.selected_nodes().len() == 1 {
                     // Get the bounds of the selected node
                     let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
-                    if let Some(node) = canvas.nodes().iter().find(|n| n.id() == selected_node_id) {
+                    if let Some(node) = canvas.nodes().get(&selected_node_id) {
                         let node_layout = node.layout();
 
                         // Create node bounds to check for resize handle hits
@@ -485,8 +485,7 @@ impl CanvasElement {
                     // Get all the information we need from the potential parent before borrowing canvas mutably
                     let parent_info = canvas
                         .nodes()
-                        .iter()
-                        .rev() // Reverse to get top-to-bottom z-order
+                        .values()
                         .filter(|node| !selected_ids.contains(&node.id()))
                         .find(|node| node.contains_point(&drop_point))
                         .map(|parent_frame| ParentFrameInfo {
@@ -625,7 +624,7 @@ impl CanvasElement {
                         // Pre-calculate all nodes that intersect with selection
                         let nodes_in_selection: HashSet<NodeId> = canvas
                             .nodes()
-                            .iter()
+                            .values()
                             .filter(|node| bounds_intersect(&selection_bounds, &node.bounds()))
                             .map(|node| node.id())
                             .collect();
@@ -665,8 +664,7 @@ impl CanvasElement {
                         // Find potential parent frame at the current position
                         let potential_parent = canvas
                             .nodes()
-                            .iter()
-                            .rev() // Reverse to get top-to-bottom z-order
+                            .values()
                             .filter(|node| !selected_ids.contains(&node.id()))
                             .find(|node| node.contains_point(&canvas_point))
                             .map(|node| node.id());
@@ -1316,9 +1314,8 @@ impl CanvasElement {
                     if let Some(scene_node_id) = scene_graph.get_scene_node_from_data_node(node_id)
                     {
                         // Calculate world bounds on demand
-                        let world_bounds = scene_graph.get_world_bounds(scene_node_id, |id| {
-                            canvas.nodes().iter().find(|n| n.id == id).cloned()
-                        });
+                        let world_bounds = scene_graph
+                            .get_world_bounds(scene_node_id, |id| canvas.nodes().get(&id).cloned());
 
                         // Convert to window coordinates using canvas transform
                         let canvas_pos = glam::Vec2::new(world_bounds.min.x, world_bounds.min.y);
