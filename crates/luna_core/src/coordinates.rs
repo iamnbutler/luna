@@ -74,12 +74,12 @@ impl CanvasPoint {
     }
 
     /// Convert to a GPUI Point
-    pub fn to_point(&self) -> Point<f32> {
+    pub fn to_gpui(&self) -> Point<f32> {
         Point::new(self.0.x, self.0.y)
     }
 
     /// Create from a GPUI Point
-    pub fn from_point(point: Point<f32>) -> Self {
+    pub fn from_gpui(point: Point<f32>) -> Self {
         Self(Vec2::new(point.x, point.y))
     }
 
@@ -318,7 +318,7 @@ impl CanvasBounds {
     /// Convert to a GPUI Bounds
     pub fn to_bounds(&self) -> Bounds<f32> {
         Bounds {
-            origin: self.origin.to_point(),
+            origin: self.origin.to_gpui(),
             size: self.size.to_size(),
         }
     }
@@ -326,7 +326,7 @@ impl CanvasBounds {
     /// Create from a GPUI Bounds
     pub fn from_bounds(bounds: Bounds<f32>) -> Self {
         Self {
-            origin: CanvasPoint::from_point(bounds.origin),
+            origin: CanvasPoint::from_gpui(bounds.origin),
             size: CanvasSize::from_size(bounds.size),
         }
     }
