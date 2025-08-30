@@ -82,6 +82,9 @@ pub struct ActiveDrag {
     pub current_position: DragPosition,
     /// The type of drag operation being performed
     pub drag_type: DragType,
+    /// Track the last position where we checked for a potential parent frame
+    /// Used to throttle expensive hit testing during drags
+    pub last_parent_check_position: Option<gpui::Point<f32>>,
 }
 
 impl ActiveDrag {
@@ -92,36 +95,40 @@ impl ActiveDrag {
             start_position: position,
             current_position: position,
             drag_type: DragType::Selection,
+            last_parent_check_position: None,
         }
     }
 
     /// Creates a new move elements drag operation
-    pub fn new_move_elements(start: Point<Pixels>) -> Self {
+    pub fn new_move(start: Point<Pixels>) -> Self {
         let position = DragPosition::from_point_pixels(start);
         Self {
             start_position: position,
             current_position: position,
             drag_type: DragType::MoveElements,
+            last_parent_check_position: None,
         }
     }
 
     /// Creates a new create element drag operation
-    pub fn new_create_element(start: Point<Pixels>) -> Self {
+    pub fn new_create(start: Point<Pixels>) -> Self {
         let position = DragPosition::from_point_pixels(start);
         Self {
             start_position: position,
             current_position: position,
             drag_type: DragType::CreateElement,
+            last_parent_check_position: None,
         }
     }
 
     /// Creates a new resize element drag operation
-    pub fn new_resize(start: Point<Pixels>, resize_op: ResizeOperation) -> Self {
+    pub fn new_resize(start: Point<Pixels>, operation: ResizeOperation) -> Self {
         let position = DragPosition::from_point_pixels(start);
         Self {
             start_position: position,
             current_position: position,
-            drag_type: DragType::Resize(resize_op),
+            drag_type: DragType::Resize(operation),
+            last_parent_check_position: None,
         }
     }
 

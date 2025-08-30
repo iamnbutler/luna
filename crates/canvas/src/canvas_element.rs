@@ -364,7 +364,7 @@ impl CanvasElement {
                         canvas.save_selected_nodes_positions();
 
                         // Start a move elements drag operation
-                        canvas.set_active_drag(ActiveDrag::new_move_elements(position));
+                        canvas.set_active_drag(ActiveDrag::new_move(position));
                     }
 
                     canvas.mark_dirty(cx);
@@ -386,7 +386,7 @@ impl CanvasElement {
                 // Use the generate_id method directly since it already returns the correct type
                 let new_node_id = canvas.generate_id();
 
-                let active_drag = ActiveDrag::new_create_element(position);
+                let active_drag = ActiveDrag::new_create(position);
                 canvas.set_active_element_draw((new_node_id, NodeType::Frame, active_drag));
                 canvas.mark_dirty(cx);
             }
@@ -589,7 +589,6 @@ impl CanvasElement {
         if let Some(mut active_drag) = canvas.active_drag().take() {
             // Update the drag with new position
             active_drag.update_position(position);
-            canvas.set_active_drag(active_drag.clone());
 
             // For any non-Selection tool, only allow specific drag types
             if active_tool != Tool::Selection
@@ -645,6 +644,9 @@ impl CanvasElement {
                                 }
                             }
                         }
+
+                        // Put the active drag back after all modifications
+                        canvas.set_active_drag(active_drag);
                     }
                 }
                 DragType::MoveElements => {
@@ -653,31 +655,56 @@ impl CanvasElement {
                         // Calculate the drag delta in canvas coordinates
                         let delta = active_drag.delta();
 
-                        // Get current canvas point to check for potential parent frames
-                        let canvas_point =
-                            canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                        // Only check for potential parent frames occasionally to avoid expensive iteration
+                        // Check every 10 pixels of movement to reduce CPU load
+                        const PARENT_CHECK_THRESHOLD: f32 = 10.0;
 
-                        // Get all the selected node IDs
-                        let selected_ids: Vec<NodeId> =
-                            canvas.selected_nodes().iter().cloned().collect();
+                        let should_check_parent =
+                            if let Some(last_pos) = active_drag.last_parent_check_position {
+                                let distance = ((position.x.0 - last_pos.x).powi(2)
+                                    + (position.y.0 - last_pos.y).powi(2))
+                                .sqrt();
+                                distance > PARENT_CHECK_THRESHOLD
+                            } else {
+                                true // First check
+                            };
 
-                        // Find potential parent frame at the current position
-                        let potential_parent = canvas
-                            .nodes()
-                            .values()
-                            .filter(|node| !selected_ids.contains(&node.id()))
-                            .find(|node| node.contains_point(&canvas_point))
-                            .map(|node| node.id());
+                        if should_check_parent {
+                            // Get current canvas point to check for potential parent frames
+                            let canvas_point = canvas
+                                .window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
-                        // Update the potential parent frame
-                        canvas.set_potential_parent_frame(potential_parent);
+                            // Get all the selected node IDs
+                            let selected_ids: Vec<NodeId> =
+                                canvas.selected_nodes().iter().cloned().collect();
+
+                            // Find potential parent frame at the current position
+                            let potential_parent = canvas
+                                .nodes()
+                                .values()
+                                .filter(|node| !selected_ids.contains(&node.id()))
+                                .find(|node| node.contains_point(&canvas_point))
+                                .map(|node| node.id());
+
+                            // Update the potential parent frame
+                            canvas.set_potential_parent_frame(potential_parent);
+
+                            // Update the last check position in the drag state
+                            active_drag.last_parent_check_position =
+                                Some(Point::new(position.x.0, position.y.0));
+                        }
 
                         // Move all selected nodes with the drag delta
                         canvas.move_selected_nodes_with_drag(delta, cx);
+
+                        // Put the active drag back after modifications
+                        canvas.set_active_drag(active_drag);
                     }
                 }
                 DragType::CreateElement => {
                     // Nothing to do here - handled in the rectangle drawing code below
+                    // Put the active drag back
+                    canvas.set_active_drag(active_drag);
                 }
                 DragType::Resize(resize_op) => {
                     // Handle resize operation
@@ -979,7 +1006,7 @@ impl CanvasElement {
                     }
                 }
             }
-
+            // Mark dirty to trigger redraw after drag update
             canvas.mark_dirty(cx);
         }
 
@@ -991,6 +1018,7 @@ impl CanvasElement {
                         start_position: active_draw.2.start_position,
                         current_position: DragPosition::from_point_pixels(position),
                         drag_type: DragType::CreateElement,
+                        last_parent_check_position: None,
                     };
                     canvas.set_active_element_draw((active_draw.0, active_draw.1, new_drag));
                     canvas.mark_dirty(cx);
@@ -1228,13 +1256,18 @@ impl CanvasElement {
             move |event: &MouseMoveEvent, phase, window, cx| {
                 if phase == DispatchPhase::Bubble {
                     canvas.update(cx, |canvas, cx| {
+                        // Throttle mouse move processing to ~60fps to avoid overwhelming the system
                         if event.pressed_button == Some(MouseButton::Left)
                             || event.pressed_button == Some(MouseButton::Middle)
                         {
-                            Self::handle_mouse_drag(canvas, event, window, cx)
+                            // Only process drag events at throttled rate
+                            if canvas.should_process_mouse_move() {
+                                Self::handle_mouse_drag(canvas, event, window, cx)
+                            }
+                        } else {
+                            // Always process hover updates (they're less expensive)
+                            Self::handle_mouse_move(canvas, event, window, cx)
                         }
-
-                        Self::handle_mouse_move(canvas, event, window, cx)
                     });
                 }
             }

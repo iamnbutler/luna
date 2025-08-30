@@ -76,6 +76,12 @@ pub struct LunaCanvas {
     /// Currently selected nodes
     selected_nodes: HashSet<NodeId>,
 
+    /// Last time we processed a mouse move event (for throttling)
+    last_mouse_move_time: std::time::Instant,
+
+    /// Minimum time between mouse move processing (16ms = ~60fps)
+    mouse_move_throttle: std::time::Duration,
+
     /// Currently hovered node (for hover effects)
     hovered_node: Option<NodeId>,
 
@@ -145,6 +151,8 @@ impl LunaCanvas {
             canvas_node,
             nodes: HashMap::new(),
             selected_nodes: HashSet::new(),
+            last_mouse_move_time: std::time::Instant::now(),
+            mouse_move_throttle: std::time::Duration::from_millis(16), // ~60fps
             viewport,
             scroll_position: Point::new(0.0, 0.0), // Will be initialized with set_scroll_position below
             zoom: 1.0,
@@ -270,8 +278,23 @@ impl LunaCanvas {
         self.potential_parent_frame
     }
 
+    /// Check if enough time has passed to process the next mouse move
+    pub fn should_process_mouse_move(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_mouse_move_time) >= self.mouse_move_throttle {
+            self.last_mouse_move_time = now;
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn set_potential_parent_frame(&mut self, frame_id: Option<NodeId>) {
         self.potential_parent_frame = frame_id;
+    }
+
+    pub fn get_node(&self, node_id: NodeId) -> Option<&FrameNode> {
+        self.nodes.get(&node_id)
     }
 
     pub fn hovered_node(&self) -> Option<NodeId> {
@@ -280,10 +303,6 @@ impl LunaCanvas {
 
     pub fn set_hovered_node(&mut self, hovered_node: Option<NodeId>) {
         self.hovered_node = hovered_node;
-    }
-
-    pub fn get_node(&self, node_id: NodeId) -> Option<&FrameNode> {
-        self.nodes.get(&node_id)
     }
 
     pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut FrameNode> {
