@@ -533,152 +533,10 @@ impl CanvasElement {
         if let Some(active_drag) = canvas.active_drag().take() {
             match active_drag.drag_type {
                 DragType::MoveElements => {
-                    // Convert window coordinates to canvas coordinates (centered system)
-                    let drop_point =
-                        canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
-
-                    // Get all the selected node IDs
-                    let selected_ids: Vec<NodeId> =
-                        canvas.selected_nodes().iter().cloned().collect();
-
-                    // First, check if any selected nodes need to be unparented
-                    // (they're no longer inside their parent's bounds)
-                    for &node_id in &selected_ids {
-                        if let Some(current_parent_id) = canvas.find_parent(node_id) {
-                            // Get absolute position of the node
-                            let (node_abs_x, node_abs_y) =
-                                canvas.get_absolute_position(node_id, cx);
-
-                            // Get the parent's absolute bounds
-                            let (parent_abs_x, parent_abs_y) =
-                                canvas.get_absolute_position(current_parent_id, cx);
-                            let parent_bounds =
-                                if let Some(parent_node) = canvas.get_node(current_parent_id) {
-                                    let layout = parent_node.layout();
-                                    Bounds {
-                                        origin: Point::new(parent_abs_x, parent_abs_y),
-                                        size: Size::new(layout.width, layout.height),
-                                    }
-                                } else {
-                                    continue;
-                                };
-
-                            // Get the node's size
-                            let node_size = if let Some(node) = canvas.get_node(node_id) {
-                                let layout = node.layout();
-                                Size::new(layout.width, layout.height)
-                            } else {
-                                continue;
-                            };
-
-                            // Check if the node's bounds are completely outside the parent
-                            let node_bounds = Bounds {
-                                origin: Point::new(node_abs_x, node_abs_y),
-                                size: node_size,
-                            };
-
-                            // If the node is completely outside its parent, unparent it
-                            // Check if bounds intersect (if they don't intersect, the node is outside)
-                            let intersects = !(node_bounds.origin.x + node_bounds.size.width
-                                < parent_bounds.origin.x
-                                || node_bounds.origin.x
-                                    > parent_bounds.origin.x + parent_bounds.size.width
-                                || node_bounds.origin.y + node_bounds.size.height
-                                    < parent_bounds.origin.y
-                                || node_bounds.origin.y
-                                    > parent_bounds.origin.y + parent_bounds.size.height);
-
-                            if !intersects {
-                                // Remove from parent and convert to absolute positioning
-                                canvas.remove_child_from_parent(node_id, cx);
-                            }
-                        }
-                    }
-
-                    // Structure to hold all the information we need from the parent frame
-                    struct ParentFrameInfo {
-                        id: NodeId,
-                        children: Vec<NodeId>,
-                        x: f32,
-                        y: f32,
-                    }
-
-                    // Now check if nodes are being dropped on a new parent frame
-                    let parent_info = canvas
-                        .nodes()
-                        .values()
-                        .filter(|node| !selected_ids.contains(&node.id()))
-                        .find(|node| node.contains_point(&drop_point))
-                        .map(|parent_frame| ParentFrameInfo {
-                            id: parent_frame.id(),
-                            children: parent_frame.children().clone(),
-                            x: parent_frame.layout().x,
-                            y: parent_frame.layout().y,
-                        });
-
-                    // Process if we found a potential parent
-                    if let Some(parent_info) = parent_info {
-                        // For each selected node, add it as a child to the parent frame
-                        for &node_id in &selected_ids {
-                            // First, ensure the node isn't already a child of this frame
-                            if !parent_info.children.contains(&node_id) {
-                                // Remove from current parent if it has one
-                                if canvas.find_parent(node_id).is_some() {
-                                    canvas.remove_child_from_parent(node_id, cx);
-                                }
-
-                                // Get canvas-space absolute position of child and parent before any changes
-                                let child_absolute_pos =
-                                    if let Some(child_node) = canvas.get_node(node_id) {
-                                        let child_layout = child_node.layout();
-                                        canvas.get_absolute_position(node_id, cx)
-                                    } else {
-                                        continue;
-                                    };
-
-                                let parent_absolute_pos =
-                                    canvas.get_absolute_position(parent_info.id, cx);
-
-                                // Calculate child's position relative to parent
-                                // This is the key part for correct parent-relative positioning
-                                let relative_x = child_absolute_pos.0 - parent_absolute_pos.0;
-                                let relative_y = child_absolute_pos.1 - parent_absolute_pos.1;
-
-                                // Now update parent to add child
-                                if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
-                                    parent_node.add_child(node_id);
-                                }
-
-                                // Then set the child's position relative to parent
-                                if let Some(child_node) = canvas.get_node_mut(node_id) {
-                                    let child_layout = child_node.layout_mut();
-
-                                    // Use the calculated relative coordinates
-                                    child_layout.x = relative_x;
-                                    child_layout.y = relative_y;
-                                }
-
-                                // Update the scene graph to reflect the new parent-child relationship
-                                canvas.scene_graph().update(cx, |sg, _cx| {
-                                    // Get scene node IDs for parent and child
-                                    if let (Some(parent_scene_id), Some(child_scene_id)) = (
-                                        sg.get_scene_node_from_data_node(parent_info.id),
-                                        sg.get_scene_node_from_data_node(node_id),
-                                    ) {
-                                        // Update child bounds to be parent-relative
-                                        // Position is stored in FrameNode, no need to update scene graph bounds
-
-                                        // Make child a child of parent in scene graph
-                                        sg.add_child(parent_scene_id, child_scene_id);
-                                    }
-                                });
-                            }
-                        }
-                        canvas.mark_dirty(cx);
-                    }
-
-                    // Finalize the move by clearing initial positions
+                    // Parenting/unparenting is now handled during drag
+                    // Just finalize the move by clearing initial positions
                     canvas.element_initial_positions_mut().clear();
+                    canvas.mark_dirty(cx);
                 }
                 DragType::Selection => {
                     // Selection handling is already done in the drag handler
@@ -781,6 +639,9 @@ impl CanvasElement {
                         // Calculate the drag delta in canvas coordinates
                         let delta = active_drag.delta();
 
+                        // Move all selected nodes with the drag delta first
+                        canvas.move_selected_nodes_with_drag(delta, cx);
+
                         // Only check for potential parent frames occasionally to avoid expensive iteration
                         // Check every 10 pixels of movement to reduce CPU load
                         const PARENT_CHECK_THRESHOLD: f32 = 10.0;
@@ -804,24 +665,110 @@ impl CanvasElement {
                             let selected_ids: Vec<NodeId> =
                                 canvas.selected_nodes().iter().cloned().collect();
 
+                            // First, check if any selected nodes need to be unparented
+                            // (they're no longer inside their parent's bounds)
+                            for &node_id in &selected_ids {
+                                if let Some(current_parent_id) = canvas.find_parent(node_id) {
+                                    // Get absolute position of the node
+                                    let (node_abs_x, node_abs_y) =
+                                        canvas.get_absolute_position(node_id, cx);
+
+                                    // Get the parent's absolute bounds
+                                    let (parent_abs_x, parent_abs_y) =
+                                        canvas.get_absolute_position(current_parent_id, cx);
+                                    let parent_bounds = if let Some(parent_node) =
+                                        canvas.get_node(current_parent_id)
+                                    {
+                                        let layout = parent_node.layout();
+                                        Bounds {
+                                            origin: Point::new(parent_abs_x, parent_abs_y),
+                                            size: Size::new(layout.width, layout.height),
+                                        }
+                                    } else {
+                                        continue;
+                                    };
+
+                                    // Get the node's size
+                                    let node_size = if let Some(node) = canvas.get_node(node_id) {
+                                        let layout = node.layout();
+                                        Size::new(layout.width, layout.height)
+                                    } else {
+                                        continue;
+                                    };
+
+                                    // Check if the node's bounds are completely outside the parent
+                                    let node_bounds = Bounds {
+                                        origin: Point::new(node_abs_x, node_abs_y),
+                                        size: node_size,
+                                    };
+
+                                    // If the node is completely outside its parent, unparent it
+                                    let intersects = !(node_bounds.origin.x
+                                        + node_bounds.size.width
+                                        < parent_bounds.origin.x
+                                        || node_bounds.origin.x
+                                            > parent_bounds.origin.x + parent_bounds.size.width
+                                        || node_bounds.origin.y + node_bounds.size.height
+                                            < parent_bounds.origin.y
+                                        || node_bounds.origin.y
+                                            > parent_bounds.origin.y + parent_bounds.size.height);
+
+                                    if !intersects {
+                                        // Remove from parent and convert to absolute positioning
+                                        canvas.remove_child_from_parent(node_id, cx);
+                                    }
+                                }
+                            }
+
                             // Find potential parent frame at the current position
                             let potential_parent = canvas
                                 .nodes()
                                 .values()
                                 .filter(|node| !selected_ids.contains(&node.id()))
-                                .find(|node| node.contains_point(&canvas_point))
+                                .find(|node| {
+                                    // Get absolute bounds of this potential parent
+                                    let (abs_x, abs_y) =
+                                        canvas.get_absolute_position(node.id(), cx);
+                                    let abs_bounds = Bounds {
+                                        origin: Point::new(abs_x, abs_y),
+                                        size: Size::new(node.layout().width, node.layout().height),
+                                    };
+                                    abs_bounds.contains(&canvas_point)
+                                })
                                 .map(|node| node.id());
 
-                            // Update the potential parent frame
+                            // If we found a potential parent, apply parenting to nodes that aren't already its children
+                            if let Some(parent_id) = potential_parent {
+                                let parent_children =
+                                    if let Some(parent_node) = canvas.get_node(parent_id) {
+                                        parent_node.children().clone()
+                                    } else {
+                                        Vec::new()
+                                    };
+
+                                for &node_id in &selected_ids {
+                                    // Only parent if not already a child of this parent
+                                    if !parent_children.contains(&node_id)
+                                        && canvas.find_parent(node_id) != Some(parent_id)
+                                    {
+                                        // Remove from current parent if it has one
+                                        if canvas.find_parent(node_id).is_some() {
+                                            canvas.remove_child_from_parent(node_id, cx);
+                                        }
+
+                                        // Add to new parent
+                                        canvas.add_child_to_parent(parent_id, node_id, cx);
+                                    }
+                                }
+                            }
+
+                            // Update the potential parent frame for visual feedback
                             canvas.set_potential_parent_frame(potential_parent);
 
                             // Update the last check position in the drag state
                             active_drag.last_parent_check_position =
                                 Some(Point::new(position.x.0, position.y.0));
                         }
-
-                        // Move all selected nodes with the drag delta
-                        canvas.move_selected_nodes_with_drag(delta, cx);
 
                         // Put the active drag back after modifications
                         canvas.set_active_drag(active_drag);
