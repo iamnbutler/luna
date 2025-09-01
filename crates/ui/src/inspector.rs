@@ -15,7 +15,7 @@ use canvas::{AppState, LunaCanvas};
 use node::{NodeCommon, NodeId};
 use theme::Theme;
 
-use super::property::{float_input, ColorInput};
+use crate::property::{float_input, ColorInput, PropertyType};
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
@@ -399,6 +399,15 @@ impl Render for Inspector {
         let (x, y, width, height, border_width, corner_radius, border_color, background_color) =
             self.get_ui_property_values();
 
+        // Get selected node IDs
+        let selected_nodes: Vec<NodeId> = self
+            .canvas
+            .read(cx)
+            .selected_nodes()
+            .iter()
+            .copied()
+            .collect();
+
         let inner = div()
             .id("inspector-inner")
             .flex()
@@ -419,12 +428,54 @@ impl Render for Inspector {
                     .gap(px(8.))
                     .border_color(theme.tokens.inactive_border)
                     .border_b_1()
-                    .child(float_input(x, "X"))
-                    .child(float_input(y, "Y"))
-                    .child(float_input(width, "W"))
-                    .child(float_input(height, "H"))
-                    .child(float_input(border_width, "B"))
-                    .child(float_input(corner_radius, "R")),
+                    .child(float_input(
+                        x,
+                        "X",
+                        PropertyType::X,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    ))
+                    .child(float_input(
+                        y,
+                        "Y",
+                        PropertyType::Y,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    ))
+                    .child(float_input(
+                        width,
+                        "W",
+                        PropertyType::Width,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    ))
+                    .child(float_input(
+                        height,
+                        "H",
+                        PropertyType::Height,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    ))
+                    .child(float_input(
+                        border_width,
+                        "B",
+                        PropertyType::BorderWidth,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    ))
+                    .child(float_input(
+                        corner_radius,
+                        "R",
+                        PropertyType::CornerRadius,
+                        selected_nodes.clone(),
+                        self.canvas.clone(),
+                        cx,
+                    )),
             )
             .child(
                 div()

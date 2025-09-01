@@ -3,19 +3,30 @@
 //! Provides reusable UI components for displaying and editing
 //! element properties, with support for mixed-value states.
 
+use std::ops::Range;
 use std::str::FromStr;
 
 use gpui::{
-    div, prelude::*, px, Context, Entity, Hsla, IntoElement, ParentElement, Render, Rgba,
-    SharedString, Styled, Window,
+    div, prelude::*, px, App, Bounds, Context, ElementId, Entity, EntityInputHandler, FocusHandle,
+    Focusable, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, Rgba, SharedString, Styled, UTF16Selection, Window,
 };
+use smallvec::SmallVec;
 
 use canvas::{AppState, LunaCanvas};
+use node::{NodeCommon, NodeId};
 use theme::{ActiveTheme, Theme};
 
-/// Creates a new property input field with the given value and icon
-pub fn float_input(value: Option<Vec<f32>>, icon: impl Into<SharedString>) -> PropertyInput {
-    PropertyInput::new(value, icon)
+/// Creates a new interactive property input field with the given value and icon
+pub fn float_input(
+    value: Option<Vec<f32>>,
+    icon: impl Into<SharedString>,
+    property: PropertyType,
+    selected_nodes: Vec<NodeId>,
+    canvas: Entity<LunaCanvas>,
+    cx: &mut App,
+) -> Entity<InteractivePropertyInput> {
+    cx.new(|cx| InteractivePropertyInput::new(value, icon, property, selected_nodes, canvas, cx))
 }
 
 /// Input field for numeric property values with support for mixed states
@@ -81,6 +92,396 @@ impl RenderOnce for PropertyInput {
                         .child(self.icon),
                 ),
         )
+    }
+}
+
+/// Types of properties that can be edited
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PropertyType {
+    X,
+    Y,
+    Width,
+    Height,
+    BorderWidth,
+    CornerRadius,
+}
+
+/// Interactive input field for numeric property values
+pub struct InteractivePropertyInput {
+    value: Option<Vec<f32>>,
+    icon: SharedString,
+    property: PropertyType,
+    selected_nodes: Vec<NodeId>,
+    canvas: Entity<LunaCanvas>,
+    focus_handle: FocusHandle,
+    content: String,
+    selected_range: Range<usize>,
+    is_selecting: bool,
+    was_focused: bool,
+}
+
+impl InteractivePropertyInput {
+    pub fn new(
+        value: Option<Vec<f32>>,
+        icon: impl Into<SharedString>,
+        property: PropertyType,
+        selected_nodes: Vec<NodeId>,
+        canvas: Entity<LunaCanvas>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let focus_handle = cx.focus_handle();
+
+        // Convert value to string for display
+        let content = match &value {
+            None => String::new(),
+            Some(values) if values.is_empty() => String::from("Mixed"),
+            Some(values) if values.len() == 1 => format!("{}", values[0]),
+            Some(_) => String::from("Mixed"),
+        };
+
+        Self {
+            value,
+            icon: icon.into(),
+            property,
+            selected_nodes,
+            canvas,
+            focus_handle,
+            content: content.clone(),
+            selected_range: 0..0,
+            is_selecting: false,
+            was_focused: false,
+        }
+    }
+
+    fn apply_value(&mut self, cx: &mut Context<Self>) {
+        // Try to parse the content as a float
+        if let Ok(new_value) = self.content.parse::<f32>() {
+            // Update the canvas with the new value
+            self.canvas.update(cx, |canvas, cx| {
+                for &node_id in &self.selected_nodes {
+                    if let Some(node) = canvas.get_node_mut(node_id) {
+                        match self.property {
+                            PropertyType::X => {
+                                let layout = node.layout_mut();
+                                layout.x = new_value;
+                            }
+                            PropertyType::Y => {
+                                let layout = node.layout_mut();
+                                layout.y = new_value;
+                            }
+                            PropertyType::Width => {
+                                let layout = node.layout_mut();
+                                layout.width = new_value.max(1.0);
+                            }
+                            PropertyType::Height => {
+                                let layout = node.layout_mut();
+                                layout.height = new_value.max(1.0);
+                            }
+                            PropertyType::BorderWidth => {
+                                node.border_width = new_value.max(0.0);
+                            }
+                            PropertyType::CornerRadius => {
+                                node.corner_radius = new_value.max(0.0);
+                            }
+                        }
+                    }
+                }
+                canvas.mark_dirty(cx);
+            });
+
+            // Update our stored value
+            self.value = Some(vec![new_value]);
+        }
+    }
+
+    fn insert_text(&mut self, text: &str) {
+        // Only allow numeric input (digits, decimal point, minus sign)
+        let filtered: String = text
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+            .collect();
+
+        if !filtered.is_empty() {
+            self.content
+                .replace_range(self.selected_range.clone(), &filtered);
+            let new_cursor = self.selected_range.start + filtered.len();
+            self.selected_range = new_cursor..new_cursor;
+        }
+    }
+
+    fn backspace(&mut self) {
+        if self.selected_range.is_empty() && self.selected_range.start > 0 {
+            let start = self.selected_range.start - 1;
+            self.content.remove(start);
+            self.selected_range = start..start;
+        } else if !self.selected_range.is_empty() {
+            self.content.replace_range(self.selected_range.clone(), "");
+            let cursor = self.selected_range.start;
+            self.selected_range = cursor..cursor;
+        }
+    }
+
+    fn select_all(&mut self) {
+        self.selected_range = 0..self.content.len();
+    }
+
+    fn move_cursor_left(&mut self) {
+        if !self.selected_range.is_empty() {
+            self.selected_range = self.selected_range.start..self.selected_range.start;
+        } else if self.selected_range.start > 0 {
+            let new_pos = self.selected_range.start - 1;
+            self.selected_range = new_pos..new_pos;
+        }
+    }
+
+    fn move_cursor_right(&mut self) {
+        if !self.selected_range.is_empty() {
+            self.selected_range = self.selected_range.end..self.selected_range.end;
+        } else if self.selected_range.end < self.content.len() {
+            let new_pos = self.selected_range.end + 1;
+            self.selected_range = new_pos..new_pos;
+        }
+    }
+
+    fn on_mouse_down(
+        &mut self,
+        _event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.focus_handle.is_focused(window) {
+            window.focus(&self.focus_handle);
+            // Select all when first focusing
+            self.select_all();
+        }
+        self.is_selecting = true;
+        cx.stop_propagation();
+    }
+
+    fn on_mouse_up(&mut self, _event: &MouseUpEvent, _cx: &mut Context<Self>) {
+        self.is_selecting = false;
+    }
+}
+
+impl Focusable for InteractivePropertyInput {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl EntityInputHandler for InteractivePropertyInput {
+    fn text_for_range(
+        &mut self,
+        range: Range<usize>,
+        actual_range: &mut Option<Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<String> {
+        actual_range.replace(range.clone());
+        Some(self.content[range].to_string())
+    }
+
+    fn selected_text_range(
+        &mut self,
+        _ignore_disabled: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<UTF16Selection> {
+        Some(UTF16Selection {
+            range: self.selected_range.clone(),
+            reversed: false,
+        })
+    }
+
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Range<usize>> {
+        None
+    }
+
+    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
+
+    fn replace_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let range = range.unwrap_or(self.selected_range.clone());
+
+        // Filter input to only allow valid numeric characters
+        let filtered: String = text
+            .chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+            .collect();
+
+        self.content.replace_range(range.clone(), &filtered);
+        let new_cursor = range.start + filtered.len();
+        self.selected_range = new_cursor..new_cursor;
+
+        cx.notify();
+    }
+
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        _range: Option<Range<usize>>,
+        _new_text: &str,
+        _new_selected_range: Option<Range<usize>>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        // Not needed for simple numeric input
+    }
+
+    fn bounds_for_range(
+        &mut self,
+        _range: Range<usize>,
+        _element_bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        None
+    }
+
+    fn character_index_for_point(
+        &mut self,
+        _point: Point<Pixels>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<usize> {
+        None
+    }
+}
+
+impl Render for InteractivePropertyInput {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = Theme::default();
+        let is_focused = self.focus_handle.is_focused(window);
+        let no_value = self.content.is_empty();
+        let mixed = self.content == "Mixed";
+
+        // Check if focus state changed
+        if self.was_focused && !is_focused {
+            // Lost focus - apply value
+            self.apply_value(cx);
+            self.selected_range = 0..0;
+        } else if !self.was_focused && is_focused {
+            // Gained focus - select all
+            self.selected_range = 0..self.content.len();
+        }
+        self.was_focused = is_focused;
+
+        div()
+            .id(ElementId::Name(
+                format!("property-input-{:?}", self.property).into(),
+            ))
+            .key_context("PropertyInput")
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                match event.keystroke.key.as_str() {
+                    "enter" => {
+                        this.apply_value(cx);
+                        window.blur();
+                    }
+                    "escape" => {
+                        // Reset to original value
+                        this.content = match &this.value {
+                            None => String::new(),
+                            Some(values) if values.is_empty() => String::from("Mixed"),
+                            Some(values) if values.len() == 1 => format!("{}", values[0]),
+                            Some(_) => String::from("Mixed"),
+                        };
+                        this.selected_range = 0..0;
+                        window.blur();
+                    }
+                    "backspace" => this.backspace(),
+                    "left" => this.move_cursor_left(),
+                    "right" => this.move_cursor_right(),
+                    "a" if event.keystroke.modifiers.platform => this.select_all(),
+                    _ => {}
+                }
+                cx.notify();
+            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                    this.on_mouse_down(event, window, cx);
+                }),
+            )
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, _window, cx| {
+                    this.on_mouse_up(event, cx);
+                }),
+            )
+            .flex()
+            .flex_row()
+            .child(
+                div()
+                    .id(ElementId::Name(
+                        format!("property-input-field-{:?}", self.property).into(),
+                    ))
+                    .flex()
+                    .items_center()
+                    .flex_none()
+                    .pl(px(6.))
+                    .pr(px(4.))
+                    .w(px(84.))
+                    .rounded(px(4.))
+                    .bg(if is_focused {
+                        theme.tokens.surface1
+                    } else {
+                        theme.tokens.surface0
+                    })
+                    .border_1()
+                    .border_color(if is_focused {
+                        theme.tokens.active_border
+                    } else {
+                        gpui::transparent_black()
+                    })
+                    .text_color(theme.tokens.text)
+                    .when(no_value || mixed, |this| {
+                        this.text_color(theme.tokens.text.alpha(0.5))
+                    })
+                    .text_size(px(11.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .overflow_hidden()
+                            .relative()
+                            .child(
+                                div()
+                                    .when(is_focused && !self.selected_range.is_empty(), |d| {
+                                        d.bg(theme.tokens.selected.alpha(0.3))
+                                    })
+                                    .child(self.content.clone()),
+                            )
+                            .when(is_focused && self.selected_range.is_empty(), |d| {
+                                // Show a simple cursor at the end when focused with no selection
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .right_0()
+                                        .w(px(1.))
+                                        .h_full()
+                                        .bg(theme.tokens.text),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .justify_center()
+                            .flex_none()
+                            .overflow_hidden()
+                            .w(px(11.))
+                            .h_full()
+                            .child(self.icon.clone()),
+                    ),
+            )
     }
 }
 
