@@ -99,7 +99,7 @@ impl Luna {
         let scene_graph = cx.new(|_| SceneGraph::new());
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
-        let inspector = cx.new(|_| Inspector::new(app_state.clone(), canvas.clone()));
+        let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone(), cx));
         let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
 
         Luna {
@@ -185,7 +185,6 @@ impl Render for Luna {
         div()
             .id("Luna")
             .key_context("luna")
-            .track_focus(&self.focus_handle(cx))
             .absolute()
             .top_0()
             .left_0()
@@ -199,9 +198,6 @@ impl Render for Luna {
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
-            .on_key_down(|event, _, _| {
-                dbg!(event.keystroke.clone());
-            })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
                 Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),

@@ -7,27 +7,14 @@ use std::ops::Range;
 use std::str::FromStr;
 
 use gpui::{
-    div, prelude::*, px, App, Bounds, Context, ElementId, Entity, EntityInputHandler, FocusHandle,
-    Focusable, Hsla, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, Rgba, SharedString, Styled, UTF16Selection, Window,
+    div, prelude::*, px, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Focusable, Hsla,
+    IntoElement, KeyDownEvent, ParentElement, Render, SharedString, Styled, Window,
 };
 use smallvec::SmallVec;
 
 use canvas::{AppState, LunaCanvas};
 use node::{NodeCommon, NodeId};
 use theme::{ActiveTheme, Theme};
-
-/// Creates a new interactive property input field with the given value and icon
-pub fn float_input(
-    value: Option<Vec<f32>>,
-    icon: impl Into<SharedString>,
-    property: PropertyType,
-    selected_nodes: Vec<NodeId>,
-    canvas: Entity<LunaCanvas>,
-    cx: &mut App,
-) -> Entity<InteractivePropertyInput> {
-    cx.new(|cx| InteractivePropertyInput::new(value, icon, property, selected_nodes, canvas, cx))
-}
 
 /// Input field for numeric property values with support for mixed states
 ///
@@ -134,7 +121,7 @@ impl InteractivePropertyInput {
         // Convert value to string for display
         let content = match &value {
             None => String::new(),
-            Some(values) if values.is_empty() => String::from("Mixed"),
+            Some(values) if values.is_empty() => String::new(),
             Some(values) if values.len() == 1 => format!("{}", values[0]),
             Some(_) => String::from("Mixed"),
         };
@@ -151,6 +138,30 @@ impl InteractivePropertyInput {
             is_selecting: false,
             was_focused: false,
         }
+    }
+
+    pub fn update_value(
+        &mut self,
+        value: Option<Vec<f32>>,
+        selected_nodes: Vec<NodeId>,
+        cx: &mut Context<Self>,
+    ) {
+        self.value = value;
+        self.selected_nodes = selected_nodes;
+
+        // Update content to reflect new value
+        self.content = match &self.value {
+            None => String::new(),
+            Some(values) if values.is_empty() => String::new(),
+            Some(values) if values.len() == 1 => format!("{}", values[0]),
+            Some(_) => String::from("Mixed"),
+        };
+
+        cx.notify();
+    }
+
+    pub fn is_focused(&self, window: &Window) -> bool {
+        self.focus_handle.is_focused(window)
     }
 
     fn apply_value(&mut self, cx: &mut Context<Self>) {
@@ -243,116 +254,19 @@ impl InteractivePropertyInput {
         }
     }
 
-    fn on_mouse_down(
-        &mut self,
-        _event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn on_click(&mut self, _event: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.focus_handle.is_focused(window) {
             window.focus(&self.focus_handle);
             // Select all when first focusing
             self.select_all();
         }
-        self.is_selecting = true;
-        cx.stop_propagation();
-    }
-
-    fn on_mouse_up(&mut self, _event: &MouseUpEvent, _cx: &mut Context<Self>) {
-        self.is_selecting = false;
+        cx.notify();
     }
 }
 
 impl Focusable for InteractivePropertyInput {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
-    }
-}
-
-impl EntityInputHandler for InteractivePropertyInput {
-    fn text_for_range(
-        &mut self,
-        range: Range<usize>,
-        actual_range: &mut Option<Range<usize>>,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<String> {
-        actual_range.replace(range.clone());
-        Some(self.content[range].to_string())
-    }
-
-    fn selected_text_range(
-        &mut self,
-        _ignore_disabled: bool,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<UTF16Selection> {
-        Some(UTF16Selection {
-            range: self.selected_range.clone(),
-            reversed: false,
-        })
-    }
-
-    fn marked_text_range(
-        &self,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<Range<usize>> {
-        None
-    }
-
-    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
-
-    fn replace_text_in_range(
-        &mut self,
-        range: Option<Range<usize>>,
-        text: &str,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let range = range.unwrap_or(self.selected_range.clone());
-
-        // Filter input to only allow valid numeric characters
-        let filtered: String = text
-            .chars()
-            .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-            .collect();
-
-        self.content.replace_range(range.clone(), &filtered);
-        let new_cursor = range.start + filtered.len();
-        self.selected_range = new_cursor..new_cursor;
-
-        cx.notify();
-    }
-
-    fn replace_and_mark_text_in_range(
-        &mut self,
-        _range: Option<Range<usize>>,
-        _new_text: &str,
-        _new_selected_range: Option<Range<usize>>,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        // Not needed for simple numeric input
-    }
-
-    fn bounds_for_range(
-        &mut self,
-        _range: Range<usize>,
-        _element_bounds: Bounds<Pixels>,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<Bounds<Pixels>> {
-        None
-    }
-
-    fn character_index_for_point(
-        &mut self,
-        _point: Point<Pixels>,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> Option<usize> {
-        None
     }
 }
 
@@ -380,6 +294,9 @@ impl Render for InteractivePropertyInput {
             ))
             .key_context("PropertyInput")
             .track_focus(&self.focus_handle)
+            .on_click(cx.listener(|this, event: &ClickEvent, window, cx| {
+                this.on_click(event, window, cx);
+            }))
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 match event.keystroke.key.as_str() {
                     "enter" => {
@@ -390,7 +307,7 @@ impl Render for InteractivePropertyInput {
                         // Reset to original value
                         this.content = match &this.value {
                             None => String::new(),
-                            Some(values) if values.is_empty() => String::from("Mixed"),
+                            Some(values) if values.is_empty() => String::new(),
                             Some(values) if values.len() == 1 => format!("{}", values[0]),
                             Some(_) => String::from("Mixed"),
                         };
@@ -401,22 +318,27 @@ impl Render for InteractivePropertyInput {
                     "left" => this.move_cursor_left(),
                     "right" => this.move_cursor_right(),
                     "a" if event.keystroke.modifiers.platform => this.select_all(),
-                    _ => {}
+                    key => {
+                        // Handle regular character input
+                        if let Some(key_char) = &event.keystroke.key_char {
+                            if !event.keystroke.modifiers.control
+                                && !event.keystroke.modifiers.platform
+                            {
+                                // Filter to only allow numeric input
+                                let filtered: String = key_char
+                                    .chars()
+                                    .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                                    .collect();
+
+                                if !filtered.is_empty() {
+                                    this.insert_text(&filtered);
+                                }
+                            }
+                        }
+                    }
                 }
                 cx.notify();
             }))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.on_mouse_down(event, window, cx);
-                }),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(|this, event: &MouseUpEvent, _window, cx| {
-                    this.on_mouse_up(event, cx);
-                }),
-            )
             .flex()
             .flex_row()
             .child(

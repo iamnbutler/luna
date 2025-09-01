@@ -15,11 +15,12 @@ use canvas::{AppState, LunaCanvas};
 use node::{NodeCommon, NodeId};
 use theme::Theme;
 
-use crate::property::{float_input, ColorInput, PropertyType};
+use crate::property::{ColorInput, InteractivePropertyInput, PropertyType};
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
 /// Represents the current selection state in the canvas
+#[derive(Debug)]
 pub enum NodeSelection {
     /// No nodes are selected
     None,
@@ -86,22 +87,99 @@ pub struct Inspector {
     state: Entity<AppState>,
     canvas: Entity<LunaCanvas>,
     properties: InspectorProperties,
+    // Input entities - created once and reused
+    x_input: Entity<InteractivePropertyInput>,
+    y_input: Entity<InteractivePropertyInput>,
+    width_input: Entity<InteractivePropertyInput>,
+    height_input: Entity<InteractivePropertyInput>,
+    border_width_input: Entity<InteractivePropertyInput>,
+    corner_radius_input: Entity<InteractivePropertyInput>,
+    // Track last selection to avoid unnecessary updates
+    last_selection: HashSet<NodeId>,
 }
 
 impl Inspector {
-    pub fn new(state: Entity<AppState>, canvas: Entity<LunaCanvas>) -> Self {
+    pub fn new(
+        state: Entity<AppState>,
+        canvas: Entity<LunaCanvas>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        // Create input entities once
+        let x_input = cx.new(|cx| {
+            InteractivePropertyInput::new(None, "X", PropertyType::X, vec![], canvas.clone(), cx)
+        });
+        let y_input = cx.new(|cx| {
+            InteractivePropertyInput::new(None, "Y", PropertyType::Y, vec![], canvas.clone(), cx)
+        });
+        let width_input = cx.new(|cx| {
+            InteractivePropertyInput::new(
+                None,
+                "W",
+                PropertyType::Width,
+                vec![],
+                canvas.clone(),
+                cx,
+            )
+        });
+        let height_input = cx.new(|cx| {
+            InteractivePropertyInput::new(
+                None,
+                "H",
+                PropertyType::Height,
+                vec![],
+                canvas.clone(),
+                cx,
+            )
+        });
+        let border_width_input = cx.new(|cx| {
+            InteractivePropertyInput::new(
+                None,
+                "B",
+                PropertyType::BorderWidth,
+                vec![],
+                canvas.clone(),
+                cx,
+            )
+        });
+        let corner_radius_input = cx.new(|cx| {
+            InteractivePropertyInput::new(
+                None,
+                "R",
+                PropertyType::CornerRadius,
+                vec![],
+                canvas.clone(),
+                cx,
+            )
+        });
+
         Self {
             state,
             canvas,
             properties: InspectorProperties::default(),
+            x_input,
+            y_input,
+            width_input,
+            height_input,
+            border_width_input,
+            corner_radius_input,
+            last_selection: HashSet::new(),
         }
     }
 
     /// Updates the inspector properties based on the currently selected nodes
-    pub fn update_selected_node_properties(&mut self, cx: &mut Context<Self>) {
+    /// If force_update is true, updates all inputs regardless of focus state
+    pub fn update_selected_node_properties(
+        &mut self,
+        force_update: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Update the existing input entities with new values
         let canvas = self.canvas.clone();
         let selected_node_set = canvas.read(cx).selected_nodes().clone();
         let selected_nodes = NodeSelection::from(selected_node_set);
+
+        eprintln!("UPDATE_PROPS: Selected nodes: {:?}", selected_nodes);
 
         // Clear the current properties
         self.properties.x.clear();
@@ -144,12 +222,26 @@ impl Inspector {
                             .background_color
                             .push(SharedString::from(color_str));
                     }
+                    eprintln!(
+                        "UPDATE_PROPS: After single node - x:{:?}, y:{:?}, width:{:?}, height:{:?}",
+                        self.properties.x,
+                        self.properties.y,
+                        self.properties.width,
+                        self.properties.height
+                    );
+                } else {
+                    eprintln!("UPDATE_PROPS: Node {:?} not found in canvas!", node_id);
                 }
             }
-            NodeSelection::Multiple(nodes) => {
+            NodeSelection::Multiple(node_ids) => {
+                eprintln!("UPDATE_PROPS: Processing multiple nodes: {:?}", node_ids);
                 // For multiple selections, we'll collect all values and then
                 // check if they're all the same to properly handle the "Mixed" state
                 let canvas_read = canvas.read(cx);
+                eprintln!(
+                    "UPDATE_PROPS: Canvas has {} total nodes",
+                    canvas_read.nodes().len()
+                );
 
                 // Temporary collections for all values
                 let mut all_x = Vec::new();
@@ -162,7 +254,7 @@ impl Inspector {
                 let mut all_background_colors = Vec::new();
 
                 // Collect all values first
-                for node_id in &nodes {
+                for node_id in &node_ids {
                     if let Some(node) = canvas_read
                         .nodes()
                         .iter()
@@ -283,6 +375,91 @@ impl Inspector {
                             .push(SharedString::from("Mixed"));
                     }
                 }
+                eprintln!(
+                    "UPDATE_PROPS: After multiple nodes - x:{:?}, y:{:?}, width:{:?}, height:{:?}",
+                    self.properties.x,
+                    self.properties.y,
+                    self.properties.width,
+                    self.properties.height
+                );
+
+                // Update the input entities with the new values
+                let selected_nodes: Vec<NodeId> = self
+                    .canvas
+                    .read(cx)
+                    .selected_nodes()
+                    .iter()
+                    .copied()
+                    .collect();
+
+                // Only update inputs that aren't focused to prevent disrupting user input
+                let x_focused = self.x_input.read(cx).is_focused(window);
+                if force_update || !x_focused {
+                    self.x_input.update(cx, |input, cx| {
+                        let value = if self.properties.x.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.x.to_vec())
+                        };
+                        eprintln!("UPDATE_PROPS: Setting X value to: {:?}", value);
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
+                let y_focused = self.y_input.read(cx).is_focused(window);
+                if force_update || !y_focused {
+                    self.y_input.update(cx, |input, cx| {
+                        let value = if self.properties.y.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.y.to_vec())
+                        };
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
+                let width_focused = self.width_input.read(cx).is_focused(window);
+                if force_update || !width_focused {
+                    self.width_input.update(cx, |input, cx| {
+                        let value = if self.properties.width.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.width.to_vec())
+                        };
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
+                let height_focused = self.height_input.read(cx).is_focused(window);
+                if force_update || !height_focused {
+                    self.height_input.update(cx, |input, cx| {
+                        let value = if self.properties.height.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.height.to_vec())
+                        };
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
+                let border_width_focused = self.border_width_input.read(cx).is_focused(window);
+                if force_update || !border_width_focused {
+                    self.border_width_input.update(cx, |input, cx| {
+                        let value = if self.properties.border_width.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.border_width.to_vec())
+                        };
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
+                let corner_radius_focused = self.corner_radius_input.read(cx).is_focused(window);
+                if force_update || !corner_radius_focused {
+                    self.corner_radius_input.update(cx, |input, cx| {
+                        let value = if self.properties.corner_radius.is_empty() {
+                            None
+                        } else {
+                            Some(self.properties.corner_radius.to_vec())
+                        };
+                        input.update_value(value, selected_nodes.clone(), cx);
+                    });
+                }
             }
         }
 
@@ -392,8 +569,15 @@ impl Render for Inspector {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::default();
 
-        // Update properties based on current selection
-        self.update_selected_node_properties(cx);
+        // Check if selection has changed
+        let current_selection = self.canvas.read(cx).selected_nodes().clone();
+        let selection_changed = current_selection != self.last_selection;
+        if selection_changed {
+            self.last_selection = current_selection;
+        }
+
+        // Update properties - force update all inputs if selection changed, otherwise skip focused inputs
+        self.update_selected_node_properties(selection_changed, window, cx);
 
         // Get property values formatted for UI display with appropriate rounding
         let (x, y, width, height, border_width, corner_radius, border_color, background_color) =
@@ -416,9 +600,6 @@ impl Render for Inspector {
             .w(px(INSPECTOR_WIDTH))
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
-            .on_click(cx.listener(|_, _, _, cx| {
-                cx.stop_propagation();
-            }))
             .child(
                 div()
                     .px(px(8.))
@@ -428,54 +609,12 @@ impl Render for Inspector {
                     .gap(px(8.))
                     .border_color(theme.tokens.inactive_border)
                     .border_b_1()
-                    .child(float_input(
-                        x,
-                        "X",
-                        PropertyType::X,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    ))
-                    .child(float_input(
-                        y,
-                        "Y",
-                        PropertyType::Y,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    ))
-                    .child(float_input(
-                        width,
-                        "W",
-                        PropertyType::Width,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    ))
-                    .child(float_input(
-                        height,
-                        "H",
-                        PropertyType::Height,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    ))
-                    .child(float_input(
-                        border_width,
-                        "B",
-                        PropertyType::BorderWidth,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    ))
-                    .child(float_input(
-                        corner_radius,
-                        "R",
-                        PropertyType::CornerRadius,
-                        selected_nodes.clone(),
-                        self.canvas.clone(),
-                        cx,
-                    )),
+                    .child(self.x_input.clone())
+                    .child(self.y_input.clone())
+                    .child(self.width_input.clone())
+                    .child(self.height_input.clone())
+                    .child(self.border_width_input.clone())
+                    .child(self.corner_radius_input.clone()),
             )
             .child(
                 div()

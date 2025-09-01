@@ -1293,56 +1293,87 @@ impl CanvasElement {
     fn paint_mouse_listeners(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         window.on_mouse_event({
             let canvas = self.canvas.clone();
+            let hitbox = layout.hitbox.clone();
             move |event: &MouseDownEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    match event.button {
-                        MouseButton::Left => canvas.update(cx, |canvas, cx| {
-                            Self::handle_left_mouse_down(canvas, event, window, cx);
-                        }),
-                        MouseButton::Right => canvas.update(cx, |canvas, cx| {
-                            // todo
-                        }),
-                        _ => {}
-                    }
-                }
-            }
-        });
+                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    // Check if click is outside UI panels (inspector on right, sidebar on left)
+                    let window_width = window.viewport_size().width.0;
+                    let click_x = event.position.x.0;
 
-        window.on_mouse_event({
-            let canvas = self.canvas.clone();
-            move |event: &MouseUpEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    match event.button {
-                        MouseButton::Left => canvas.update(cx, |canvas, cx| {
-                            Self::handle_left_mouse_up(canvas, event, window, cx)
-                        }),
-                        MouseButton::Right => canvas.update(cx, |canvas, cx| {
-                            // todo
-                        }),
-                        _ => {}
-                    }
-                }
-            }
-        });
+                    const SIDEBAR_WIDTH: f32 = 220.0; // From Sidebar::INITIAL_WIDTH
+                    const INSPECTOR_WIDTH: f32 = 200.0; // From inspector.rs
 
-        window.on_mouse_event({
-            let canvas = self.canvas.clone();
-            move |event: &MouseMoveEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble {
-                    canvas.update(cx, |canvas, cx| {
-                        // Throttle mouse move processing to ~60fps to avoid overwhelming the system
-                        if event.pressed_button == Some(MouseButton::Left)
-                            || event.pressed_button == Some(MouseButton::Middle)
-                        {
-                            // Only process drag events at throttled rate
-                            if canvas.should_process_mouse_move() {
-                                Self::handle_mouse_drag(canvas, event, window, cx)
-                            }
-                        } else {
-                            // Always process hover updates (they're less expensive)
-                            Self::handle_mouse_move(canvas, event, window, cx)
+                    // Only process if click is not on sidebar (left) or inspector (right)
+                    if click_x > SIDEBAR_WIDTH && click_x < (window_width - INSPECTOR_WIDTH) {
+                        match event.button {
+                            MouseButton::Left => canvas.update(cx, |canvas, cx| {
+                                Self::handle_left_mouse_down(canvas, event, window, cx);
+                            }),
+                            MouseButton::Right => canvas.update(cx, |canvas, cx| {
+                                // todo
+                            }),
+                            _ => {}
                         }
-                    });
+                    }
+                }
+            }
+        });
+
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            let hitbox = layout.hitbox.clone();
+            move |event: &MouseUpEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    // Check if release is outside UI panels
+                    let window_width = window.viewport_size().width.0;
+                    let click_x = event.position.x.0;
+
+                    const SIDEBAR_WIDTH: f32 = 220.0;
+                    const INSPECTOR_WIDTH: f32 = 200.0;
+
+                    if click_x > SIDEBAR_WIDTH && click_x < (window_width - INSPECTOR_WIDTH) {
+                        match event.button {
+                            MouseButton::Left => canvas.update(cx, |canvas, cx| {
+                                Self::handle_left_mouse_up(canvas, event, window, cx)
+                            }),
+                            MouseButton::Right => canvas.update(cx, |canvas, cx| {
+                                // todo
+                            }),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        });
+
+        window.on_mouse_event({
+            let canvas = self.canvas.clone();
+            let hitbox = layout.hitbox.clone();
+            move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
+                    // Check if mouse move is outside UI panels
+                    let window_width = window.viewport_size().width.0;
+                    let mouse_x = event.position.x.0;
+
+                    const SIDEBAR_WIDTH: f32 = 220.0;
+                    const INSPECTOR_WIDTH: f32 = 200.0;
+
+                    if mouse_x > SIDEBAR_WIDTH && mouse_x < (window_width - INSPECTOR_WIDTH) {
+                        canvas.update(cx, |canvas, cx| {
+                            // Throttle mouse move processing to ~60fps to avoid overwhelming the system
+                            if event.pressed_button == Some(MouseButton::Left)
+                                || event.pressed_button == Some(MouseButton::Middle)
+                            {
+                                // Only process drag events at throttled rate
+                                if canvas.should_process_mouse_move() {
+                                    Self::handle_mouse_drag(canvas, event, window, cx)
+                                }
+                            } else {
+                                // Always process hover updates (they're less expensive)
+                                Self::handle_mouse_move(canvas, event, window, cx)
+                            }
+                        });
+                    }
                 }
             }
         });
