@@ -497,15 +497,11 @@ impl Render for Inspector {
             .top_0()
             .h_full()
             .w(px(INSPECTOR_WIDTH + 1.))
-            .cursor_default()
             .rounded_tr(px(15.))
             .rounded_br(px(15.))
             .border_color(theme.tokens.inactive_border)
             .border_l_1()
             .bg(theme.tokens.background_secondary)
-            .on_click(cx.listener(|_, _, _, cx| {
-                cx.stop_propagation();
-            }))
             .child(inner)
     }
 }
