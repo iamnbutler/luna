@@ -640,7 +640,12 @@ impl CanvasElement {
                         let delta = active_drag.delta();
 
                         // Move all selected nodes with the drag delta first
+                        // This now properly handles coordinate conversion for parented nodes
                         canvas.move_selected_nodes_with_drag(delta, cx);
+
+                        // Get all the selected node IDs
+                        let selected_ids: Vec<NodeId> =
+                            canvas.selected_nodes().iter().cloned().collect();
 
                         // Only check for potential parent frames occasionally to avoid expensive iteration
                         // Check every 10 pixels of movement to reduce CPU load
@@ -661,15 +666,11 @@ impl CanvasElement {
                             let canvas_point = canvas
                                 .window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
-                            // Get all the selected node IDs
-                            let selected_ids: Vec<NodeId> =
-                                canvas.selected_nodes().iter().cloned().collect();
-
                             // First, check if any selected nodes need to be unparented
                             // (they're no longer inside their parent's bounds)
                             for &node_id in &selected_ids {
                                 if let Some(current_parent_id) = canvas.find_parent(node_id) {
-                                    // Get absolute position of the node
+                                    // Get absolute position of the node (already updated by move_selected_nodes_with_drag)
                                     let (node_abs_x, node_abs_y) =
                                         canvas.get_absolute_position(node_id, cx);
 

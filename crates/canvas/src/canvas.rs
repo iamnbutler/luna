@@ -851,12 +851,33 @@ impl LunaCanvas {
     pub fn save_selected_nodes_positions(&mut self) {
         self.element_initial_positions.clear();
 
+        // Always save absolute positions to avoid coordinate system issues during drag
         for node_id in &self.selected_nodes {
+            // Get the absolute position of this node (accounting for parent chain)
+            let mut abs_x = 0.0;
+            let mut abs_y = 0.0;
+
             if let Some(node) = self.nodes.get(node_id) {
                 let layout = node.layout();
-                self.element_initial_positions
-                    .insert(*node_id, Point::new(layout.x, layout.y));
+                abs_x = layout.x;
+                abs_y = layout.y;
+
+                // Walk up parent chain to get absolute position
+                let mut current_parent = self.find_parent(*node_id);
+                while let Some(parent_id) = current_parent {
+                    if let Some(parent_node) = self.nodes.get(&parent_id) {
+                        let parent_layout = parent_node.layout();
+                        abs_x += parent_layout.x;
+                        abs_y += parent_layout.y;
+                        current_parent = self.find_parent(parent_id);
+                    } else {
+                        break;
+                    }
+                }
             }
+
+            self.element_initial_positions
+                .insert(*node_id, Point::new(abs_x, abs_y));
         }
     }
 
@@ -871,12 +892,29 @@ impl LunaCanvas {
     /// * `cx` - Context used for scene graph updates
     pub fn move_selected_nodes_with_drag(&mut self, delta: Point<f32>, cx: &mut Context<Self>) {
         for node_id in self.selected_nodes.clone() {
-            if let Some(initial_pos) = self.element_initial_positions.get(&node_id) {
-                if let Some(node) = self.nodes.get_mut(&node_id) {
-                    // Update the layout
-                    let layout = node.layout_mut();
-                    layout.x = initial_pos.x + delta.x;
-                    layout.y = initial_pos.y + delta.y;
+            if let Some(initial_abs_pos) = self.element_initial_positions.get(&node_id) {
+                // Calculate target absolute position
+                let target_abs_x = initial_abs_pos.x + delta.x;
+                let target_abs_y = initial_abs_pos.y + delta.y;
+
+                // Check if this node has a parent
+                if let Some(parent_id) = self.find_parent(node_id) {
+                    // Get parent's absolute position to convert to relative
+                    let (parent_abs_x, parent_abs_y) = self.get_absolute_position(parent_id, cx);
+
+                    // Set position relative to parent
+                    if let Some(node) = self.nodes.get_mut(&node_id) {
+                        let layout = node.layout_mut();
+                        layout.x = target_abs_x - parent_abs_x;
+                        layout.y = target_abs_y - parent_abs_y;
+                    }
+                } else {
+                    // No parent, use absolute position directly
+                    if let Some(node) = self.nodes.get_mut(&node_id) {
+                        let layout = node.layout_mut();
+                        layout.x = target_abs_x;
+                        layout.y = target_abs_y;
+                    }
                 }
             }
         }
