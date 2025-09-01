@@ -167,13 +167,7 @@ impl Inspector {
     }
 
     /// Updates the inspector properties based on the currently selected nodes
-    /// If force_update is true, updates all inputs regardless of focus state
-    pub fn update_selected_node_properties(
-        &mut self,
-        force_update: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn update_selected_node_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Update the existing input entities with new values
         let canvas = self.canvas.clone();
         let selected_node_set = canvas.read(cx).selected_nodes().clone();
@@ -394,7 +388,7 @@ impl Inspector {
 
                 // Only update inputs that aren't focused to prevent disrupting user input
                 let x_focused = self.x_input.read(cx).is_focused(window);
-                if force_update || !x_focused {
+                if !x_focused {
                     self.x_input.update(cx, |input, cx| {
                         let value = if self.properties.x.is_empty() {
                             None
@@ -406,7 +400,7 @@ impl Inspector {
                     });
                 }
                 let y_focused = self.y_input.read(cx).is_focused(window);
-                if force_update || !y_focused {
+                if !y_focused {
                     self.y_input.update(cx, |input, cx| {
                         let value = if self.properties.y.is_empty() {
                             None
@@ -417,7 +411,7 @@ impl Inspector {
                     });
                 }
                 let width_focused = self.width_input.read(cx).is_focused(window);
-                if force_update || !width_focused {
+                if !width_focused {
                     self.width_input.update(cx, |input, cx| {
                         let value = if self.properties.width.is_empty() {
                             None
@@ -428,7 +422,7 @@ impl Inspector {
                     });
                 }
                 let height_focused = self.height_input.read(cx).is_focused(window);
-                if force_update || !height_focused {
+                if !height_focused {
                     self.height_input.update(cx, |input, cx| {
                         let value = if self.properties.height.is_empty() {
                             None
@@ -439,7 +433,7 @@ impl Inspector {
                     });
                 }
                 let border_width_focused = self.border_width_input.read(cx).is_focused(window);
-                if force_update || !border_width_focused {
+                if !border_width_focused {
                     self.border_width_input.update(cx, |input, cx| {
                         let value = if self.properties.border_width.is_empty() {
                             None
@@ -450,7 +444,7 @@ impl Inspector {
                     });
                 }
                 let corner_radius_focused = self.corner_radius_input.read(cx).is_focused(window);
-                if force_update || !corner_radius_focused {
+                if !corner_radius_focused {
                     self.corner_radius_input.update(cx, |input, cx| {
                         let value = if self.properties.corner_radius.is_empty() {
                             None
@@ -576,8 +570,8 @@ impl Render for Inspector {
             self.last_selection = current_selection;
         }
 
-        // Update properties - force update all inputs if selection changed, otherwise skip focused inputs
-        self.update_selected_node_properties(selection_changed, window, cx);
+        // Update properties - skip focused inputs to prevent disrupting user input
+        self.update_selected_node_properties(window, cx);
 
         // Get property values formatted for UI display with appropriate rounding
         let (x, y, width, height, border_width, corner_radius, border_color, background_color) =
