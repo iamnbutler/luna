@@ -189,10 +189,11 @@ impl InteractivePropertyInput {
                                 layout.height = new_value.max(1.0);
                             }
                             PropertyType::BorderWidth => {
-                                node.border_width = new_value.max(0.0);
+                                let color = node.border_color();
+                                node.set_border(color, new_value.max(0.0));
                             }
                             PropertyType::CornerRadius => {
-                                node.corner_radius = new_value.max(0.0);
+                                node.set_corner_radius(new_value.max(0.0));
                             }
                         }
                     }

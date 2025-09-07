@@ -5,7 +5,10 @@ pub mod css_parser;
 pub mod tools;
 
 use luna_core::interactivity::ActiveDrag;
-use node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType};
+use node::{
+    frame::FrameNode, shape::ShapeNode, AnyNode, NodeCommon, NodeFactory, NodeId, NodeLayout,
+    NodeType,
+};
 use scene_graph::{SceneGraph, SceneNodeId};
 use theme::Theme;
 use tools::Tool;
@@ -71,7 +74,7 @@ pub struct LunaCanvas {
     canvas_node: SceneNodeId,
 
     /// Flat map of nodes (the data model) - HashMap for O(1) lookups
-    nodes: HashMap<NodeId, FrameNode>,
+    nodes: HashMap<NodeId, AnyNode>,
 
     /// Currently selected nodes
     selected_nodes: HashSet<NodeId>,
@@ -231,7 +234,7 @@ impl LunaCanvas {
         id
     }
 
-    pub fn nodes(&self) -> &HashMap<NodeId, FrameNode> {
+    pub fn nodes(&self) -> &HashMap<NodeId, AnyNode> {
         &self.nodes
     }
 
@@ -293,7 +296,7 @@ impl LunaCanvas {
         self.potential_parent_frame = frame_id;
     }
 
-    pub fn get_node(&self, node_id: NodeId) -> Option<&FrameNode> {
+    pub fn get_node(&self, node_id: NodeId) -> Option<&AnyNode> {
         self.nodes.get(&node_id)
     }
 
@@ -305,7 +308,7 @@ impl LunaCanvas {
         self.hovered_node = hovered_node;
     }
 
-    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut FrameNode> {
+    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut AnyNode> {
         self.nodes.get_mut(&node_id)
     }
 
@@ -346,12 +349,13 @@ impl LunaCanvas {
     /// If parent_id is provided, the node will be added as a child of that parent in both
     /// the data model and scene graph. The node's coordinates will be transformed to be
     /// relative to the parent's coordinate system.
-    pub fn add_node(
+    pub fn add_node<N: Into<AnyNode>>(
         &mut self,
-        mut node: FrameNode,
+        node: N,
         parent: Option<NodeId>,
         cx: &mut Context<Self>,
     ) -> NodeId {
+        let mut node: AnyNode = node.into();
         let node_id = node.id();
 
         // Update parent-relative coordinates if we have a parent
@@ -369,9 +373,11 @@ impl LunaCanvas {
                     node_layout.y -= parent_y;
                 }
 
-                // Add child to parent in data model
-                if let Some(parent_node_mut) = self.nodes.get_mut(&parent) {
-                    parent_node_mut.add_child(node_id);
+                // Add child to parent in data model - only frames can have children
+                if let Some(parent_node) = self.nodes.get_mut(&parent) {
+                    if let Some(frame) = parent_node.as_frame_mut() {
+                        frame.add_child(node_id);
+                    }
                 }
             }
             None => {}
@@ -442,7 +448,11 @@ impl LunaCanvas {
 
         // 3. Update data model - add child to new parent
         let data_updated = if let Some(parent_node) = self.get_node_mut(parent_id) {
-            parent_node.add_child(child_id)
+            if let Some(frame) = parent_node.as_frame_mut() {
+                frame.add_child(child_id)
+            } else {
+                false
+            }
         } else {
             false
         };
@@ -487,7 +497,11 @@ impl LunaCanvas {
 
             // Update data model - remove child from parent
             let data_updated = if let Some(parent_node) = self.get_node_mut(parent_id) {
-                parent_node.remove_child(child_id)
+                if let Some(frame) = parent_node.as_frame_mut() {
+                    frame.remove_child(child_id)
+                } else {
+                    false
+                }
             } else {
                 false
             };
@@ -523,11 +537,23 @@ impl LunaCanvas {
     /// Find the parent node of a child node
     pub fn find_parent(&self, child_id: NodeId) -> Option<NodeId> {
         for (node_id, node) in &self.nodes {
-            if node.children().contains(&child_id) {
-                return Some(*node_id);
+            if let Some(frame) = node.as_frame() {
+                if frame.children().contains(&child_id) {
+                    return Some(*node_id);
+                }
             }
         }
         None
+    }
+
+    /// Get children of a node if it's a frame
+    pub fn get_node_children(&self, node_id: NodeId) -> Vec<NodeId> {
+        if let Some(node) = self.nodes.get(&node_id) {
+            if let Some(frame) = node.as_frame() {
+                return frame.children().clone();
+            }
+        }
+        Vec::new()
     }
 
     /// Check if a node is an ancestor of another node
@@ -595,20 +621,12 @@ impl LunaCanvas {
     ///
     /// This method removes the specified node and all its children recursively
     /// from both the data model and the scene graph.
-    pub fn remove_node(
-        &mut self,
-        node_id: NodeId,
-        cx: &mut Context<Self>,
-    ) -> Option<node::frame::FrameNode> {
+    pub fn remove_node(&mut self, node_id: NodeId, cx: &mut Context<Self>) -> Option<AnyNode> {
         // Remove from selection
         self.selected_nodes.remove(&node_id);
 
         // Get a copy of this node's children first
-        let children = if let Some(node) = self.get_node(node_id) {
-            node.children().clone()
-        } else {
-            Vec::new()
-        };
+        let children = self.get_node_children(node_id);
 
         // Recursively remove all children first
         for child_id in children {
@@ -724,7 +742,7 @@ impl LunaCanvas {
     }
 
     /// Get nodes that are visible in the current viewport
-    pub fn visible_nodes(&self, cx: &mut App) -> Vec<&FrameNode> {
+    pub fn visible_nodes(&self, cx: &mut App) -> Vec<&AnyNode> {
         // Create viewport bounds in window coordinates
         let viewport = Bounds {
             origin: Point::new(0.0, 0.0),
@@ -989,29 +1007,26 @@ impl LunaCanvas {
     pub fn update_child_layouts_after_parent_resize(
         &mut self,
         parent_id: NodeId,
+        _old_size: Size<f32>,
+        _new_size: Size<f32>,
         cx: &mut Context<Self>,
     ) {
-        // First get the parent node to access its children
-        let parent = match self.get_node(parent_id) {
-            Some(node) => node,
-            None => return,
-        };
-
-        // Only frame nodes can have children
-        if parent.node_type() != NodeType::Frame {
-            return;
-        }
-
+        // Get children IDs from the parent if it's a frame
+        let children_ids = self.get_node_children(parent_id);
         // Find all children of this parent by looking for nodes whose parent is this node
         // We need to do this since we can't directly cast to FrameNode
         let children: Vec<NodeId> = self
             .nodes
-            .iter()
-            .filter(|(node_id, _node)| self.find_parent(**node_id) == Some(parent_id))
-            .map(|(node_id, _node)| *node_id)
+            .keys()
+            .filter(|&node_id| self.find_parent(*node_id) == Some(parent_id))
+            .cloned()
             .collect();
 
-        // Get parent's layout information
+        // Get parent layout dimensions
+        let parent = match self.get_node(parent_id) {
+            Some(node) => node,
+            None => return,
+        };
         let parent_layout = parent.layout();
         let parent_x = parent_layout.x;
         let parent_y = parent_layout.y;
@@ -1042,7 +1057,13 @@ impl LunaCanvas {
                 child_layout.y = world_bounds.min.y - parent_y;
 
                 // Recursively update this child's children
-                self.update_child_layouts_after_parent_resize(child_id, cx);
+                // Recursively update child layouts with dummy sizes for now
+                self.update_child_layouts_after_parent_resize(
+                    child_id,
+                    Size::new(0.0, 0.0),
+                    Size::new(0.0, 0.0),
+                    cx,
+                );
             }
         }
 

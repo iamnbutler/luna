@@ -260,7 +260,7 @@ impl RenderOnce for ToolStrip {
                     .child(tool_button(Tool::TextCursor).disabled(true))
                     .child(tool_divider())
                     .child(tool_button(Tool::Frame))
-                    .child(tool_button(Tool::Rectangle).disabled(true))
+                    .child(tool_button(Tool::Rectangle))
                     .child(tool_button(Tool::Line).disabled(true))
                     .child(tool_divider())
                     .child(tool_button(Tool::Image).disabled(true))

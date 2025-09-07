@@ -459,6 +459,14 @@ impl CanvasElement {
                 canvas.set_active_element_draw((new_node_id, NodeType::Frame, active_drag));
                 canvas.mark_dirty(cx);
             }
+            Tool::Rectangle => {
+                // Create a new shape node ID
+                let new_node_id = canvas.generate_id();
+
+                let active_drag = ActiveDrag::new_create(position);
+                canvas.set_active_element_draw((new_node_id, NodeType::Shape, active_drag));
+                canvas.mark_dirty(cx);
+            }
             _ => {}
         }
 
@@ -513,6 +521,45 @@ impl CanvasElement {
 
                         // Add the node to the canvas
                         let new_node_id = canvas.add_node(rect, None, cx);
+
+                        // Clear any existing selection
+                        canvas.deselect_all_nodes(cx);
+
+                        // Select only the newly created element
+                        canvas.select_node(new_node_id);
+
+                        cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
+
+                        canvas.mark_dirty(cx);
+                    }
+                }
+                (NodeType::Shape, Tool::Rectangle) => {
+                    // Calculate rectangle dimensions
+                    let start_pos = active_drag.start_position;
+                    let end_pos = active_drag.current_position;
+
+                    let min_x = start_pos.x().min(end_pos.x());
+                    let min_y = start_pos.y().min(end_pos.y());
+                    let width = (start_pos.x() - end_pos.x()).abs();
+                    let height = (start_pos.y() - end_pos.y()).abs();
+
+                    // Only create a shape if it has meaningful dimensions
+                    if width >= 2.0 && height >= 2.0 {
+                        // Convert window coordinates to canvas coordinates
+                        let canvas_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
+                        let rel_x = canvas_point.x;
+                        let rel_y = canvas_point.y;
+
+                        // Create a new shape node (rectangle)
+                        let mut shape =
+                            node::shape::ShapeNode::rectangle(node_id, rel_x, rel_y, width, height);
+
+                        // Set colors
+                        shape.set_fill(Some(current_background_color));
+                        shape.set_border(Some(current_border_color), 1.0);
+
+                        // Add the node to the canvas
+                        let new_node_id = canvas.add_node(shape, None, cx);
 
                         // Clear any existing selection
                         canvas.deselect_all_nodes(cx);
@@ -740,12 +787,7 @@ impl CanvasElement {
 
                             // If we found a potential parent, apply parenting to nodes that aren't already its children
                             if let Some(parent_id) = potential_parent {
-                                let parent_children =
-                                    if let Some(parent_node) = canvas.get_node(parent_id) {
-                                        parent_node.children().clone()
-                                    } else {
-                                        Vec::new()
-                                    };
+                                let parent_children = canvas.get_node_children(parent_id);
 
                                 for &node_id in &selected_ids {
                                     // Only parent if not already a child of this parent
@@ -1066,6 +1108,8 @@ impl CanvasElement {
                                     // Update child node layouts to reflect parent's resize
                                     canvas.update_child_layouts_after_parent_resize(
                                         selected_node_id,
+                                        Size::new(0.0, 0.0), // old_size placeholder
+                                        Size::new(0.0, 0.0), // new_size placeholder
                                         cx,
                                     );
                                 }
@@ -1481,7 +1525,10 @@ impl CanvasElement {
                             border_width: node.border_width(),
                             corner_radius: node.corner_radius(),
                             shadows: node.shadows(),
-                            children: node.children().clone(),
+                            children: node
+                                .as_frame()
+                                .map(|frame| frame.children().clone())
+                                .unwrap_or_else(Vec::new),
                         });
                     }
                 }

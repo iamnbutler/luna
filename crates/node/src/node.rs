@@ -19,6 +19,7 @@ use gpui::{Bounds, Hsla, Point, Size};
 use smallvec::SmallVec;
 
 pub mod frame;
+pub mod shape;
 
 /// A unique identifier for a canvas node
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,6 +42,170 @@ impl std::fmt::Display for NodeId {
 pub enum NodeType {
     /// A frame that can contain other nodes
     Frame,
+    /// A shape that renders geometric primitives
+    Shape,
+}
+
+/// Enum wrapper for all node types, providing a unified interface
+#[derive(Debug, Clone)]
+pub enum AnyNode {
+    Frame(frame::FrameNode),
+    Shape(shape::ShapeNode),
+}
+
+impl AnyNode {
+    /// Get the node type from the wrapped node
+    pub fn node_type(&self) -> NodeType {
+        match self {
+            AnyNode::Frame(_) => NodeType::Frame,
+            AnyNode::Shape(_) => NodeType::Shape,
+        }
+    }
+
+    /// Try to get a reference to the node as a FrameNode
+    pub fn as_frame(&self) -> Option<&frame::FrameNode> {
+        match self {
+            AnyNode::Frame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Try to get a mutable reference to the node as a FrameNode
+    pub fn as_frame_mut(&mut self) -> Option<&mut frame::FrameNode> {
+        match self {
+            AnyNode::Frame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Try to get a reference to the node as a ShapeNode
+    pub fn as_shape(&self) -> Option<&shape::ShapeNode> {
+        match self {
+            AnyNode::Shape(shape) => Some(shape),
+            _ => None,
+        }
+    }
+
+    /// Try to get a mutable reference to the node as a ShapeNode
+    pub fn as_shape_mut(&mut self) -> Option<&mut shape::ShapeNode> {
+        match self {
+            AnyNode::Shape(shape) => Some(shape),
+            _ => None,
+        }
+    }
+}
+
+impl NodeCommon for AnyNode {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn id(&self) -> NodeId {
+        match self {
+            AnyNode::Frame(frame) => frame.id(),
+            AnyNode::Shape(shape) => shape.id(),
+        }
+    }
+
+    fn node_type(&self) -> NodeType {
+        match self {
+            AnyNode::Frame(frame) => frame.node_type(),
+            AnyNode::Shape(shape) => shape.node_type(),
+        }
+    }
+
+    fn layout(&self) -> &NodeLayout {
+        match self {
+            AnyNode::Frame(frame) => frame.layout(),
+            AnyNode::Shape(shape) => shape.layout(),
+        }
+    }
+
+    fn layout_mut(&mut self) -> &mut NodeLayout {
+        match self {
+            AnyNode::Frame(frame) => frame.layout_mut(),
+            AnyNode::Shape(shape) => shape.layout_mut(),
+        }
+    }
+
+    fn fill(&self) -> Option<Hsla> {
+        match self {
+            AnyNode::Frame(frame) => frame.fill(),
+            AnyNode::Shape(shape) => shape.fill(),
+        }
+    }
+
+    fn set_fill(&mut self, color: Option<Hsla>) {
+        match self {
+            AnyNode::Frame(frame) => frame.set_fill(color),
+            AnyNode::Shape(shape) => shape.set_fill(color),
+        }
+    }
+
+    fn border_color(&self) -> Option<Hsla> {
+        match self {
+            AnyNode::Frame(frame) => frame.border_color(),
+            AnyNode::Shape(shape) => shape.border_color(),
+        }
+    }
+
+    fn border_width(&self) -> f32 {
+        match self {
+            AnyNode::Frame(frame) => frame.border_width(),
+            AnyNode::Shape(shape) => shape.border_width(),
+        }
+    }
+
+    fn set_border(&mut self, color: Option<Hsla>, width: f32) {
+        match self {
+            AnyNode::Frame(frame) => frame.set_border(color, width),
+            AnyNode::Shape(shape) => shape.set_border(color, width),
+        }
+    }
+
+    fn corner_radius(&self) -> f32 {
+        match self {
+            AnyNode::Frame(frame) => frame.corner_radius(),
+            AnyNode::Shape(shape) => shape.corner_radius(),
+        }
+    }
+
+    fn set_corner_radius(&mut self, radius: f32) {
+        match self {
+            AnyNode::Frame(frame) => frame.set_corner_radius(radius),
+            AnyNode::Shape(shape) => shape.set_corner_radius(radius),
+        }
+    }
+
+    fn shadows(&self) -> SmallVec<[Shadow; 1]> {
+        match self {
+            AnyNode::Frame(frame) => frame.shadows(),
+            AnyNode::Shape(shape) => shape.shadows(),
+        }
+    }
+
+    fn set_shadows(&mut self, shadows: SmallVec<[Shadow; 1]>) {
+        match self {
+            AnyNode::Frame(frame) => frame.set_shadows(shadows),
+            AnyNode::Shape(shape) => shape.set_shadows(shadows),
+        }
+    }
+}
+
+impl From<frame::FrameNode> for AnyNode {
+    fn from(frame: frame::FrameNode) -> Self {
+        AnyNode::Frame(frame)
+    }
+}
+
+impl From<shape::ShapeNode> for AnyNode {
+    fn from(shape: shape::ShapeNode) -> Self {
+        AnyNode::Shape(shape)
+    }
 }
 
 /// Layout information for a node
@@ -148,6 +313,12 @@ impl From<gpui::BoxShadow> for Shadow {
 /// type-specific customization. This enables polymorphic operations across
 /// heterogeneous collections of nodes.
 pub trait NodeCommon: std::fmt::Debug {
+    /// Get a reference to self as Any for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Get a mutable reference to self as Any for downcasting
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+
     /// Get the node's ID
     fn id(&self) -> NodeId;
 
@@ -233,6 +404,11 @@ impl NodeFactory {
     /// Create a new frame node
     pub fn create_frame(&mut self) -> frame::FrameNode {
         frame::FrameNode::new(self.next_id())
+    }
+
+    /// Create a new shape node
+    pub fn create_shape(&mut self) -> shape::ShapeNode {
+        shape::ShapeNode::new(self.next_id())
     }
 }
 

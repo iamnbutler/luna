@@ -11,7 +11,7 @@ use gpui::{
 use std::collections::{HashMap, HashSet};
 
 use canvas::LunaCanvas;
-use node::{frame::FrameNode, NodeCommon, NodeId, NodeType};
+use node::{AnyNode, NodeCommon, NodeId, NodeType};
 use theme::Theme;
 
 /// Individual item in the layer list representing a canvas element
@@ -101,10 +101,12 @@ impl LayerList {
     }
 
     // Helper method to find the parent of a node
-    fn find_parent(&self, nodes: &HashMap<NodeId, FrameNode>, child_id: NodeId) -> Option<NodeId> {
+    fn find_parent(&self, nodes: &HashMap<NodeId, AnyNode>, child_id: NodeId) -> Option<NodeId> {
         for (node_id, node) in nodes {
-            if node.children().contains(&child_id) {
-                return Some(*node_id);
+            if let Some(frame) = node.as_frame() {
+                if frame.children().contains(&child_id) {
+                    return Some(*node_id);
+                }
             }
         }
         None
@@ -114,7 +116,7 @@ impl LayerList {
     fn build_items(
         &self,
         weak_canvas_handle: WeakEntity<LunaCanvas>,
-        nodes: &HashMap<NodeId, FrameNode>,
+        nodes: &HashMap<NodeId, AnyNode>,
         parent_id: Option<NodeId>,
         nesting_level: usize,
         selected_nodes: &HashSet<NodeId>,
@@ -136,25 +138,31 @@ impl LayerList {
 
         for (node_id, node) in children {
             let node_id = *node_id;
-            let name = format!("Frame {}", node_id.0);
+            let node_type = node.node_type();
+            let name = match node_type {
+                NodeType::Frame => format!("Frame {}", node_id.0),
+                NodeType::Shape => format!("Shape {}", node_id.0),
+            };
             let selected = selected_nodes.contains(&node_id);
 
             items.push(
-                LayerListItem::new(weak_canvas_handle.clone(), node_id, name, NodeType::Frame)
+                LayerListItem::new(weak_canvas_handle.clone(), node_id, name, node_type)
                     .selected(selected)
                     .nesting_level(nesting_level),
             );
 
             // Add children
-            if !node.children().is_empty() {
-                let child_items = self.build_items(
-                    weak_canvas_handle.clone(),
-                    nodes,
-                    Some(node_id),
-                    nesting_level + 1,
-                    selected_nodes,
-                );
-                items.extend(child_items);
+            if let Some(frame) = node.as_frame() {
+                if !frame.children().is_empty() {
+                    let child_items = self.build_items(
+                        weak_canvas_handle.clone(),
+                        nodes,
+                        Some(node_id),
+                        nesting_level + 1,
+                        selected_nodes,
+                    );
+                    items.extend(child_items);
+                }
             }
         }
 

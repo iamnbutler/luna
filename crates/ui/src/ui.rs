@@ -20,6 +20,7 @@
 pub mod inspector;
 pub mod layer_list;
 pub mod property;
+pub mod property2;
 pub mod sidebar;
 
 use canvas::{canvas_element::CanvasElement, LunaCanvas};

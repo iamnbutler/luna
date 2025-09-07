@@ -21,7 +21,7 @@ pub mod scene_node;
 
 use gpui::{Bounds, Point, Size};
 use luna_core::bounds::Bounds as LunaBounds;
-use node::{frame::FrameNode, NodeId};
+use node::{AnyNode, NodeCommon, NodeId};
 use slotmap::{KeyData, SlotMap};
 use std::{
     collections::HashMap,
@@ -224,7 +224,7 @@ impl SceneGraph {
     pub fn get_world_position(
         &self,
         node_id: SceneNodeId,
-        get_frame: impl Fn(NodeId) -> Option<FrameNode>,
+        get_node: impl Fn(NodeId) -> Option<AnyNode>,
     ) -> glam::Vec2 {
         let node = match self.nodes.get(node_id) {
             Some(n) => n,
@@ -234,13 +234,16 @@ impl SceneGraph {
         // Get the local position from the frame node
         let local_pos = node
             .data_node_id
-            .and_then(|id| get_frame(id))
-            .map(|frame| glam::Vec2::new(frame.layout.x, frame.layout.y))
+            .and_then(|id| get_node(id))
+            .map(|node| {
+                let layout = node.layout();
+                glam::Vec2::new(layout.x, layout.y)
+            })
             .unwrap_or(glam::Vec2::ZERO);
 
         // If there's a parent, add its world position
         if let Some(parent_id) = node.parent {
-            self.get_world_position(parent_id, get_frame) + local_pos
+            self.get_world_position(parent_id, get_node) + local_pos
         } else {
             local_pos
         }
@@ -250,17 +253,20 @@ impl SceneGraph {
     pub fn get_world_bounds(
         &self,
         node_id: SceneNodeId,
-        get_frame: impl Fn(NodeId) -> Option<FrameNode>,
+        get_node: impl Fn(NodeId) -> Option<AnyNode>,
     ) -> LunaBounds {
-        let pos = self.get_world_position(node_id, &get_frame);
+        let pos = self.get_world_position(node_id, &get_node);
 
         // Get size from frame node
         let size = self
             .nodes
             .get(node_id)
             .and_then(|node| node.data_node_id)
-            .and_then(|id| get_frame(id))
-            .map(|frame| glam::Vec2::new(frame.layout.width, frame.layout.height))
+            .and_then(|id| get_node(id))
+            .map(|node| {
+                let layout = node.layout();
+                glam::Vec2::new(layout.width, layout.height)
+            })
             .unwrap_or(glam::Vec2::ZERO);
 
         LunaBounds::from_origin_size(pos, size)
