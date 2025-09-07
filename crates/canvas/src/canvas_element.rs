@@ -1131,7 +1131,7 @@ impl CanvasElement {
         // Handle rectangle drawing
         if let Some(active_draw) = canvas.active_element_draw().take() {
             match *cx.active_tool().clone() {
-                Tool::Frame => {
+                Tool::Frame | Tool::Rectangle => {
                     let new_drag = ActiveDrag {
                         start_position: active_draw.2.start_position,
                         current_position: DragPosition::from_point_pixels(position),
@@ -1968,7 +1968,7 @@ impl Element for CanvasElement {
                 // Paint rectangle preview if drawing with rectangle tool
                 if let Some((node_id, node_type, drag)) = active_element_draw {
                     match active_tool {
-                        Tool::Frame => {
+                        Tool::Frame | Tool::Rectangle => {
                             self.paint_draw_rectangle(node_id, &drag, layout, window, cx);
                         }
                         _ => {}
