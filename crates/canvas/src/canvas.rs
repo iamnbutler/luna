@@ -424,8 +424,14 @@ impl LunaCanvas {
         child_id: NodeId,
         cx: &mut Context<Self>,
     ) -> bool {
-        // 1. Verify both nodes exist
-        if self.get_node(parent_id).is_none() || self.get_node(child_id).is_none() {
+        // 1. Verify both nodes exist and parent can have children
+        let parent_node = self.get_node(parent_id);
+        if parent_node.is_none() || self.get_node(child_id).is_none() {
+            return false;
+        }
+
+        // Only frames can have children
+        if !parent_node.unwrap().can_have_children() {
             return false;
         }
 
@@ -448,6 +454,7 @@ impl LunaCanvas {
 
         // 3. Update data model - add child to new parent
         let data_updated = if let Some(parent_node) = self.get_node_mut(parent_id) {
+            // We already verified the parent can have children, so this should succeed
             if let Some(frame) = parent_node.as_frame_mut() {
                 frame.add_child(child_id)
             } else {

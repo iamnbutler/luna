@@ -93,6 +93,11 @@ impl AnyNode {
             _ => None,
         }
     }
+
+    /// Check if this node type can have children
+    pub fn can_have_children(&self) -> bool {
+        matches!(self, AnyNode::Frame(_))
+    }
 }
 
 impl NodeCommon for AnyNode {

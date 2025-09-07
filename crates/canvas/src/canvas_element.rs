@@ -772,7 +772,10 @@ impl CanvasElement {
                             let potential_parent = canvas
                                 .nodes()
                                 .values()
-                                .filter(|node| !selected_ids.contains(&node.id()))
+                                .filter(|node| {
+                                    // Only nodes that can have children can be parents
+                                    node.can_have_children() && !selected_ids.contains(&node.id())
+                                })
                                 .find(|node| {
                                     // Get absolute bounds of this potential parent
                                     let (abs_x, abs_y) =
