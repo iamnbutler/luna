@@ -173,8 +173,6 @@ impl Inspector {
         let selected_node_set = canvas.read(cx).selected_nodes().clone();
         let selected_nodes = NodeSelection::from(selected_node_set);
 
-        eprintln!("UPDATE_PROPS: Selected nodes: {:?}", selected_nodes);
-
         // Clear the current properties
         self.properties.x.clear();
         self.properties.y.clear();
@@ -216,29 +214,14 @@ impl Inspector {
                             .background_color
                             .push(SharedString::from(color_str));
                     }
-                    eprintln!(
-                        "UPDATE_PROPS: After single node - x:{:?}, y:{:?}, width:{:?}, height:{:?}",
-                        self.properties.x,
-                        self.properties.y,
-                        self.properties.width,
-                        self.properties.height
-                    );
-                } else {
-                    eprintln!("UPDATE_PROPS: Node {:?} not found in canvas!", node_id);
                 }
             }
             NodeSelection::Multiple(node_ids) => {
-                eprintln!("UPDATE_PROPS: Processing multiple nodes: {:?}", node_ids);
                 // For multiple selections, we'll collect all values and then
                 // check if they're all the same to properly handle the "Mixed" state
                 let canvas_read = canvas.read(cx);
-                eprintln!(
-                    "UPDATE_PROPS: Canvas has {} total nodes",
-                    canvas_read.nodes().len()
-                );
 
-                // Temporary collections for all values
-                let mut all_x = Vec::new();
+                let mut x_values = Vec::new();
                 let mut all_y = Vec::new();
                 let mut all_width = Vec::new();
                 let mut all_height = Vec::new();
@@ -255,7 +238,7 @@ impl Inspector {
                         .find(|(id, _)| **id == *node_id)
                         .map(|(_, node)| node)
                     {
-                        all_x.push(node.layout().x);
+                        x_values.push(node.layout().x);
                         all_y.push(node.layout().y);
                         all_width.push(node.layout().width);
                         all_height.push(node.layout().height);
@@ -295,11 +278,11 @@ impl Inspector {
 
                 // If all values are the same, just use the first one
                 // Otherwise, use all values to indicate they're different (will show as "Mixed")
-                if !all_x.is_empty() {
-                    if all_same(&all_x) {
-                        self.properties.x.push(all_x[0]);
+                if !x_values.is_empty() {
+                    if all_same(&x_values) {
+                        self.properties.x.push(x_values[0]);
                     } else {
-                        self.properties.x.extend(all_x);
+                        self.properties.x.extend(x_values);
                     }
                 }
 
@@ -369,13 +352,6 @@ impl Inspector {
                             .push(SharedString::from("Mixed"));
                     }
                 }
-                eprintln!(
-                    "UPDATE_PROPS: After multiple nodes - x:{:?}, y:{:?}, width:{:?}, height:{:?}",
-                    self.properties.x,
-                    self.properties.y,
-                    self.properties.width,
-                    self.properties.height
-                );
 
                 // Update the input entities with the new values
                 let selected_nodes: Vec<NodeId> = self
@@ -395,7 +371,6 @@ impl Inspector {
                         } else {
                             Some(self.properties.x.to_vec())
                         };
-                        eprintln!("UPDATE_PROPS: Setting X value to: {:?}", value);
                         input.update_value(value, selected_nodes.clone(), cx);
                     });
                 }

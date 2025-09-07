@@ -85,7 +85,14 @@ impl RenderOnce for LayerListItem {
                     canvas.select_node(self.node_id);
                 });
             })
-            .child(div().text_color(text_color.alpha(0.8)).child("□"))
+            .child(
+                div()
+                    .text_color(text_color.alpha(0.8))
+                    .child(match self.kind {
+                        NodeType::Frame => "▢",
+                        NodeType::Shape => "▬",
+                    }),
+            )
             .child(self.name)
     }
 }
