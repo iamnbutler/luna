@@ -70,7 +70,7 @@ pub struct SceneGraph {
     root: SceneNodeId,
 
     /// Storage for all scene nodes, indexed by their IDs
-    nodes: SlotMap<SceneNodeId, GraphNode>,
+    nodes: SlotMap<SceneNodeId, SceneNode>,
 
     /// Maps from data node IDs to scene node IDs, allowing lookups in both directions
     node_mapping: HashMap<NodeId, SceneNodeId>,
@@ -81,7 +81,7 @@ impl SceneGraph {
     #[allow(dead_code)]
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
-        let root_node = GraphNode {
+        let root_node = SceneNode {
             parent: None,
             children: Vec::new(),
             local_transform: TransformationMatrix::unit(),
@@ -116,7 +116,7 @@ impl SceneGraph {
         let parent_id = parent_id.unwrap_or(self.root);
 
         // Create the new node
-        let node = GraphNode {
+        let node = SceneNode {
             parent: Some(parent_id),
             children: Vec::new(),
             local_transform: TransformationMatrix::unit(),
@@ -303,11 +303,7 @@ impl SceneGraph {
     fn update_world_bounds(&mut self, node_id: SceneNodeId) {
         // First collect the data we need
         let (transform, local_bounds, children) = match self.nodes.get(node_id) {
-            Some(node) => (
-                node.world_transform,
-                node.local_bounds,
-                node.children.clone(),
-            ),
+            Some(node) => (node.world_transform, node.local_bounds, node.children.clone()),
             None => return,
         };
 
@@ -368,7 +364,7 @@ impl SceneGraph {
                 size: Size::new(max_x - min_x, max_y - min_y),
             };
         }
-
+        
         // Recursively update all children's world bounds
         for child_id in children {
             self.update_world_bounds(child_id);
@@ -376,7 +372,7 @@ impl SceneGraph {
     }
 
     /// Get a reference to a node by its ID
-    pub fn get_node(&self, node_id: SceneNodeId) -> Option<&GraphNode> {
+    pub fn get_node(&self, node_id: SceneNodeId) -> Option<&SceneNode> {
         self.nodes.get(node_id)
     }
 
@@ -438,7 +434,7 @@ impl SceneGraph {
 /// and hit testing. A scene node may be associated with a data node from the
 /// flat data model, or it may be a pure structural node (like the canvas root).
 #[derive(Debug)]
-pub struct GraphNode {
+pub struct SceneNode {
     /// Reference to the parent node, if any
     /// Root nodes have no parent (None)
     parent: Option<SceneNodeId>,
@@ -474,7 +470,7 @@ pub struct GraphNode {
     visible: bool,
 }
 
-impl GraphNode {
+impl SceneNode {
     /// Returns a reference to the node's children
     pub fn children(&self) -> &Vec<SceneNodeId> {
         &self.children
