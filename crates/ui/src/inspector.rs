@@ -561,12 +561,8 @@ impl Render for Inspector {
             .copied()
             .collect();
 
-        // Show viewport coordinates when nothing is selected
+        // Show empty inspector when nothing is selected
         let inner = if selected_nodes.is_empty() {
-            let scroll_pos = self.canvas.read(cx).get_scroll_position();
-            let viewport_x_value = Some(vec![scroll_pos.x]);
-            let viewport_y_value = Some(vec![scroll_pos.y]);
-
             div()
                 .id("inspector-inner")
                 .flex()
@@ -575,36 +571,6 @@ impl Render for Inspector {
                 .w(px(INSPECTOR_WIDTH))
                 .rounded_tr(px(15.))
                 .rounded_br(px(15.))
-                .child(
-                    div()
-                        .px(px(8.))
-                        .py(px(10.))
-                        .flex()
-                        .flex_col()
-                        .gap(px(4.))
-                        .border_color(theme.tokens.inactive_border)
-                        .border_b_1()
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(theme.tokens.subtext0)
-                                .mb(px(4.))
-                                .child("Viewport Center"),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .gap(px(8.))
-                                .child(PropertyInput::new(
-                                    viewport_x_value,
-                                    SharedString::from("X"),
-                                ))
-                                .child(PropertyInput::new(
-                                    viewport_y_value,
-                                    SharedString::from("Y"),
-                                )),
-                        ),
-                )
         } else {
             div()
                 .id("inspector-inner")

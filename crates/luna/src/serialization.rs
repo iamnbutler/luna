@@ -96,10 +96,6 @@ pub fn deserialize_canvas(
         canvas.mark_dirty(cx);
     });
 
-    scene_graph.update(cx, |scene, _| {
-        scene.clear();
-    });
-
     // Update app state colors
     if let Some(bg_color) = &page.canvas.background_color {
         app_state.update(cx, |state, cx| {
@@ -113,35 +109,25 @@ pub fn deserialize_canvas(
     let mut id_mapping: HashMap<usize, NodeId> = HashMap::new();
 
     // First pass: create all nodes
-    eprintln!("Deserializing {} nodes", page.nodes.len());
     canvas.update(cx, |canvas, cx| {
         for serialized_node in &page.nodes {
             match deserialize_node(serialized_node, &mut factory) {
                 Ok(node) => {
                     let node_id = node.id();
-                    eprintln!(
-                        "Created node {:?} with layout: {:?}",
-                        node_id,
-                        node.layout()
-                    );
                     id_mapping.insert(get_serialized_node_id(serialized_node), node_id);
                     canvas.add_node(node, cx);
                     canvas.mark_dirty(cx);
-                    eprintln!("Added node {:?} to canvas", node_id);
                 }
-                Err(e) => {
+                Err(_e) => {
                     // Failed to deserialize node - skip it
-                    eprintln!("Failed to deserialize node: {}", e);
                 }
             }
         }
-        eprintln!("Canvas now has {} nodes", canvas.nodes().len());
     });
 
     // Second pass: establish parent-child relationships
     // The nodes are already in the scene graph from canvas.add_node(),
     // we just need to set up the hierarchy
-    eprintln!("Rebuilding node hierarchy");
     scene_graph.update(cx, |scene, _| {
         // Only establish parent-child relationships, don't add nodes again
         for relationship in &page.hierarchy {
@@ -154,9 +140,6 @@ pub fn deserialize_canvas(
                             scene.get_scene_node_for_data_node(child_node_id),
                         ) {
                             scene.add_child(parent_scene, child_scene);
-                            eprintln!("Added child {:?} to parent {:?}", child_node_id, parent_id);
-                        } else {
-                            eprintln!("Warning: Could not find scene nodes for hierarchy - parent: {:?}, child: {:?}", parent_id, child_node_id);
                         }
                     }
                 }
@@ -166,10 +149,6 @@ pub fn deserialize_canvas(
 
     // Restore canvas viewport state
     canvas.update(cx, |canvas, cx| {
-        eprintln!(
-            "Restoring viewport to ({}, {})",
-            page.canvas.viewport_x, page.canvas.viewport_y
-        );
         canvas.set_scroll_position(
             gpui::point(page.canvas.viewport_x, page.canvas.viewport_y),
             cx,
@@ -183,13 +162,6 @@ pub fn deserialize_canvas(
                 canvas.select_node(node_id);
             }
         }
-
-        eprintln!(
-            "Final canvas state: {} nodes, viewport at ({}, {})",
-            canvas.nodes().len(),
-            canvas.get_scroll_position().x,
-            canvas.get_scroll_position().y
-        );
 
         // Force a full canvas update after loading
         canvas.mark_dirty(cx);

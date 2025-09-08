@@ -326,8 +326,8 @@ impl Luna {
         }
 
         let project = serialize_canvas(&self.canvas, &self.scene_graph, &self.app_state, cx)
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to serialize canvas: {}", e);
+            .unwrap_or_else(|_e| {
+                // Failed to serialize canvas - return empty project
                 project::LunaProject::new()
             });
 

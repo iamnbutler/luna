@@ -402,15 +402,7 @@ impl LunaCanvas {
 
         // Create scene node as child of parent scene node
         self.scene_graph.update(cx, |sg, _cx| {
-            let scene_node = sg.create_node(Some(parent_scene_node_id), Some(node_id));
-
-            // Get node layout for debugging
-            let node = self.nodes.get(&node_id).unwrap();
-            let layout = node.layout();
-            eprintln!(
-                "Created scene node for {:?} at ({}, {}) size {}x{}",
-                node_id, layout.x, layout.y, layout.width, layout.height
-            );
+            sg.create_node(Some(parent_scene_node_id), Some(node_id));
         });
 
         self.dirty = true;
@@ -683,10 +675,12 @@ impl LunaCanvas {
         self.active_drag = None;
         self.active_element_draw = None;
 
-        // Clear scene graph but keep the canvas root node
-        self.scene_graph.update(cx, |sg, _| {
+        // Clear scene graph and update our canvas_node reference to the new root
+        self.canvas_node = self.scene_graph.update(cx, |sg, _| {
             sg.clear();
-            // The clear method preserves the root node, no need to re-add anything
+            // After clearing, the scene graph creates a new root node
+            // We need to update our reference to it
+            sg.root()
         });
 
         self.mark_dirty(cx);
@@ -769,10 +763,6 @@ impl LunaCanvas {
 
     /// Get nodes that are visible in the current viewport
     pub fn visible_nodes(&self, cx: &mut App) -> Vec<&AnyNode> {
-        eprintln!("visible_nodes called, total nodes: {}", self.nodes.len());
-        eprintln!("viewport size: {:?}", self.viewport.size);
-        eprintln!("scroll position: {:?}", self.scroll_position);
-
         // Create viewport bounds in window coordinates
         let viewport = Bounds {
             origin: Point::new(0.0, 0.0),
@@ -820,7 +810,6 @@ impl LunaCanvas {
         sg: &SceneGraph,
         result: &mut Vec<NodeId>,
     ) {
-        eprintln!("collect_visible_nodes called for scene node {:?}", node_id);
         // TODO: Implement proper visibility checking
         // For now, just add the node and its children to the result
         if let Some(node) = sg.get_node(node_id) {

@@ -102,7 +102,6 @@ impl SceneGraph {
     }
 
     /// Returns the ID of the root node
-    #[allow(dead_code)]
     pub fn root(&self) -> SceneNodeId {
         self.root
     }
