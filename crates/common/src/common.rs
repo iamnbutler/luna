@@ -1,4 +1,4 @@
-//! # Core utilities and shared functionality for Luna
+//! # Common utilities and shared functionality for Luna
 //!
 //! This crate provides common utilities and shared types used throughout
 //! the Luna application, including color handling, interactivity primitives,

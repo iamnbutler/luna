@@ -3,8 +3,8 @@ use crate::{
     tools::{ActiveTool, GlobalTool, Tool},
     ClearSelection, LunaCanvas,
 };
-use core::interactivity::DragPosition;
-use core::{
+use common::interactivity::DragPosition;
+use common::{
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
     util::{round_to_pixel, rounded_point},
 };

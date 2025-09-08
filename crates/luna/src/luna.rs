@@ -5,7 +5,7 @@
 //!
 //! ## Architecture
 //!
-//! Luna is built around several core abstractions:
+//! Luna is built around several common abstractions:
 //!
 //! - **Canvas**: The central drawing surface where elements are rendered and manipulated
 //! - **SceneGraph**: Manages spatial relationships between nodes for efficient transformations
@@ -38,7 +38,7 @@ mod serialization;
 
 // Re-export commonly used items from external crates
 pub use canvas::{canvas_element, tools};
-pub use core::{color, coordinates, interactivity, keymap, util};
+pub use common::{color, coordinates, interactivity, keymap, util};
 pub use node;
 pub use scene_graph;
 pub use theme;

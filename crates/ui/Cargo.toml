@@ -10,7 +10,7 @@ path = "src/ui.rs"
 
 [dependencies]
 canvas = { path = "../canvas" }
-core = { path = "../core" }
+common = { path = "../common" }
 gpui = { workspace = true }
 node = { path = "../node" }
 project = { path = "../project" }

@@ -45,7 +45,7 @@ pub fn rounded_point(x: Pixels, y: Pixels) -> Point<Pixels> {
 /// # Examples
 ///
 /// ```
-/// use core::util::keystroke_builder;
+/// use common::util::keystroke_builder;
 ///
 /// // Creates Cmd+S keystroke
 /// let save = keystroke_builder("cmd-s");

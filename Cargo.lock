@@ -641,7 +641,7 @@ name = "canvas"
 version = "0.1.1"
 dependencies = [
  "assets",
- "core",
+ "common",
  "glam",
  "gpui",
  "node",
@@ -859,6 +859,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
+name = "common"
+version = "0.1.1"
+dependencies = [
+ "glam",
+ "gpui",
+ "palette",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -892,18 +904,6 @@ name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "core"
-version = "0.1.1"
-dependencies = [
- "glam",
- "gpui",
- "palette",
- "serde",
- "serde_json",
- "smallvec",
-]
 
 [[package]]
 name = "core-foundation"
@@ -2712,7 +2712,7 @@ dependencies = [
  "assets",
  "canvas",
  "chrono",
- "core",
+ "common",
  "glam",
  "gpui",
  "node",
@@ -4203,7 +4203,7 @@ dependencies = [
 name = "scene_graph"
 version = "0.1.1"
 dependencies = [
- "core",
+ "common",
  "glam",
  "gpui",
  "node",
@@ -5036,7 +5036,7 @@ name = "ui"
 version = "0.1.1"
 dependencies = [
  "canvas",
- "core",
+ "common",
  "gpui",
  "node",
  "project",

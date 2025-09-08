@@ -16,7 +16,7 @@ use gpui::Hsla;
 /// # Examples
 ///
 /// ```
-/// use core::color::parse_color;
+/// use common::color::parse_color;
 ///
 /// // Parse a hex color
 /// let red = parse_color("#ff0000").unwrap();

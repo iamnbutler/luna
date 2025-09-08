@@ -4,7 +4,7 @@ pub mod canvas_element;
 pub mod css_parser;
 pub mod tools;
 
-use core::interactivity::ActiveDrag;
+use common::interactivity::ActiveDrag;
 use node::{
     frame::FrameNode, shape::ShapeNode, AnyNode, NodeCommon, NodeFactory, NodeId, NodeLayout,
     NodeType,

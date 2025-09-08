@@ -1,12 +1,12 @@
 [package]
-name = "core"
+name = "common"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
 [lib]
-name = "core"
-path = "src/core.rs"
+name = "common"
+path = "src/common.rs"
 
 [dependencies]
 glam = { workspace = true }
