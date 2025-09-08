@@ -1514,11 +1514,6 @@ impl CanvasElement {
                             gpui::Pixels(canvas_size.y * canvas.zoom()),
                         );
 
-                        eprintln!(
-                            "    Window pos: ({}, {}), size: ({}, {})",
-                            window_pos.x, window_pos.y, window_size.width.0, window_size.height.0
-                        );
-
                         nodes_to_render.push(NodeRenderInfo {
                             node_id,
                             bounds: gpui::Bounds {

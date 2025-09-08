@@ -230,7 +230,6 @@ impl LunaCanvas {
     pub fn generate_id(&mut self) -> NodeId {
         let id = NodeId::new(self.next_id);
         self.next_id += 1;
-        println!("Generated new node ID: {}", id); // Debug logging
         id
     }
 
