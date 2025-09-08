@@ -1,12 +1,12 @@
 [package]
-name = "luna_core"
+name = "core"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
 [lib]
-name = "luna_core"
-path = "src/luna_core.rs"
+name = "core"
+path = "src/core.rs"
 
 [dependencies]
 glam = { workspace = true }

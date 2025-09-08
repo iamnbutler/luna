@@ -13,7 +13,6 @@ Follow this process before you make each edit:
 7. Once this logical step of your plan is complete, error free, with passing tests, write a commit message and commit your changes to the current branch. If you are correcting issues from your previous plan, don't just write "implement whatever the previous plan was", write a commit message explaining what you are fixing, and what went wrong with the previous step. Don't limit yourself to 100 characters or whatever, I'd rather have a clear message than a short one.
 8. Finally, if you have finished all your steps and completed the original task I gave you, let me know you are done.
 
-
 ### Style Guide
 
 Long range goal: Luna is software design tool in the vein of figma, sketchapp, and old Framer. It can swap between rendering nodes on a canvas, and editing specific nodes and their children in code directly.

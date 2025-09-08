@@ -426,7 +426,7 @@ impl ColorInput {
 
     pub fn parse_color(&self) -> Option<Hsla> {
         if let Some(color_str) = &self.value {
-            luna_core::color::parse_color(color_str)
+            core::color::parse_color(color_str)
         } else {
             None
         }

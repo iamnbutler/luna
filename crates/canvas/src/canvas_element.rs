@@ -3,17 +3,17 @@ use crate::{
     tools::{ActiveTool, GlobalTool, Tool},
     ClearSelection, LunaCanvas,
 };
+use core::interactivity::DragPosition;
+use core::{
+    interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
+    util::{round_to_pixel, rounded_point},
+};
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
     Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
     TextStyle, TextStyleRefinement, Window,
 };
 use gpui::{point, Bounds, Point, Size};
-use luna_core::interactivity::DragPosition;
-use luna_core::{
-    interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
-    util::{round_to_pixel, rounded_point},
-};
 use node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType, Shadow};
 use scene_graph::SceneGraph;
 use smallvec::SmallVec;

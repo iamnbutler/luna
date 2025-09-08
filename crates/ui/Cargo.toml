@@ -9,12 +9,12 @@ name = "ui"
 path = "src/ui.rs"
 
 [dependencies]
-gpui = { workspace = true }
 canvas = { path = "../canvas" }
+core = { path = "../core" }
+gpui = { workspace = true }
 node = { path = "../node" }
-theme = { path = "../theme" }
-luna_core = { path = "../core" }
 project = { path = "../project" }
+regex = { workspace = true }
 smallvec = { workspace = true }
 strum = { workspace = true }
-regex = { workspace = true }
+theme = { path = "../theme" }

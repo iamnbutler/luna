@@ -9,25 +9,20 @@ name = "Luna"
 path = "src/luna.rs"
 
 [dependencies]
-# Internal crates
-assets = { path = "../assets" }
-luna_core = { path = "../core" }
-node = { path = "../node" }
-project = { path = "../project" }
-theme = { path = "../theme" }
-canvas = { path = "../canvas" }
-scene_graph = { path = "../scene_graph" }
-ui = { path = "../ui" }
-
-# External dependencies
 anyhow = { workspace = true }
+assets = { path = "../assets" }
+canvas = { path = "../canvas" }
 chrono = { workspace = true }
+core = { path = "../core" }
 glam = { workspace = true }
 gpui = { workspace = true }
+node = { path = "../node" }
 palette = { workspace = true }
+project = { path = "../project" }
 quadtree_rs = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
+scene_graph = { path = "../scene_graph" }
 schemars = { workspace = true }
 schemars_derive = { workspace = true }
 serde = { workspace = true }
@@ -39,4 +34,6 @@ smol = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 taffy = { workspace = true }
+theme = { path = "../theme" }
+ui = { path = "../ui" }
 uuid = { workspace = true }
