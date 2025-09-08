@@ -192,6 +192,7 @@ impl Luna {
     }
 
     fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("New file action triggered!");
         // Clear the canvas and create a new project
         self.project_state.update(cx, |state, _| {
             *state = ProjectState::new();
@@ -205,6 +206,7 @@ impl Luna {
     }
 
     fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("Open file action triggered!");
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -250,6 +252,7 @@ impl Luna {
     }
 
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("Save file action triggered!");
         let file_path = self.project_state.read(cx).file_path.clone();
 
         if let Some(path) = file_path {
@@ -260,6 +263,7 @@ impl Luna {
     }
 
     fn save_file_as(&mut self, _: &SaveFileAs, window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("Save file as action triggered!");
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -360,6 +364,10 @@ impl Render for Luna {
             .on_action(cx.listener(Self::open_file))
             .on_action(cx.listener(Self::save_file))
             .on_action(cx.listener(Self::save_file_as))
+            .when(false, |div| {
+                // Remove verbose logging for now
+                div
+            })
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
@@ -412,11 +420,63 @@ fn init_globals(cx: &mut App) {
 /// for the entire Luna application.
 fn main() {
     Application::new().with_assets(Assets).run(|cx: &mut App| {
+        // Register global action handlers
         cx.on_action(quit);
-        cx.set_menus(vec![Menu {
-            name: "Luna".into(),
-            items: vec![MenuItem::action("Quit", Quit)],
-        }]);
+        cx.on_action(new_file);
+        cx.on_action(open_file);
+        cx.on_action(save_file);
+        cx.on_action(save_file_as);
+
+        // Add keystroke logging
+        cx.observe_keystrokes(|event, window, cx| {
+            eprintln!(
+                "Keystroke: {:?} (key: {:?}, modifiers: {:?})",
+                event.keystroke, event.keystroke.key, event.keystroke.modifiers
+            );
+        })
+        .detach();
+
+        // Set up menus with File menu
+        cx.set_menus(vec![
+            Menu {
+                name: "Luna".into(),
+                items: vec![
+                    MenuItem::action("About Luna", Quit), // TODO: Add About action
+                    MenuItem::separator(),
+                    MenuItem::action("Quit", Quit),
+                ],
+            },
+            Menu {
+                name: "File".into(),
+                items: vec![
+                    MenuItem::action("New", NewFile),
+                    MenuItem::action("Open...", OpenFile),
+                    MenuItem::separator(),
+                    MenuItem::action("Save", SaveFile),
+                    MenuItem::action("Save As...", SaveFileAs),
+                ],
+            },
+            Menu {
+                name: "Edit".into(),
+                items: vec![
+                    MenuItem::action("Copy", Copy),
+                    MenuItem::action("Cut", Cut),
+                    MenuItem::action("Paste", Paste),
+                    MenuItem::separator(),
+                    MenuItem::action("Select All", SelectAll),
+                    MenuItem::action("Delete", Delete),
+                ],
+            },
+            Menu {
+                name: "Tools".into(),
+                items: vec![
+                    MenuItem::action("Selection Tool", SelectionTool),
+                    MenuItem::action("Hand Tool", HandTool),
+                    MenuItem::action("Rectangle Tool", RectangleTool),
+                    MenuItem::action("Frame Tool", FrameTool),
+                ],
+            },
+        ]);
 
         init_keymap(cx);
         init_globals(cx);
@@ -445,8 +505,10 @@ fn main() {
 
         window
             .update(cx, |view, window, cx| {
+                eprintln!("Setting focus to Luna window");
                 window.focus(&view.focus_handle(cx));
                 cx.activate(true);
+                eprintln!("Luna window activated and focused");
             })
             .unwrap();
     });
@@ -454,4 +516,52 @@ fn main() {
 
 fn quit(_: &Quit, cx: &mut App) {
     cx.quit();
+}
+
+fn new_file(_: &NewFile, cx: &mut App) {
+    eprintln!("Global new file action received");
+    // Forward to the active window
+    if let Some(window) = cx.active_window() {
+        window
+            .update(cx, |_, window, cx| {
+                cx.dispatch_action(&NewFile);
+            })
+            .ok();
+    }
+}
+
+fn open_file(_: &OpenFile, cx: &mut App) {
+    eprintln!("Global open file action received");
+    // Forward to the active window
+    if let Some(window) = cx.active_window() {
+        window
+            .update(cx, |_, window, cx| {
+                cx.dispatch_action(&OpenFile);
+            })
+            .ok();
+    }
+}
+
+fn save_file(_: &SaveFile, cx: &mut App) {
+    eprintln!("Global save file action received");
+    // Forward to the active window
+    if let Some(window) = cx.active_window() {
+        window
+            .update(cx, |_, window, cx| {
+                cx.dispatch_action(&SaveFile);
+            })
+            .ok();
+    }
+}
+
+fn save_file_as(_: &SaveFileAs, cx: &mut App) {
+    eprintln!("Global save file as action received");
+    // Forward to the active window
+    if let Some(window) = cx.active_window() {
+        window
+            .update(cx, |_, window, cx| {
+                cx.dispatch_action(&SaveFileAs);
+            })
+            .ok();
+    }
 }
