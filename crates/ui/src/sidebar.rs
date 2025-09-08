@@ -10,6 +10,7 @@ use gpui::{
     MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal, WeakEntity,
     Window, WindowBackgroundAppearance, WindowOptions,
 };
+use project::ProjectState;
 use theme::Theme;
 
 use super::{layer_list::LayerList, Titlebar};
@@ -21,12 +22,21 @@ use super::{layer_list::LayerList, Titlebar};
 pub struct Sidebar {
     canvas: Entity<LunaCanvas>,
     layer_list: Entity<LayerList>,
+    project_state: Entity<ProjectState>,
 }
 
 impl Sidebar {
-    pub fn new(canvas: Entity<LunaCanvas>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        canvas: Entity<LunaCanvas>,
+        project_state: Entity<ProjectState>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let layer_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
-        Self { canvas, layer_list }
+        Self {
+            canvas,
+            layer_list,
+            project_state,
+        }
     }
 }
 
@@ -46,7 +56,30 @@ impl Render for Sidebar {
             .w(px(Self::INITIAL_WIDTH))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .child(div().w_full().h(px(Titlebar::HEIGHT)))
+            .child(
+                div()
+                    .w_full()
+                    .h(px(Titlebar::HEIGHT))
+                    .flex()
+                    .items_center()
+                    .px_2()
+                    .child({
+                        let project_state = self.project_state.read(cx);
+                        let display_name = project_state.display_name();
+                        let is_dirty = project_state.is_dirty;
+
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .text_sm()
+                            .text_color(token.text)
+                            .when(is_dirty, |d| {
+                                d.child(div().size_2().rounded_full().bg(token.overlay0))
+                            })
+                            .child(display_name)
+                    }),
+            )
             .child(
                 div()
                     .flex()

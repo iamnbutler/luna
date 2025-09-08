@@ -42,7 +42,6 @@ impl From<u64> for SceneNodeId {
 
 impl SceneNodeId {
     /// Converts this scene node id to a [NonZeroU64]
-    #[allow(dead_code)]
     pub fn as_non_zero_u64(self) -> NonZeroU64 {
         NonZeroU64::new(self.0.as_ffi()).unwrap()
     }
@@ -82,7 +81,6 @@ pub struct SceneGraph {
 
 impl SceneGraph {
     /// Creates a new, empty scene graph with a root node
-    #[allow(dead_code)]
     pub fn new() -> Self {
         let mut nodes = SlotMap::with_key();
         let root_node = SceneNode {

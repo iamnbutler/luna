@@ -15,7 +15,7 @@ gpui = { workspace = true }
 node = { path = "../node" }
 scene_graph = { path = "../scene_graph" }
 theme = { path = "../theme" }
-luna_core = { path = "../luna_core" }
+luna_core = { path = "../core" }
 smallvec = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

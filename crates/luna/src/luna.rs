@@ -1,5 +1,3 @@
-#![allow(unused, dead_code)]
-
 //! # Luna: A GPU-accelerated design canvas
 //!
 //! Luna is a modern design application built on the GPUI framework, providing a high-performance
@@ -21,14 +19,14 @@ use assets::Assets;
 use canvas::{
     canvas_element::CanvasElement,
     tools::{ActiveTool, GlobalTool, Tool},
-    AppState, LunaCanvas,
+    AppState, CanvasEvent, LunaCanvas,
 };
 use gpui::{
-    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
-    IntoElement, KeyBinding, Menu, MenuItem, Modifiers, TitlebarOptions, Window,
+    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable,
+    IntoElement, KeyBinding, Menu, MenuItem, Subscription, TitlebarOptions, Window,
     WindowBackgroundAppearance, WindowOptions,
 };
-use luna_core::keymap::StandardKeymaps;
+use project::{LunaProject, ProjectState};
 use scene_graph::SceneGraph;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -36,7 +34,6 @@ use theme::{ActiveTheme, GlobalTheme, Theme};
 use ui::{inspector::Inspector, sidebar::Sidebar};
 
 mod assets;
-mod project;
 mod serialization;
 
 // Re-export commonly used items from external crates
@@ -47,7 +44,6 @@ pub use scene_graph;
 pub use theme;
 pub use ui;
 
-use crate::project::ProjectState;
 use crate::serialization::{deserialize_canvas, serialize_canvas};
 
 actions!(
@@ -99,6 +95,8 @@ struct Luna {
     sidebar: Entity<Sidebar>,
     /// Project state for file management
     project_state: Entity<ProjectState>,
+    /// Subscriptions to various events
+    _subscriptions: Vec<Subscription>,
 }
 
 impl Luna {
@@ -112,8 +110,11 @@ impl Luna {
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone(), cx));
-        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
         let project_state = cx.new(|_| ProjectState::new());
+        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), project_state.clone(), cx));
+
+        // Subscribe to canvas events to mark project as dirty
+        let canvas_subscription = cx.subscribe(&canvas, Self::handle_canvas_event);
 
         Luna {
             app_state,
@@ -123,6 +124,25 @@ impl Luna {
             inspector,
             sidebar,
             project_state,
+            _subscriptions: vec![canvas_subscription],
+        }
+    }
+
+    fn handle_canvas_event(
+        &mut self,
+        _canvas: Entity<LunaCanvas>,
+        event: &CanvasEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            CanvasEvent::NodeAdded(_)
+            | CanvasEvent::NodeRemoved(_)
+            | CanvasEvent::ContentChanged => {
+                // Mark the project as dirty when canvas content changes
+                self.project_state.update(cx, |state, _| {
+                    state.mark_dirty();
+                });
+            }
         }
     }
 
@@ -176,6 +196,11 @@ impl Luna {
             }
             canvas.mark_dirty(cx);
         });
+
+        // Mark project as dirty after deleting nodes
+        self.project_state.update(cx, |state, _| {
+            state.mark_dirty();
+        });
     }
 
     fn handle_cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
@@ -210,7 +235,7 @@ impl Luna {
         let weak_scene = self.scene_graph.downgrade();
         let weak_app_state = self.app_state.downgrade();
 
-        cx.spawn(async move |_, mut cx| {
+        cx.spawn(async move |_, cx| {
             let paths = cx
                 .update(|cx| {
                     cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -271,7 +296,7 @@ impl Luna {
         let weak_scene = self.scene_graph.downgrade();
         let weak_app_state = self.app_state.downgrade();
 
-        cx.spawn(async move |_, mut cx| {
+        cx.spawn(async move |_, cx| {
             let path = cx
                 .update(|cx| {
                     let home_dir = std::env::var("HOME")
@@ -302,6 +327,7 @@ impl Luna {
                         project_state.update(cx, |state, cx| {
                             state.project = project.clone();
                             state.file_path = Some(path.to_path_buf());
+                            state.mark_clean();
                             cx.notify();
                         });
 
@@ -328,7 +354,7 @@ impl Luna {
         let project = serialize_canvas(&self.canvas, &self.scene_graph, &self.app_state, cx)
             .unwrap_or_else(|_e| {
                 // Failed to serialize canvas - return empty project
-                project::LunaProject::new()
+                LunaProject::new()
             });
 
         self.project_state.update(cx, |state, _| {

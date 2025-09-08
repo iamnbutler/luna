@@ -2705,6 +2705,7 @@ dependencies = [
  "luna_core",
  "node",
  "palette",
+ "project",
  "quadtree_rs",
  "rand 0.9.0",
  "regex",
@@ -3735,6 +3736,20 @@ checksum = "a65f2e60fbf1063868558d69c6beacf412dc755f9fc020f514b7955fc914fe30"
 dependencies = [
  "quote 1.0.40",
  "syn 2.0.100",
+]
+
+[[package]]
+name = "project"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "gpui",
+ "node",
+ "serde",
+ "serde_json",
+ "smol",
+ "uuid",
 ]
 
 [[package]]
@@ -5024,6 +5039,7 @@ dependencies = [
  "gpui",
  "luna_core",
  "node",
+ "project",
  "regex",
  "smallvec",
  "strum 0.24.1",

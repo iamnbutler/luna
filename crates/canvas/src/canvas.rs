@@ -13,6 +13,17 @@ use scene_graph::{SceneGraph, SceneNodeId};
 use theme::Theme;
 use tools::Tool;
 
+/// Events emitted by the canvas
+#[derive(Clone, Debug, PartialEq)]
+pub enum CanvasEvent {
+    /// A node was added to the canvas
+    NodeAdded(NodeId),
+    /// A node was removed from the canvas
+    NodeRemoved(NodeId),
+    /// The canvas content has changed
+    ContentChanged,
+}
+
 /// Shared application state for canvas operations
 #[derive(Clone, Debug)]
 pub struct AppState {
@@ -23,9 +34,9 @@ pub struct AppState {
 }
 use gpui::{
     actions, canvas as gpui_canvas, div, hsla, point, prelude::*, px, size, Action, App, Bounds,
-    Context, ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, FocusHandle,
-    Focusable, InputHandler, InteractiveElement, IntoElement, KeyContext, ParentElement, Pixels,
-    Point, Render, ScaledPixels, Size, Styled, Window,
+    Context, ContextEntry, DispatchPhase, Element, Entity, EntityInputHandler, EventEmitter,
+    FocusHandle, Focusable, InputHandler, InteractiveElement, IntoElement, KeyContext,
+    ParentElement, Pixels, Point, Render, ScaledPixels, Size, Styled, Window,
 };
 use std::{
     any::TypeId,
@@ -405,6 +416,7 @@ impl LunaCanvas {
         });
 
         self.dirty = true;
+        cx.emit(CanvasEvent::NodeAdded(node_id));
         node_id
     }
 
@@ -649,6 +661,11 @@ impl LunaCanvas {
 
         // Mark canvas as dirty
         self.dirty = true;
+
+        // Emit event that node was removed
+        if node.is_some() {
+            cx.emit(CanvasEvent::NodeRemoved(node_id));
+        }
 
         node
     }
@@ -1089,6 +1106,8 @@ impl LunaCanvas {
         self.mark_dirty(cx);
     }
 }
+
+impl EventEmitter<CanvasEvent> for LunaCanvas {}
 
 /// Tests for AABB intersection between two bounds
 fn bounds_intersect(a: &Bounds<f32>, b: &Bounds<f32>) -> bool {

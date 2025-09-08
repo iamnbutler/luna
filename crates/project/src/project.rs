@@ -1,9 +1,7 @@
 use anyhow::{anyhow, Result};
-use gpui::{point, Hsla, Point};
-use node::{AnyNode, NodeId, NodeLayout};
-use scene_graph::SceneGraph;
+use gpui::Hsla;
+use node::NodeLayout;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Version of the Luna project file format
@@ -186,11 +184,6 @@ impl LunaProject {
     /// Gets the active page
     pub fn active_page(&self) -> Option<&Page> {
         self.pages.get(self.active_page)
-    }
-
-    /// Gets the active page mutably
-    pub fn active_page_mut(&mut self) -> Option<&mut Page> {
-        self.pages.get_mut(self.active_page)
     }
 }
 

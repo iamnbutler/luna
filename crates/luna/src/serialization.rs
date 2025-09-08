@@ -1,15 +1,10 @@
-use crate::project::{
-    CanvasState, LunaProject, NodeRelationship, Page, SerializedColor, SerializedLayout,
-    SerializedNode, SerializedShadow,
-};
 use anyhow::{anyhow, Result};
 use canvas::{AppState, LunaCanvas};
-use gpui::{App, Context, Entity};
-use node::frame::FrameNode;
-use node::shape::ShapeNode;
+use gpui::{App, Entity};
 use node::{AnyNode, NodeCommon, NodeFactory, NodeId, Shadow, ShadowOffset};
+use project::{CanvasState, LunaProject, NodeRelationship, SerializedNode, SerializedShadow};
 use scene_graph::SceneGraph;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Serializes the current canvas state into a Luna project
 pub fn serialize_canvas(
