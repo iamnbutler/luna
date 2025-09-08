@@ -191,12 +191,7 @@ impl Luna {
         }
     }
 
-    fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("New file action triggered on Luna instance!");
-        eprintln!(
-            "Focus handle is focused: {:?}",
-            self.focus_handle.is_focused(window)
-        );
+    fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
         // Clear the canvas and create a new project
         self.project_state.update(cx, |state, _| {
             *state = ProjectState::new();
@@ -209,8 +204,7 @@ impl Luna {
         cx.notify();
     }
 
-    fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Open file action triggered on Luna instance!");
+    fn open_file(&mut self, _: &OpenFile, _window: &mut Window, cx: &mut Context<Self>) {
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -256,7 +250,6 @@ impl Luna {
     }
 
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Save file action triggered on Luna instance!");
         let file_path = self.project_state.read(cx).file_path.clone();
 
         if let Some(path) = file_path {
@@ -266,8 +259,7 @@ impl Luna {
         }
     }
 
-    fn save_file_as(&mut self, _: &SaveFileAs, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Save file as action triggered on Luna instance!");
+    fn save_file_as(&mut self, _: &SaveFileAs, _window: &mut Window, cx: &mut Context<Self>) {
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -284,7 +276,14 @@ impl Luna {
                 })?
                 .await??;
 
-            if let Some(path) = path {
+            if let Some(mut path) = path {
+                // Ensure the file has a .luna extension
+                if path.extension().is_none()
+                    || path.extension() != Some(std::ffi::OsStr::new("luna"))
+                {
+                    path.set_extension("luna");
+                }
+
                 cx.update(|cx| {
                     if let (Some(project_state), Some(canvas), Some(scene), Some(app_state)) = (
                         weak_project.upgrade(),
@@ -314,7 +313,12 @@ impl Luna {
         .detach_and_log_err(cx);
     }
 
-    fn save_to_path(&mut self, path: PathBuf, _window: &mut Window, cx: &mut Context<Self>) {
+    fn save_to_path(&mut self, mut path: PathBuf, _window: &mut Window, cx: &mut Context<Self>) {
+        // Ensure the file has a .luna extension
+        if path.extension().is_none() || path.extension() != Some(std::ffi::OsStr::new("luna")) {
+            path.set_extension("luna");
+        }
+
         let project = serialize_canvas(&self.canvas, &self.scene_graph, &self.app_state, cx)
             .unwrap_or_else(|e| {
                 eprintln!("Failed to serialize canvas: {}", e);
@@ -333,15 +337,8 @@ impl Luna {
 }
 
 impl Render for Luna {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
-
-        // Debug focus state
-        let is_focused = self.focus_handle.is_focused(window);
-        if !is_focused {
-            eprintln!("Luna view is not focused, requesting focus");
-            window.focus(&self.focus_handle);
-        }
 
         div()
             .id("Luna")
@@ -376,10 +373,6 @@ impl Render for Luna {
             .on_action(cx.listener(Self::open_file))
             .on_action(cx.listener(Self::save_file))
             .on_action(cx.listener(Self::save_file_as))
-            .when(false, |div| {
-                // Remove verbose logging for now
-                div
-            })
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
@@ -434,28 +427,6 @@ fn main() {
     Application::new().with_assets(Assets).run(|cx: &mut App| {
         // Register global action handlers
         cx.on_action(quit);
-
-        // Debug: Try registering file actions globally to see if they're being dispatched
-        cx.on_action(|action: &NewFile, cx| {
-            eprintln!("Global NewFile action intercepted!");
-            if let Some(window) = cx.active_window() {
-                window
-                    .update(cx, |_, window, cx| {
-                        eprintln!("Dispatching NewFile to window");
-                        window.dispatch_action(Box::new(NewFile), cx);
-                    })
-                    .ok();
-            }
-        });
-
-        // Add keystroke logging
-        cx.observe_keystrokes(|event, window, cx| {
-            eprintln!(
-                "Keystroke: {:?} (key: {:?}, modifiers: {:?})",
-                event.keystroke, event.keystroke.key, event.keystroke.modifiers
-            );
-        })
-        .detach();
 
         // Set up menus with File menu
         cx.set_menus(vec![
@@ -526,15 +497,8 @@ fn main() {
 
         window
             .update(cx, |view, window, cx| {
-                eprintln!("Setting focus to Luna window");
-                let focus_handle = view.focus_handle(cx);
-                window.focus(&focus_handle);
+                window.focus(&view.focus_handle(cx));
                 cx.activate(true);
-                eprintln!("Luna window activated and focused");
-                eprintln!(
-                    "Focus handle is focused after setup: {:?}",
-                    focus_handle.is_focused(window)
-                );
             })
             .unwrap();
     });

@@ -561,42 +561,103 @@ impl Render for Inspector {
             .copied()
             .collect();
 
-        let inner = div()
-            .id("inspector-inner")
-            .flex()
-            .flex_col()
-            .h_full()
-            .w(px(INSPECTOR_WIDTH))
-            .rounded_tr(px(15.))
-            .rounded_br(px(15.))
-            .child(
-                div()
-                    .px(px(8.))
-                    .py(px(10.))
-                    .flex()
-                    .flex_wrap()
-                    .gap(px(8.))
-                    .border_color(theme.tokens.inactive_border)
-                    .border_b_1()
-                    .child(self.x_input.clone())
-                    .child(self.y_input.clone())
-                    .child(self.width_input.clone())
-                    .child(self.height_input.clone())
-                    .child(self.border_width_input.clone())
-                    .child(self.corner_radius_input.clone()),
-            )
-            .child(
-                div()
-                    .px(px(8.))
-                    .py(px(10.))
-                    .flex()
-                    .flex_col()
-                    .gap(px(8.))
-                    .border_color(theme.tokens.inactive_border)
-                    .border_b_1()
-                    .child(ColorInput::new(background_color, SharedString::from("BG")))
-                    .child(ColorInput::new(border_color, SharedString::from("BC"))),
-            );
+        // Show viewport coordinates when nothing is selected
+        let inner = if selected_nodes.is_empty() {
+            let scroll_pos = self.canvas.read(cx).get_scroll_position();
+            let viewport_x = scroll_pos.x;
+            let viewport_y = scroll_pos.y;
+
+            div()
+                .id("inspector-inner")
+                .flex()
+                .flex_col()
+                .h_full()
+                .w(px(INSPECTOR_WIDTH))
+                .rounded_tr(px(15.))
+                .rounded_br(px(15.))
+                .child(
+                    div()
+                        .px(px(8.))
+                        .py(px(10.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(4.))
+                        .border_color(theme.tokens.inactive_border)
+                        .border_b_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.tokens.inactive_text)
+                                .child("Viewport Center"),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(8.))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(theme.tokens.inactive_text)
+                                                .child("X"),
+                                        )
+                                        .child(div().text_xs().child(format!("{:.0}", viewport_x))),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(theme.tokens.inactive_text)
+                                                .child("Y"),
+                                        )
+                                        .child(div().text_xs().child(format!("{:.0}", viewport_y))),
+                                ),
+                        ),
+                )
+        } else {
+            div()
+                .id("inspector-inner")
+                .flex()
+                .flex_col()
+                .h_full()
+                .w(px(INSPECTOR_WIDTH))
+                .rounded_tr(px(15.))
+                .rounded_br(px(15.))
+                .child(
+                    div()
+                        .px(px(8.))
+                        .py(px(10.))
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(8.))
+                        .border_color(theme.tokens.inactive_border)
+                        .border_b_1()
+                        .child(self.x_input.clone())
+                        .child(self.y_input.clone())
+                        .child(self.width_input.clone())
+                        .child(self.height_input.clone())
+                        .child(self.border_width_input.clone())
+                        .child(self.corner_radius_input.clone()),
+                )
+                .child(
+                    div()
+                        .px(px(8.))
+                        .py(px(10.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .border_color(theme.tokens.inactive_border)
+                        .border_b_1()
+                        .child(ColorInput::new(background_color, SharedString::from("BG")))
+                        .child(ColorInput::new(border_color, SharedString::from("BC"))),
+                )
+        };
 
         div()
             .id("inspector")

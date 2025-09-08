@@ -93,6 +93,7 @@ pub fn deserialize_canvas(
     // Clear existing canvas state
     canvas.update(cx, |canvas, cx| {
         canvas.clear_all(cx);
+        canvas.mark_dirty(cx);
     });
 
     scene_graph.update(cx, |scene, _| {
@@ -119,6 +120,7 @@ pub fn deserialize_canvas(
                     let node_id = node.id();
                     id_mapping.insert(get_serialized_node_id(serialized_node), node_id);
                     canvas.add_node(node, cx);
+                    canvas.mark_dirty(cx);
                 }
                 Err(e) => {
                     // Failed to deserialize node - skip it
@@ -169,7 +171,9 @@ pub fn deserialize_canvas(
             }
         }
 
+        // Force a full canvas update after loading
         canvas.mark_dirty(cx);
+        cx.notify();
     });
 
     Ok(())
