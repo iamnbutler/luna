@@ -239,6 +239,12 @@ impl Luna {
                             });
 
                             deserialize_canvas(&project_data, &canvas, &scene, &app_state, cx)?;
+
+                            // Force canvas to update and repaint
+                            canvas.update(cx, |canvas, cx| {
+                                canvas.mark_dirty(cx);
+                                cx.notify();
+                            });
                         }
                         anyhow::Ok(())
                     })?;
