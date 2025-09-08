@@ -265,47 +265,23 @@ fn parse_hex_color(hex: &str) -> Option<Hsla> {
 fn parse_box_shadows(value: &str) -> Option<SmallVec<[Shadow; 1]>> {
     let mut result = SmallVec::new();
 
-    // Split by commas to handle multiple shadow definitions, but respect parentheses
-    let mut shadow_definitions = Vec::new();
-    let mut current_def = String::new();
-    let mut paren_count = 0;
-
-    for ch in value.chars() {
-        match ch {
-            '(' => {
-                paren_count += 1;
-                current_def.push(ch);
-            }
-            ')' => {
-                paren_count -= 1;
-                current_def.push(ch);
-            }
-            ',' if paren_count == 0 => {
-                if !current_def.trim().is_empty() {
-                    shadow_definitions.push(current_def.trim().to_string());
-                }
-                current_def.clear();
-            }
-            _ => {
-                current_def.push(ch);
-            }
-        }
-    }
-
-    // Add the last definition
-    if !current_def.trim().is_empty() {
-        shadow_definitions.push(current_def.trim().to_string());
-    }
-
-    for shadow_def in shadow_definitions {
+    // Split by commas to handle multiple shadow definitions
+    for shadow_def in value.split(',') {
         let shadow_def = shadow_def.trim();
         if shadow_def.is_empty() {
             continue;
         }
 
-        // Parse shadow components more carefully to handle rgba() colors
-        let mut x_offset = 0.0;
-        let mut y_offset = 0.0;
+        // Split the shadow definition into components
+        let parts: Vec<&str> = shadow_def.split_whitespace().collect();
+        if parts.len() < 2 {
+            // Need at least x and y offsets
+            continue;
+        }
+
+        // Parse shadow components
+        let x_offset = parse_length(parts[0]).unwrap_or(0.0);
+        let y_offset = parse_length(parts[1]).unwrap_or(0.0);
         let mut blur_radius = 0.0;
         let mut spread_radius = 0.0;
         let mut color = Hsla {
@@ -315,79 +291,27 @@ fn parse_box_shadows(value: &str) -> Option<SmallVec<[Shadow; 1]>> {
             a: 0.32,
         }; // Default semi-transparent black
 
-        // Find rgba() or rgb() color function if present
-        let mut color_start = None;
-        let mut paren_count = 0;
-        let chars: Vec<char> = shadow_def.chars().collect();
+        // Process remaining parts (blur, spread, color)
+        let mut i = 2;
 
-        for (i, &ch) in chars.iter().enumerate() {
-            if ch == '(' {
-                paren_count += 1;
-                if i >= 4 && chars[i - 4..i].iter().collect::<String>() == "rgba"
-                    || i >= 3 && chars[i - 3..i].iter().collect::<String>() == "rgb"
-                {
-                    color_start = Some(
-                        i - if chars[i - 4..i].iter().collect::<String>() == "rgba" {
-                            4
-                        } else {
-                            3
-                        },
-                    );
-                }
-            } else if ch == ')' {
-                paren_count -= 1;
-                if paren_count == 0 && color_start.is_some() {
-                    break;
-                }
-            }
+        // Check if there's a blur radius
+        if i < parts.len() && (parts[i].ends_with("px") || parts[i].parse::<f32>().is_ok()) {
+            blur_radius = parse_length(parts[i]).unwrap_or(0.0);
+            i += 1;
         }
 
-        if let Some(start) = color_start {
-            let numeric_part = shadow_def[..start].trim();
-            let color_part = shadow_def[start..].trim();
+        // Check if there's a spread radius
+        if i < parts.len() && (parts[i].ends_with("px") || parts[i].parse::<f32>().is_ok()) {
+            spread_radius = parse_length(parts[i]).unwrap_or(0.0);
+            i += 1;
+        }
 
-            // Parse numeric values
-            let numeric_parts: Vec<&str> = numeric_part.split_whitespace().collect();
-            if numeric_parts.len() < 2 {
-                continue;
-            }
-
-            x_offset = parse_length(numeric_parts[0]).unwrap_or(0.0);
-            y_offset = parse_length(numeric_parts[1]).unwrap_or(0.0);
-
-            if numeric_parts.len() > 2 {
-                blur_radius = parse_length(numeric_parts[2]).unwrap_or(0.0);
-            }
-            if numeric_parts.len() > 3 {
-                spread_radius = parse_length(numeric_parts[3]).unwrap_or(0.0);
-            }
-
-            // Parse color
-            if let Some(parsed_color) = parse_color(color_part) {
+        // The rest should be the color
+        if i < parts.len() {
+            // Reconstruct the color string (it might have been split by whitespace)
+            let color_str = parts[i..].join(" ");
+            if let Some(parsed_color) = parse_color(&color_str) {
                 color = parsed_color;
-            }
-        } else {
-            // No rgba/rgb function, split by whitespace normally
-            let parts: Vec<&str> = shadow_def.split_whitespace().collect();
-            if parts.len() < 2 {
-                continue;
-            }
-
-            x_offset = parse_length(parts[0]).unwrap_or(0.0);
-            y_offset = parse_length(parts[1]).unwrap_or(0.0);
-
-            if parts.len() > 2 {
-                blur_radius = parse_length(parts[2]).unwrap_or(0.0);
-            }
-            if parts.len() > 3 {
-                spread_radius = parse_length(parts[3]).unwrap_or(0.0);
-            }
-
-            // Check for hex color at the end
-            if parts.len() > 4 && parts.last().unwrap().starts_with('#') {
-                if let Some(parsed_color) = parse_color(parts.last().unwrap()) {
-                    color = parsed_color;
-                }
             }
         }
 
