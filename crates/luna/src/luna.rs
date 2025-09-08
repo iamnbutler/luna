@@ -217,7 +217,6 @@ impl Luna {
                         files: true,
                         directories: false,
                         multiple: false,
-                        prompt: None,
                     })
                 })?
                 .await??;
@@ -241,11 +240,11 @@ impl Luna {
 
                             deserialize_canvas(&project_data, &canvas, &scene, &app_state, cx)?;
                         }
-                        Ok::<(), anyhow::Error>(())
+                        anyhow::Ok(())
                     })?;
                 }
             }
-            Ok(())
+            Ok::<(), anyhow::Error>(())
         })
         .detach_and_log_err(cx);
     }
@@ -273,7 +272,7 @@ impl Luna {
                         .ok()
                         .map(std::path::PathBuf::from)
                         .unwrap_or_else(|| std::path::PathBuf::from("/"));
-                    cx.prompt_for_new_path(&home_dir, Some("Untitled.luna"))
+                    cx.prompt_for_new_path(&home_dir)
                 })?
                 .await??;
 
@@ -299,10 +298,10 @@ impl Luna {
                             .spawn(async move { project.save_to_file(&path).await })
                             .detach_and_log_err(cx);
                     }
-                    Ok::<(), anyhow::Error>(())
+                    anyhow::Ok(())
                 })?;
             }
-            Ok(())
+            Ok::<(), anyhow::Error>(())
         })
         .detach_and_log_err(cx);
     }
