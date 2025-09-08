@@ -272,7 +272,7 @@ impl Luna {
                             });
                         }
                         anyhow::Ok(())
-                    })?;
+                    })??;
                 }
             }
             Ok::<(), anyhow::Error>(())
@@ -338,7 +338,7 @@ impl Luna {
                             .detach_and_log_err(cx);
                     }
                     anyhow::Ok(())
-                })?;
+                })??;
             }
             Ok::<(), anyhow::Error>(())
         })

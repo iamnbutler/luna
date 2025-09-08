@@ -62,7 +62,8 @@ impl Render for Sidebar {
                     .h(px(Titlebar::HEIGHT))
                     .flex()
                     .items_center()
-                    .px_2()
+                    // Make space for macos traffic lights
+                    .pl(px(76.))
                     .child({
                         let project_state = self.project_state.read(cx);
                         let display_name = project_state.display_name();
@@ -72,7 +73,7 @@ impl Render for Sidebar {
                             .flex()
                             .items_center()
                             .gap_1()
-                            .text_sm()
+                            .text_xs()
                             .text_color(token.text)
                             .when(is_dirty, |d| {
                                 d.child(div().size_2().rounded_full().bg(token.overlay0))
