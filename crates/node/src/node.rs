@@ -214,7 +214,7 @@ impl From<shape::ShapeNode> for AnyNode {
 }
 
 /// Layout information for a node
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct NodeLayout {
     pub x: f32,
     pub y: f32,

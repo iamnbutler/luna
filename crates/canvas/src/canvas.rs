@@ -191,7 +191,7 @@ impl LunaCanvas {
             // Add all rectangles to the canvas
             for (index, mut rect) in frames.into_iter().enumerate() {
                 // Add the node and capture the ID
-                let node_id = canvas.add_node(rect, None, cx);
+                let node_id = canvas.add_node(rect, cx);
 
                 // Select the second node (index 1) if it exists
                 if index == 1 {
@@ -208,7 +208,7 @@ impl LunaCanvas {
             let mut rect = FrameNode::with_rect(node_id, 100.0, 100.0, 200.0, 150.0);
             rect.set_fill(Some(current_background_color));
             rect.set_border(Some(current_border_color), 1.0);
-            let node_id = canvas.add_node(rect, None, cx);
+            let node_id = canvas.add_node(rect, cx);
 
             // Make sure our next_id is higher than the ID we just used
             canvas.next_id = canvas.next_id.max(node_id.0 + 1);
@@ -349,7 +349,12 @@ impl LunaCanvas {
     /// If parent_id is provided, the node will be added as a child of that parent in both
     /// the data model and scene graph. The node's coordinates will be transformed to be
     /// relative to the parent's coordinate system.
-    pub fn add_node<N: Into<AnyNode>>(
+    pub fn add_node<N: Into<AnyNode>>(&mut self, node: N, cx: &mut Context<Self>) -> NodeId {
+        self.add_node_with_parent(node, None, cx)
+    }
+
+    /// Add a node to the canvas with an optional parent
+    pub fn add_node_with_parent<N: Into<AnyNode>>(
         &mut self,
         node: N,
         parent: Option<NodeId>,
@@ -673,6 +678,23 @@ impl LunaCanvas {
         self.dirty = true;
     }
 
+    /// Clear all nodes from the canvas
+    pub fn clear_all(&mut self, cx: &mut Context<Self>) {
+        self.nodes.clear();
+        self.selected_nodes.clear();
+        self.active_drag = None;
+        self.active_element_draw = None;
+
+        // Clear scene graph but keep the canvas root node
+        self.scene_graph.update(cx, |sg, _| {
+            sg.clear();
+            // Re-add the canvas root node after clearing
+            sg.add_node(NodeId(0)); // Use a dummy node ID for canvas root
+        });
+
+        self.mark_dirty(cx);
+    }
+
     /// Clear all selections
     pub fn clear_selection(
         &mut self,
@@ -852,7 +874,7 @@ impl LunaCanvas {
         let mut rect = FrameNode::new(id);
         *rect.layout_mut() = NodeLayout::new(position.x, position.y, 100.0, 100.0);
 
-        self.add_node(rect, None, cx)
+        self.add_node(rect, cx)
     }
 
     /// Move selected nodes by a delta

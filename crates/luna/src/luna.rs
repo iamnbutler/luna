@@ -30,11 +30,14 @@ use gpui::{
 };
 use luna_core::keymap::StandardKeymaps;
 use scene_graph::SceneGraph;
+use std::path::PathBuf;
 use std::sync::Arc;
 use theme::{ActiveTheme, GlobalTheme, Theme};
 use ui::{inspector::Inspector, sidebar::Sidebar};
 
 mod assets;
+mod project;
+mod serialization;
 
 // Re-export commonly used items from external crates
 pub use canvas::{canvas_element, tools};
@@ -43,6 +46,9 @@ pub use node;
 pub use scene_graph;
 pub use theme;
 pub use ui;
+
+use crate::project::ProjectState;
+use crate::serialization::{deserialize_canvas, serialize_canvas};
 
 actions!(
     luna,
@@ -53,10 +59,14 @@ actions!(
         Delete,
         FrameTool,
         HandTool,
+        NewFile,
+        OpenFile,
         Paste,
         Quit,
         RectangleTool,
         ResetCurrentColors,
+        SaveFile,
+        SaveFileAs,
         SelectAll,
         SelectionTool,
         SwapCurrentColors,
@@ -87,6 +97,8 @@ struct Luna {
     inspector: Entity<Inspector>,
     /// Sidebar for additional tools and controls
     sidebar: Entity<Sidebar>,
+    /// Project state for file management
+    project_state: Entity<ProjectState>,
 }
 
 impl Luna {
@@ -101,6 +113,7 @@ impl Luna {
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
         let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone(), cx));
         let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
+        let project_state = cx.new(|_| ProjectState::new());
 
         Luna {
             app_state,
@@ -109,6 +122,7 @@ impl Luna {
             focus_handle,
             inspector,
             sidebar,
+            project_state,
         }
     }
 
@@ -176,6 +190,139 @@ impl Luna {
             cx.dispatch_action(&SelectionTool);
         }
     }
+
+    fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
+        // Clear the canvas and create a new project
+        self.project_state.update(cx, |state, _| {
+            *state = ProjectState::new();
+        });
+
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.clear_all(cx);
+        });
+
+        cx.notify();
+    }
+
+    fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
+        let weak_project = self.project_state.downgrade();
+        let weak_canvas = self.canvas.downgrade();
+        let weak_scene = self.scene_graph.downgrade();
+        let weak_app_state = self.app_state.downgrade();
+
+        cx.spawn(async move |_, mut cx| {
+            let paths = cx
+                .update(|cx| {
+                    cx.prompt_for_paths(gpui::PathPromptOptions {
+                        files: true,
+                        directories: false,
+                        multiple: false,
+                        prompt: None,
+                    })
+                })?
+                .await??;
+
+            if let Some(paths) = paths {
+                if let Some(path) = paths.first() {
+                    let project_data = project::LunaProject::load_from_file(path).await?;
+
+                    cx.update(|cx| {
+                        if let (Some(project_state), Some(canvas), Some(scene), Some(app_state)) = (
+                            weak_project.upgrade(),
+                            weak_canvas.upgrade(),
+                            weak_scene.upgrade(),
+                            weak_app_state.upgrade(),
+                        ) {
+                            project_state.update(cx, |state, _| {
+                                state.project = project_data.clone();
+                                state.file_path = Some(path.to_path_buf());
+                                state.mark_clean();
+                            });
+
+                            deserialize_canvas(&project_data, &canvas, &scene, &app_state, cx)?;
+                        }
+                        Ok::<(), anyhow::Error>(())
+                    })?;
+                }
+            }
+            Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
+        let file_path = self.project_state.read(cx).file_path.clone();
+
+        if let Some(path) = file_path {
+            self.save_to_path(path, window, cx);
+        } else {
+            self.save_file_as(&SaveFileAs, window, cx);
+        }
+    }
+
+    fn save_file_as(&mut self, _: &SaveFileAs, window: &mut Window, cx: &mut Context<Self>) {
+        let weak_project = self.project_state.downgrade();
+        let weak_canvas = self.canvas.downgrade();
+        let weak_scene = self.scene_graph.downgrade();
+        let weak_app_state = self.app_state.downgrade();
+
+        cx.spawn(async move |_, mut cx| {
+            let path = cx
+                .update(|cx| {
+                    let home_dir = std::env::var("HOME")
+                        .ok()
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|| std::path::PathBuf::from("/"));
+                    cx.prompt_for_new_path(&home_dir, Some("Untitled.luna"))
+                })?
+                .await??;
+
+            if let Some(path) = path {
+                cx.update(|cx| {
+                    if let (Some(project_state), Some(canvas), Some(scene), Some(app_state)) = (
+                        weak_project.upgrade(),
+                        weak_canvas.upgrade(),
+                        weak_scene.upgrade(),
+                        weak_app_state.upgrade(),
+                    ) {
+                        let project = serialize_canvas(&canvas, &scene, &app_state, cx)?;
+
+                        project_state.update(cx, |state, cx| {
+                            state.project = project.clone();
+                            state.file_path = Some(path.to_path_buf());
+                            cx.notify();
+                        });
+
+                        // Save to disk
+                        let executor = cx.background_executor().clone();
+                        executor
+                            .spawn(async move { project.save_to_file(&path).await })
+                            .detach_and_log_err(cx);
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })?;
+            }
+            Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn save_to_path(&mut self, path: PathBuf, _window: &mut Window, cx: &mut Context<Self>) {
+        let project = serialize_canvas(&self.canvas, &self.scene_graph, &self.app_state, cx)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to serialize canvas: {}", e);
+                project::LunaProject::new()
+            });
+
+        self.project_state.update(cx, |state, _| {
+            state.project = project.clone();
+            state.mark_clean();
+        });
+
+        cx.background_executor()
+            .spawn(async move { project.save_to_file(&path).await })
+            .detach_and_log_err(cx);
+    }
 }
 
 impl Render for Luna {
@@ -210,6 +357,10 @@ impl Render for Luna {
             .on_action(cx.listener(Self::select_all_nodes))
             .on_action(cx.listener(Self::delete_selected_nodes))
             .on_action(cx.listener(Self::handle_cancel))
+            .on_action(cx.listener(Self::new_file))
+            .on_action(cx.listener(Self::open_file))
+            .on_action(cx.listener(Self::save_file))
+            .on_action(cx.listener(Self::save_file_as))
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
@@ -229,6 +380,10 @@ fn init_keymap(cx: &mut App) {
         KeyBinding::new("r", RectangleTool, None),
         KeyBinding::new("f", FrameTool, None),
         KeyBinding::new("escape", Cancel, None),
+        KeyBinding::new("cmd-n", NewFile, None),
+        KeyBinding::new("cmd-o", OpenFile, None),
+        KeyBinding::new("cmd-s", SaveFile, None),
+        KeyBinding::new("cmd-shift-s", SaveFileAs, None),
         KeyBinding::new("cmd-a", SelectAll, None),
         KeyBinding::new("cmd-v", Paste, None),
         KeyBinding::new("cmd-c", Copy, None),

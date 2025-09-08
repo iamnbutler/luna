@@ -520,7 +520,7 @@ impl CanvasElement {
                         rect.set_border(Some(current_border_color), 1.0);
 
                         // Add the node to the canvas
-                        let new_node_id = canvas.add_node(rect, None, cx);
+                        let new_node_id = canvas.add_node(rect, cx);
 
                         // Clear any existing selection
                         canvas.deselect_all_nodes(cx);
@@ -559,7 +559,7 @@ impl CanvasElement {
                         shape.set_border(Some(current_border_color), 1.0);
 
                         // Add the node to the canvas
-                        let new_node_id = canvas.add_node(shape, None, cx);
+                        let new_node_id = canvas.add_node(shape, cx);
 
                         // Clear any existing selection
                         canvas.deselect_all_nodes(cx);

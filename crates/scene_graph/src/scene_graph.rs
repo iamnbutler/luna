@@ -219,6 +219,47 @@ impl SceneGraph {
         self.node_mapping.get(&data_node_id).copied()
     }
 
+    /// Alias for get_scene_node_from_data_node for compatibility
+    pub fn get_scene_node_for_data_node(&self, data_node_id: NodeId) -> Option<SceneNodeId> {
+        self.get_scene_node_from_data_node(data_node_id)
+    }
+
+    /// Alias for get_data_node_id for compatibility
+    pub fn get_data_node_for_scene_node(&self, scene_node_id: SceneNodeId) -> Option<NodeId> {
+        self.get_data_node_id(scene_node_id)
+    }
+
+    /// Adds a data node to the scene graph as a child of the root
+    pub fn add_node(&mut self, data_node_id: NodeId) -> SceneNodeId {
+        self.create_node(Some(self.root), Some(data_node_id))
+    }
+
+    /// Gets the children of a scene node
+    pub fn get_children(&self, node_id: SceneNodeId) -> Vec<SceneNodeId> {
+        self.nodes
+            .get(node_id)
+            .map(|node| node.children.clone())
+            .unwrap_or_default()
+    }
+
+    /// Clears all nodes from the scene graph except the root
+    pub fn clear(&mut self) {
+        // Save the root node
+        let root_node = SceneNode {
+            parent: None,
+            children: Vec::new(),
+            data_node_id: None,
+            visible: true,
+        };
+
+        // Clear everything
+        self.nodes.clear();
+        self.node_mapping.clear();
+
+        // Re-insert the root node
+        self.root = self.nodes.insert(root_node);
+    }
+
     /// Calculate the world position of a node by traversing up the parent hierarchy
     /// and summing local positions from FrameNodes
     pub fn get_world_position(
