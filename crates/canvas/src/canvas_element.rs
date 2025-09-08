@@ -1485,6 +1485,7 @@ impl CanvasElement {
         let (nodes_to_render, selected_node_ids, hovered_node, potential_parent_frame, active_drag) =
             canvas.update(cx, |canvas, cx| {
                 let visible_nodes = canvas.visible_nodes(cx);
+                eprintln!("paint_nodes: found {} visible nodes", visible_nodes.len());
                 let scene_graph = canvas.scene_graph().read(cx);
                 let selected_nodes = canvas.selected_nodes().clone();
                 let theme = cx.theme().clone();
@@ -1493,11 +1494,14 @@ impl CanvasElement {
                 // Collect all node rendering information into owned structures
                 let mut nodes_to_render = Vec::new();
 
+                eprintln!("paint_nodes: processing visible nodes...");
                 for node in visible_nodes {
                     let node_id = node.id();
+                    eprintln!("  Processing node {:?}", node_id);
 
                     if let Some(scene_node_id) = scene_graph.get_scene_node_from_data_node(node_id)
                     {
+                        eprintln!("    Found scene node for {:?}", node_id);
                         // Calculate world bounds on demand
                         let world_bounds = scene_graph
                             .get_world_bounds(scene_node_id, |id| canvas.nodes().get(&id).cloned());
@@ -1512,6 +1516,11 @@ impl CanvasElement {
                         let window_size = gpui::Size::new(
                             gpui::Pixels(canvas_size.x * canvas.zoom()),
                             gpui::Pixels(canvas_size.y * canvas.zoom()),
+                        );
+
+                        eprintln!(
+                            "    Window pos: ({}, {}), size: ({}, {})",
+                            window_pos.x, window_pos.y, window_size.width.0, window_size.height.0
                         );
 
                         nodes_to_render.push(NodeRenderInfo {
@@ -1533,8 +1542,15 @@ impl CanvasElement {
                                 .map(|frame| frame.children().clone())
                                 .unwrap_or_else(Vec::new),
                         });
+                    } else {
+                        eprintln!("    No scene node found for {:?}", node_id);
                     }
                 }
+
+                eprintln!(
+                    "paint_nodes: collected {} nodes to render",
+                    nodes_to_render.len()
+                );
 
                 (
                     nodes_to_render,
@@ -1545,9 +1561,14 @@ impl CanvasElement {
                 )
             });
 
+        eprintln!(
+            "paint_nodes: painting layer with {} nodes",
+            nodes_to_render.len()
+        );
         window.paint_layer(layout.hitbox.bounds, |window| {
             // Organize nodes into a hierarchy
             let (root_nodes, children_map) = organize_nodes_hierarchically(&nodes_to_render);
+            eprintln!("  Organized into {} root nodes", root_nodes.len());
 
             // Recursive function to paint a node and its children
             fn paint_node_recursively(

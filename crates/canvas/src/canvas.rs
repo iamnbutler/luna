@@ -770,6 +770,10 @@ impl LunaCanvas {
 
     /// Get nodes that are visible in the current viewport
     pub fn visible_nodes(&self, cx: &mut App) -> Vec<&AnyNode> {
+        eprintln!("visible_nodes called, total nodes: {}", self.nodes.len());
+        eprintln!("viewport size: {:?}", self.viewport.size);
+        eprintln!("scroll position: {:?}", self.scroll_position);
+
         // Create viewport bounds in window coordinates
         let viewport = Bounds {
             origin: Point::new(0.0, 0.0),
@@ -817,6 +821,7 @@ impl LunaCanvas {
         sg: &SceneGraph,
         result: &mut Vec<NodeId>,
     ) {
+        eprintln!("collect_visible_nodes called for scene node {:?}", node_id);
         // TODO: Implement proper visibility checking
         // For now, just add the node and its children to the result
         if let Some(node) = sg.get_node(node_id) {

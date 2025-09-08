@@ -15,7 +15,7 @@ use canvas::{AppState, LunaCanvas};
 use node::{NodeCommon, NodeId};
 use theme::Theme;
 
-use crate::property::{ColorInput, InteractivePropertyInput, PropertyType};
+use crate::property::{ColorInput, InteractivePropertyInput, PropertyInput, PropertyType};
 
 pub const INSPECTOR_WIDTH: f32 = 200.;
 
@@ -564,8 +564,8 @@ impl Render for Inspector {
         // Show viewport coordinates when nothing is selected
         let inner = if selected_nodes.is_empty() {
             let scroll_pos = self.canvas.read(cx).get_scroll_position();
-            let viewport_x = scroll_pos.x;
-            let viewport_y = scroll_pos.y;
+            let viewport_x_value = Some(vec![scroll_pos.x]);
+            let viewport_y_value = Some(vec![scroll_pos.y]);
 
             div()
                 .id("inspector-inner")
@@ -588,36 +588,21 @@ impl Render for Inspector {
                             div()
                                 .text_xs()
                                 .text_color(theme.tokens.subtext0)
+                                .mb(px(4.))
                                 .child("Viewport Center"),
                         )
                         .child(
                             div()
                                 .flex()
                                 .gap(px(8.))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .gap(px(4.))
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(theme.tokens.subtext0)
-                                                .child("X"),
-                                        )
-                                        .child(div().text_xs().child(format!("{:.0}", viewport_x))),
-                                )
-                                .child(
-                                    div()
-                                        .flex()
-                                        .gap(px(4.))
-                                        .child(
-                                            div()
-                                                .text_xs()
-                                                .text_color(theme.tokens.subtext0)
-                                                .child("Y"),
-                                        )
-                                        .child(div().text_xs().child(format!("{:.0}", viewport_y))),
-                                ),
+                                .child(PropertyInput::new(
+                                    viewport_x_value,
+                                    SharedString::from("X"),
+                                ))
+                                .child(PropertyInput::new(
+                                    viewport_y_value,
+                                    SharedString::from("Y"),
+                                )),
                         ),
                 )
         } else {
