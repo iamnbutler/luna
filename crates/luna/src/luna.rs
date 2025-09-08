@@ -191,8 +191,12 @@ impl Luna {
         }
     }
 
-    fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("New file action triggered!");
+    fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
+        eprintln!("New file action triggered on Luna instance!");
+        eprintln!(
+            "Focus handle is focused: {:?}",
+            self.focus_handle.is_focused(window)
+        );
         // Clear the canvas and create a new project
         self.project_state.update(cx, |state, _| {
             *state = ProjectState::new();
@@ -206,7 +210,7 @@ impl Luna {
     }
 
     fn open_file(&mut self, _: &OpenFile, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Open file action triggered!");
+        eprintln!("Open file action triggered on Luna instance!");
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -252,7 +256,7 @@ impl Luna {
     }
 
     fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Save file action triggered!");
+        eprintln!("Save file action triggered on Luna instance!");
         let file_path = self.project_state.read(cx).file_path.clone();
 
         if let Some(path) = file_path {
@@ -263,7 +267,7 @@ impl Luna {
     }
 
     fn save_file_as(&mut self, _: &SaveFileAs, window: &mut Window, cx: &mut Context<Self>) {
-        eprintln!("Save file as action triggered!");
+        eprintln!("Save file as action triggered on Luna instance!");
         let weak_project = self.project_state.downgrade();
         let weak_canvas = self.canvas.downgrade();
         let weak_scene = self.scene_graph.downgrade();
@@ -329,12 +333,20 @@ impl Luna {
 }
 
 impl Render for Luna {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
+
+        // Debug focus state
+        let is_focused = self.focus_handle.is_focused(window);
+        if !is_focused {
+            eprintln!("Luna view is not focused, requesting focus");
+            window.focus(&self.focus_handle);
+        }
 
         div()
             .id("Luna")
             .key_context("luna")
+            .track_focus(&self.focus_handle)
             .absolute()
             .top_0()
             .left_0()
@@ -422,10 +434,19 @@ fn main() {
     Application::new().with_assets(Assets).run(|cx: &mut App| {
         // Register global action handlers
         cx.on_action(quit);
-        cx.on_action(new_file);
-        cx.on_action(open_file);
-        cx.on_action(save_file);
-        cx.on_action(save_file_as);
+
+        // Debug: Try registering file actions globally to see if they're being dispatched
+        cx.on_action(|action: &NewFile, cx| {
+            eprintln!("Global NewFile action intercepted!");
+            if let Some(window) = cx.active_window() {
+                window
+                    .update(cx, |_, window, cx| {
+                        eprintln!("Dispatching NewFile to window");
+                        window.dispatch_action(Box::new(NewFile), cx);
+                    })
+                    .ok();
+            }
+        });
 
         // Add keystroke logging
         cx.observe_keystrokes(|event, window, cx| {
@@ -506,9 +527,14 @@ fn main() {
         window
             .update(cx, |view, window, cx| {
                 eprintln!("Setting focus to Luna window");
-                window.focus(&view.focus_handle(cx));
+                let focus_handle = view.focus_handle(cx);
+                window.focus(&focus_handle);
                 cx.activate(true);
                 eprintln!("Luna window activated and focused");
+                eprintln!(
+                    "Focus handle is focused after setup: {:?}",
+                    focus_handle.is_focused(window)
+                );
             })
             .unwrap();
     });
@@ -516,52 +542,4 @@ fn main() {
 
 fn quit(_: &Quit, cx: &mut App) {
     cx.quit();
-}
-
-fn new_file(_: &NewFile, cx: &mut App) {
-    eprintln!("Global new file action received");
-    // Forward to the active window
-    if let Some(window) = cx.active_window() {
-        window
-            .update(cx, |_, window, cx| {
-                cx.dispatch_action(&NewFile);
-            })
-            .ok();
-    }
-}
-
-fn open_file(_: &OpenFile, cx: &mut App) {
-    eprintln!("Global open file action received");
-    // Forward to the active window
-    if let Some(window) = cx.active_window() {
-        window
-            .update(cx, |_, window, cx| {
-                cx.dispatch_action(&OpenFile);
-            })
-            .ok();
-    }
-}
-
-fn save_file(_: &SaveFile, cx: &mut App) {
-    eprintln!("Global save file action received");
-    // Forward to the active window
-    if let Some(window) = cx.active_window() {
-        window
-            .update(cx, |_, window, cx| {
-                cx.dispatch_action(&SaveFile);
-            })
-            .ok();
-    }
-}
-
-fn save_file_as(_: &SaveFileAs, cx: &mut App) {
-    eprintln!("Global save file as action received");
-    // Forward to the active window
-    if let Some(window) = cx.active_window() {
-        window
-            .update(cx, |_, window, cx| {
-                cx.dispatch_action(&SaveFileAs);
-            })
-            .ok();
-    }
 }
