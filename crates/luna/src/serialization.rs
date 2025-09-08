@@ -113,14 +113,21 @@ pub fn deserialize_canvas(
     let mut id_mapping: HashMap<usize, NodeId> = HashMap::new();
 
     // First pass: create all nodes
+    eprintln!("Deserializing {} nodes", page.nodes.len());
     canvas.update(cx, |canvas, cx| {
         for serialized_node in &page.nodes {
             match deserialize_node(serialized_node, &mut factory) {
                 Ok(node) => {
                     let node_id = node.id();
+                    eprintln!(
+                        "Created node {:?} with layout: {:?}",
+                        node_id,
+                        node.layout()
+                    );
                     id_mapping.insert(get_serialized_node_id(serialized_node), node_id);
                     canvas.add_node(node, cx);
                     canvas.mark_dirty(cx);
+                    eprintln!("Added node {:?} to canvas", node_id);
                 }
                 Err(e) => {
                     // Failed to deserialize node - skip it
@@ -128,13 +135,16 @@ pub fn deserialize_canvas(
                 }
             }
         }
+        eprintln!("Canvas now has {} nodes", canvas.nodes().len());
     });
 
     // Second pass: rebuild hierarchy in scene graph
+    eprintln!("Rebuilding scene graph hierarchy");
     scene_graph.update(cx, |scene, _| {
         // Add all nodes to scene graph first
         for &node_id in id_mapping.values() {
             scene.add_node(node_id);
+            eprintln!("Added node {:?} to scene graph", node_id);
         }
 
         // Then establish parent-child relationships
@@ -148,6 +158,7 @@ pub fn deserialize_canvas(
                             scene.get_scene_node_for_data_node(child_node_id),
                         ) {
                             scene.add_child(parent_scene, child_scene);
+                            eprintln!("Added child {:?} to parent {:?}", child_node_id, parent_id);
                         }
                     }
                 }
@@ -157,6 +168,10 @@ pub fn deserialize_canvas(
 
     // Restore canvas viewport state
     canvas.update(cx, |canvas, cx| {
+        eprintln!(
+            "Restoring viewport to ({}, {})",
+            page.canvas.viewport_x, page.canvas.viewport_y
+        );
         canvas.set_scroll_position(
             gpui::point(page.canvas.viewport_x, page.canvas.viewport_y),
             cx,
@@ -170,6 +185,13 @@ pub fn deserialize_canvas(
                 canvas.select_node(node_id);
             }
         }
+
+        eprintln!(
+            "Final canvas state: {} nodes, viewport at ({}, {})",
+            canvas.nodes().len(),
+            canvas.get_scroll_position().x,
+            canvas.get_scroll_position().y
+        );
 
         // Force a full canvas update after loading
         canvas.mark_dirty(cx);

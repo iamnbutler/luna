@@ -587,7 +587,7 @@ impl Render for Inspector {
                         .child(
                             div()
                                 .text_xs()
-                                .text_color(theme.tokens.inactive_text)
+                                .text_color(theme.tokens.subtext0)
                                 .child("Viewport Center"),
                         )
                         .child(
@@ -601,7 +601,7 @@ impl Render for Inspector {
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .text_color(theme.tokens.inactive_text)
+                                                .text_color(theme.tokens.subtext0)
                                                 .child("X"),
                                         )
                                         .child(div().text_xs().child(format!("{:.0}", viewport_x))),
@@ -613,7 +613,7 @@ impl Render for Inspector {
                                         .child(
                                             div()
                                                 .text_xs()
-                                                .text_color(theme.tokens.inactive_text)
+                                                .text_color(theme.tokens.subtext0)
                                                 .child("Y"),
                                         )
                                         .child(div().text_xs().child(format!("{:.0}", viewport_y))),

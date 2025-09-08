@@ -404,15 +404,13 @@ impl LunaCanvas {
         self.scene_graph.update(cx, |sg, _cx| {
             let scene_node = sg.create_node(Some(parent_scene_node_id), Some(node_id));
 
-            // Set initial bounds from node layout
+            // Get node layout for debugging
             let node = self.nodes.get(&node_id).unwrap();
             let layout = node.layout();
-            let bounds = Bounds {
-                origin: Point::new(layout.x, layout.y),
-                size: Size::new(layout.width, layout.height),
-            };
-
-            // Position is stored in FrameNode, no need to set bounds in scene graph
+            eprintln!(
+                "Created scene node for {:?} at ({}, {}) size {}x{}",
+                node_id, layout.x, layout.y, layout.width, layout.height
+            );
         });
 
         self.dirty = true;
