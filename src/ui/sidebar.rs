@@ -11,7 +11,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 
-use super::{layer_list::LayerList, Titlebar};
+use super::TITLEBAR_HEIGHT;
 
 /// Container for tool selection and other canvas controls
 ///
@@ -19,53 +19,35 @@ use super::{layer_list::LayerList, Titlebar};
 /// hosting the [`ToolStrip`] and other controls for canvas interaction.
 pub struct Sidebar {
     canvas: Entity<LunaCanvas>,
-    layer_list: Entity<LayerList>,
 }
 
 impl Sidebar {
-    pub fn new(canvas: Entity<LunaCanvas>, cx: &mut Context<Self>) -> Self {
-        let layer_list = cx.new(|cx| LayerList::new(canvas.clone(), cx));
-        Self { canvas, layer_list }
+    pub fn new(canvas: Entity<LunaCanvas>) -> Self {
+        Self { canvas }
     }
-}
-
-impl Sidebar {
-    pub const INITIAL_WIDTH: f32 = 220.;
 }
 
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let token = &Theme::get_global(cx).tokens;
+        let theme = Theme::get_global(cx);
 
         let inner = div()
-            .id("sidebar-inner")
             .flex()
             .flex_col()
             .h_full()
-            .w(px(Self::INITIAL_WIDTH))
+            .w(px(35.))
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))
-            .child(div().w_full().h(px(Titlebar::HEIGHT)))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .w_full()
-                    .child(ToolStrip::new())
-                    .child(self.layer_list.clone()),
-            );
+            .child(div().w_full().h(px(TITLEBAR_HEIGHT)))
+            .child(div().flex().flex_1().w_full().child(ToolStrip::new()));
 
         div()
-            .id("sidebar")
-            .key_context("Sidebar")
+            .id("titlebar")
             .absolute()
             .top_0()
             .left_0()
             .h_full()
-            .w(px(Self::INITIAL_WIDTH + 1.))
-            .bg(token.background_secondary)
-            .border_r_1()
-            .border_color(token.inactive_border)
+            .w(px(36.))
             .cursor_default()
             .rounded_tl(px(15.))
             .rounded_bl(px(15.))

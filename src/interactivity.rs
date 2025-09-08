@@ -1,4 +1,7 @@
-use gpui::{Pixels, Point};
+#![allow(unused, dead_code)]
+
+use gpui::Pixels;
+use gpui::Point;
 
 /// The type of dragging operation being performed
 #[derive(Clone, Debug, PartialEq)]

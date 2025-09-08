@@ -32,10 +32,7 @@ pub mod layer_list;
 mod property;
 pub mod sidebar;
 
-pub struct Titlebar {}
-impl Titlebar {
-    pub const HEIGHT: f32 = 31.;
-}
+const TITLEBAR_HEIGHT: f32 = 31.;
 
 /// SVG icon identifiers for UI elements
 ///
@@ -60,7 +57,7 @@ pub enum Icon {
     Image,
     /// Vector path icon
     Path,
-    /// Rectangle shape icon
+    /// Rectangle shape icon 
     Square,
     /// Text tool icon
     Text,

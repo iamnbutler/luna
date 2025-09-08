@@ -1,20 +1,19 @@
 use crate::{
     canvas::{register_canvas_action, ClearSelection, LunaCanvas},
     interactivity::{ActiveDrag, DragType, ResizeHandle, ResizeOperation},
-    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType, Shadow},
+    node::{frame::FrameNode, NodeCommon, NodeId, NodeLayout, NodeType},
     scene_graph::SceneGraph,
     theme::{ActiveTheme, Theme},
     tools::{ActiveTool, GlobalTool},
     util::{round_to_pixel, rounded_point},
-    Tool,
+    AppState, GlobalState, Tool,
 };
 use gpui::{
     hsla, prelude::*, px, relative, App, BorderStyle, ContentMask, DispatchPhase, ElementId,
-    Entity, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Style,
-    TextStyle, TextStyleRefinement, TransformationMatrix, Window,
+    Entity, Focusable, Hitbox, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Style, TextStyle, TextStyleRefinement, TransformationMatrix, Window,
 };
-use gpui::{point, Bounds, Point, Size};
-use smallvec::SmallVec;
+use gpui::{point, size, Bounds, Point, Size};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -122,7 +121,7 @@ fn point_in_resize_handle(point: Point<f32>, node_bounds: &Bounds<f32>) -> Optio
     use ResizeHandle;
 
     // Define handle size and boundaries
-    const HANDLE_SIZE: f32 = 11.0; // Increased from 7.0 to provide a larger hit area
+    const HANDLE_SIZE: f32 = 7.0;
     const HALF_HANDLE: f32 = HANDLE_SIZE / 2.0;
 
     // Create bounds for each corner handle
@@ -404,6 +403,7 @@ impl CanvasElement {
 
         let position = event.position;
         let canvas_point = point(position.x.0, position.y.0);
+        let state = GlobalState::get(cx);
         let app_state = canvas.app_state().clone().read(cx);
         let current_background_color = app_state.current_background_color.clone();
         let current_border_color = app_state.current_border_color.clone();
@@ -463,7 +463,6 @@ impl CanvasElement {
                 DragType::MoveElements => {
                     // Check if the selected nodes are being dropped on a frame
                     // by getting the topmost frame at the current mouse position, excluding selected frames
-                    // Convert window coordinates to canvas coordinates (centered system)
                     let drop_point =
                         canvas.window_to_canvas_point(Point::new(position.x.0, position.y.0));
 
@@ -499,35 +498,26 @@ impl CanvasElement {
                         for &node_id in &selected_ids {
                             // First, ensure the node isn't already a child of this frame
                             if !parent_info.children.contains(&node_id) {
-                                // Get canvas-space absolute position of child and parent before any changes
-                                let child_absolute_pos =
-                                    if let Some(child_node) = canvas.get_node(node_id) {
-                                        let child_layout = child_node.layout();
-                                        canvas.get_absolute_position(node_id, cx)
-                                    } else {
-                                        continue;
-                                    };
-
-                                let parent_absolute_pos =
-                                    canvas.get_absolute_position(parent_info.id, cx);
-
-                                // Calculate child's position relative to parent
-                                // This is the key part for correct parent-relative positioning
-                                let relative_x = child_absolute_pos.0 - parent_absolute_pos.0;
-                                let relative_y = child_absolute_pos.1 - parent_absolute_pos.1;
-
-                                // Now update parent to add child
+                                // First update the parent to add the child
                                 if let Some(parent_node) = canvas.get_node_mut(parent_info.id) {
                                     parent_node.add_child(node_id);
                                 }
 
-                                // Then set the child's position relative to parent
+                                // Store absolute position of child before adjustment
+                                let (absolute_x, absolute_y) = if let Some(child_node) = canvas.get_node(node_id) {
+                                    let child_layout = child_node.layout();
+                                    (child_layout.x, child_layout.y)
+                                } else {
+                                    continue;
+                                };
+
+                                // Then update the child position in a separate borrow
                                 if let Some(child_node) = canvas.get_node_mut(node_id) {
                                     let child_layout = child_node.layout_mut();
 
-                                    // Use the calculated relative coordinates
-                                    child_layout.x = relative_x;
-                                    child_layout.y = relative_y;
+                                    // Adjust position to be relative to parent
+                                    child_layout.x = absolute_x - parent_info.x;
+                                    child_layout.y = absolute_y - parent_info.y;
                                 }
 
                                 // Update the scene graph to reflect the new parent-child relationship
@@ -535,7 +525,7 @@ impl CanvasElement {
                                     // Get scene node IDs for parent and child
                                     if let (Some(parent_scene_id), Some(child_scene_id)) = (
                                         sg.get_scene_node_id(parent_info.id),
-                                        sg.get_scene_node_id(node_id),
+                                        sg.get_scene_node_id(node_id)
                                     ) {
                                         // Update child bounds to be parent-relative
                                         if let Some(child_node) = canvas.get_node(node_id) {
@@ -546,7 +536,7 @@ impl CanvasElement {
                                             };
                                             sg.set_local_bounds(child_scene_id, bounds);
                                         }
-
+                                        
                                         // Make child a child of parent in scene graph
                                         sg.add_child(parent_scene_id, child_scene_id);
                                     }
@@ -830,108 +820,8 @@ impl CanvasElement {
                                 new_y = orig_center_y - new_height / 2.0;
                             }
 
-                            // Calculate the correct position and dimensions for each handle type
-                            match resize_op.handle {
-                                ResizeHandle::TopLeft => {
-                                    // Handle horizontal resizing (left edge)
-                                    if new_width < 0.0 {
-                                        // Crossed right edge - fixed point switches to left
-                                        new_width = -new_width;
-                                        // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_x + resize_op.original_width;
-                                    } else {
-                                        // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width
-                                            - new_width;
-                                    }
-
-                                    // Handle vertical resizing (top edge)
-                                    if new_height < 0.0 {
-                                        // Crossed bottom edge - fixed point switches to top
-                                        new_height = -new_height;
-                                        // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_y + resize_op.original_height;
-                                    } else {
-                                        // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height
-                                            - new_height;
-                                    }
-                                }
-                                ResizeHandle::TopRight => {
-                                    // Handle horizontal resizing (right edge)
-                                    if new_width < 0.0 {
-                                        // Crossed left edge - fixed point switches to right
-                                        new_width = -new_width;
-                                        // Keep the original x, width grows to the left
-                                        new_x = resize_op.original_x - new_width;
-                                    } else {
-                                        // Normal case - left edge stays fixed at original x
-                                        new_x = resize_op.original_x;
-                                    }
-
-                                    // Handle vertical resizing (top edge)
-                                    if new_height < 0.0 {
-                                        // Crossed bottom edge - fixed point switches to top
-                                        new_height = -new_height;
-                                        // Top edge is now at original bottom edge + the overflow
-                                        new_y = resize_op.original_y + resize_op.original_height;
-                                    } else {
-                                        // Normal case - bottom edge stays fixed
-                                        new_y = resize_op.original_y + resize_op.original_height
-                                            - new_height;
-                                    }
-                                }
-                                ResizeHandle::BottomLeft => {
-                                    // Handle horizontal resizing (left edge)
-                                    if new_width < 0.0 {
-                                        // Crossed right edge - fixed point switches to left
-                                        new_width = -new_width;
-                                        // Left edge is now at original right edge + the overflow
-                                        new_x = resize_op.original_x + resize_op.original_width;
-                                    } else {
-                                        // Normal case - right edge stays fixed
-                                        new_x = resize_op.original_x + resize_op.original_width
-                                            - new_width;
-                                    }
-
-                                    // Handle vertical resizing (bottom edge)
-                                    if new_height < 0.0 {
-                                        // Crossed top edge - fixed point switches to bottom
-                                        new_height = -new_height;
-                                        // Keep original y, height grows upward
-                                        new_y = resize_op.original_y - new_height;
-                                    } else {
-                                        // Normal case - top edge stays fixed at original y
-                                        new_y = resize_op.original_y;
-                                    }
-                                }
-                                ResizeHandle::BottomRight => {
-                                    // Handle horizontal resizing (right edge)
-                                    if new_width < 0.0 {
-                                        // Crossed left edge - fixed point switches to right
-                                        new_width = -new_width;
-                                        // Keep the original x, width grows to the left
-                                        new_x = resize_op.original_x - new_width;
-                                    } else {
-                                        // Normal case - left edge stays fixed at original x
-                                        new_x = resize_op.original_x;
-                                    }
-
-                                    // Handle vertical resizing (bottom edge)
-                                    if new_height < 0.0 {
-                                        // Crossed top edge - fixed point switches to bottom
-                                        new_height = -new_height;
-                                        // Keep original y, height grows upward
-                                        new_y = resize_op.original_y - new_height;
-                                    } else {
-                                        // Normal case - top edge stays fixed at original y
-                                        new_y = resize_op.original_y;
-                                    }
-                                }
-                            }
-
-                            // Ensure minimum dimensions (very small but positive)
-                            if new_width > 0.1 && new_height > 0.1 {
+                            // Ensure minimum dimensions (prevent negative width/height)
+                            if new_width > 1.0 && new_height > 1.0 {
                                 // Update node dimensions
                                 let layout = node.layout_mut();
                                 layout.x = new_x;
@@ -953,12 +843,6 @@ impl CanvasElement {
                                             },
                                         );
                                     });
-
-                                    // Update child node layouts to reflect parent's resize
-                                    canvas.update_child_layouts_after_parent_resize(
-                                        selected_node_id,
-                                        cx,
-                                    );
                                 }
                             }
 
@@ -1129,57 +1013,6 @@ impl CanvasElement {
     /// using `window.on_{}_event`, which is only available in the paint phase.
     ///
     /// Thus the `paint` prefix.
-    fn paint_scroll_wheel_listener(
-        &mut self,
-        layout: &CanvasLayout,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        window.on_mouse_event({
-            let canvas = self.canvas.clone();
-            let hitbox = layout.hitbox.clone();
-            move |event: &gpui::ScrollWheelEvent, phase, window, cx| {
-                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
-                    canvas.update(cx, |canvas, cx| {
-                        // Handle scrolling/panning of the canvas
-                        let delta = match event.delta {
-                            gpui::ScrollDelta::Pixels(pixels) => {
-                                // Trackpad input - direct pixel movement
-                                pixels
-                            }
-                            gpui::ScrollDelta::Lines(lines) => {
-                                // Mouse wheel input - convert lines to pixels
-                                // Scale lines by a factor to make it feel natural
-                                // Convert lines to pixels - multiply by 30 for natural feel
-                                gpui::Point::new(
-                                    gpui::Pixels(lines.x * 30.0),
-                                    gpui::Pixels(lines.y * 30.0),
-                                )
-                            }
-                        };
-
-                        // Invert delta for natural feeling panning
-                        let inverted_delta =
-                            gpui::Point::new(gpui::Pixels(-delta.x.0), gpui::Pixels(-delta.y.0));
-
-                        // Get current canvas position through getter
-                        let current_position = canvas.get_scroll_position();
-
-                        // Calculate new position
-                        let new_position = gpui::Point::new(
-                            current_position.x + inverted_delta.x.0 / canvas.zoom(),
-                            current_position.y + inverted_delta.y.0 / canvas.zoom(),
-                        );
-
-                        // Update canvas scroll position
-                        canvas.set_scroll_position(new_position, cx);
-                        cx.stop_propagation();
-                    });
-                }
-            }
-        });
-    }
-
     fn paint_mouse_listeners(&mut self, layout: &CanvasLayout, window: &mut Window, cx: &mut App) {
         window.on_mouse_event({
             let canvas = self.canvas.clone();
@@ -1246,7 +1079,6 @@ impl CanvasElement {
             border_color: Option<Hsla>,
             border_width: f32,
             corner_radius: f32,
-            shadows: SmallVec<[Shadow; 1]>,
             children: Vec<NodeId>,
         }
 
@@ -1321,7 +1153,6 @@ impl CanvasElement {
                                 border_color: node.border_color(),
                                 border_width: node.border_width(),
                                 corner_radius: node.corner_radius(),
-                                shadows: node.shadows(),
                                 children: node.children().clone(),
                             });
                         }
@@ -1395,33 +1226,7 @@ impl CanvasElement {
                         gpui::Pixels(frame_y).scale(1.0),
                     ));
 
-                // FIRST: Paint any shadows behind the node
-                // Shadows need to be rendered before the node itself
-                if !node_info.shadows.is_empty() {
-                    // Convert our Shadow types to gpui::BoxShadow types
-                    let box_shadows: Vec<gpui::BoxShadow> = node_info
-                        .shadows
-                        .iter()
-                        .map(|shadow| gpui::BoxShadow {
-                            offset: gpui::Point::new(
-                                gpui::Pixels(shadow.offset.x),
-                                gpui::Pixels(shadow.offset.y),
-                            ),
-                            blur_radius: gpui::Pixels(shadow.blur_radius),
-                            spread_radius: gpui::Pixels(shadow.spread_radius),
-                            color: shadow.color,
-                        })
-                        .collect();
-
-                    // Use the dedicated shadow rendering function
-                    window.paint_shadows(
-                        transformed_bounds,
-                        gpui::Corners::all(gpui::Pixels(node_info.corner_radius)),
-                        &box_shadows,
-                    );
-                }
-
-                // SECOND: Paint the node itself (background and frame)
+                // FIRST: Paint the node itself (background and frame)
                 // Paint the fill if it exists
                 if let Some(fill_color) = node_info.fill_color {
                     window.paint_quad(gpui::PaintQuad {
@@ -1507,7 +1312,8 @@ impl CanvasElement {
                         ),
                     };
 
-                    let yellow_highlight = gpui::hsla(60.0 / 360.0, 1.0, 0.5, 0.8);
+                    // Use a bright yellow color for the parent indicator
+                    let yellow_highlight = gpui::hsla(60.0, 1.0, 0.5, 0.8); // Bright yellow with 80% opacity
                     window.paint_quad(gpui::outline(
                         parent_indicator_bounds,
                         yellow_highlight,
@@ -1561,19 +1367,19 @@ impl CanvasElement {
 
             // Build a map of node ID to parent transform
             let mut node_transforms: HashMap<NodeId, TransformationMatrix> = HashMap::new();
-
+            
             // Helper function to compute the absolute transform for a node
             fn compute_node_transform(
-                node_id: NodeId,
+                node_id: NodeId, 
                 node_map: &HashMap<NodeId, Vec<NodeRenderInfo>>,
                 transforms: &mut HashMap<NodeId, TransformationMatrix>,
-                all_nodes: &[NodeRenderInfo],
+                all_nodes: &[NodeRenderInfo]
             ) -> TransformationMatrix {
                 // If we've already computed this node's transform, return it
                 if let Some(transform) = transforms.get(&node_id) {
                     return *transform;
                 }
-
+                
                 // Find this node's information
                 if let Some(node_info) = all_nodes.iter().find(|n| n.node_id == node_id) {
                     // Find this node's parent (if any)
@@ -1584,22 +1390,20 @@ impl CanvasElement {
                             break;
                         }
                     }
-
+                    
                     // Get the parent's transform if it exists
                     let parent_transform = if let Some(pid) = parent_id {
                         compute_node_transform(pid, node_map, transforms, all_nodes)
                     } else {
                         TransformationMatrix::unit()
                     };
-
+                    
                     // Apply this node's local transform to the parent's transform
                     let (x, y) = (node_info.bounds.origin.x.0, node_info.bounds.origin.y.0);
-                    let transform =
-                        parent_transform.compose(TransformationMatrix::unit().translate(point(
-                            gpui::Pixels(x).scale(1.0),
-                            gpui::Pixels(y).scale(1.0),
-                        )));
-
+                    let transform = parent_transform.compose(TransformationMatrix::unit().translate(
+                        point(gpui::Pixels(x).scale(1.0), gpui::Pixels(y).scale(1.0))
+                    ));
+                    
                     // Cache and return the combined transform
                     transforms.insert(node_id, transform);
                     transform
@@ -1608,39 +1412,37 @@ impl CanvasElement {
                     TransformationMatrix::unit()
                 }
             }
-
+            
             // Compute transforms for all selected nodes
             for node_id in selected_node_ids.iter() {
-                compute_node_transform(
-                    *node_id,
-                    &children_map,
-                    &mut node_transforms,
-                    &nodes_to_render,
-                );
+                compute_node_transform(*node_id, &children_map, &mut node_transforms, &nodes_to_render);
             }
 
             // First draw individual selection outlines
             for node_info in &nodes_to_render {
                 if selected_node_ids.contains(&node_info.node_id) {
                     // Get the absolute transform for this node
-                    let transform = node_transforms
-                        .get(&node_info.node_id)
+                    let transform = node_transforms.get(&node_info.node_id)
                         .cloned()
                         .unwrap_or_else(TransformationMatrix::unit);
-
+                    
                     // Get the bounds in local space (no parent translation)
                     let (width, height) = (
                         node_info.bounds.size.width.0,
                         node_info.bounds.size.height.0,
                     );
-
+                    
                     // Transform the corners to get absolute position
-                    let top_left =
-                        transform.apply(gpui::Point::new(gpui::Pixels(0.0), gpui::Pixels(0.0)));
-
-                    let bottom_right = transform
-                        .apply(gpui::Point::new(gpui::Pixels(width), gpui::Pixels(height)));
-
+                    let top_left = transform.apply(gpui::Point::new(
+                        gpui::Pixels(0.0),
+                        gpui::Pixels(0.0),
+                    ));
+                    
+                    let bottom_right = transform.apply(gpui::Point::new(
+                        gpui::Pixels(width),
+                        gpui::Pixels(height),
+                    ));
+                    
                     // Create selection bounds from transformed corners
                     let selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
@@ -1855,9 +1657,12 @@ impl Element for CanvasElement {
         let canvas = self.canvas.clone();
         let active_tool = *cx.active_tool().clone();
         let theme = cx.theme().clone();
-        let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
+        // let key_context = self.canvas.update(cx, |canvas, cx| canvas.key_context());
 
-        window.set_key_context(key_context);
+        // window.set_key_context(key_context);
+
+        // register_actions
+        // register_key_listeners
 
         let text_style = TextStyleRefinement {
             font_size: Some(self.style.text.font_size),
@@ -1870,7 +1675,6 @@ impl Element for CanvasElement {
                 // Clone the canvas to avoid multiple borrows of cx
                 let canvas_clone = self.canvas.clone();
                 self.paint_mouse_listeners(layout, window, cx);
-                self.paint_scroll_wheel_listener(layout, window, cx);
                 self.paint_canvas_background(layout, window, cx);
                 self.paint_nodes(layout, window, cx);
 

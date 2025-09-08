@@ -1,5 +1,3 @@
-#![allow(unused, dead_code)]
-
 //! # Luna: A GPU-accelerated design canvas
 //!
 //! Luna is a modern design application built on the GPUI framework, providing a high-performance
@@ -17,29 +15,32 @@
 //! The application uses a combination of immediate and retained UI patterns, with a scene graph
 //! for efficient spatial operations and a component-based architecture for the UI.
 
+#![allow(unused, dead_code)]
+use anyhow::Result;
 use assets::Assets;
 use canvas::LunaCanvas;
 use canvas_element::CanvasElement;
 use gpui::{
-    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable, Hsla,
-    IntoElement, Menu, MenuItem, TitlebarOptions, Window, WindowBackgroundAppearance,
-    WindowOptions,
+    actions, div, hsla, point, prelude::*, px, svg, App, Application, AssetSource, BoxShadow,
+    ElementId, Entity, FocusHandle, Focusable, Global, Hsla, IntoElement, KeyBinding, Keystroke,
+    Menu, MenuItem, Modifiers, Pixels, Point, SharedString, TitlebarOptions, UpdateGlobal,
+    WeakEntity, Window, WindowBackgroundAppearance, WindowOptions,
 };
-use keymap::init_keymap;
+use node::{NodeCommon, NodeId};
 use scene_graph::SceneGraph;
-use std::{path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
+use strum::Display;
 use theme::{ActiveTheme, GlobalTheme, Theme};
 use tools::{ActiveTool, GlobalTool, Tool};
-use ui::{inspector::Inspector, sidebar::Sidebar};
+use ui::{inspector::Inspector, sidebar::Sidebar, Icon};
+use util::keystroke_builder;
 
 mod assets;
 mod canvas;
 mod canvas_element;
 mod color;
-mod coordinates;
 mod css_parser;
 mod interactivity;
-mod keymap;
 mod node;
 mod scene_graph;
 mod scene_node;
@@ -67,6 +68,56 @@ actions!(
         ToggleUI,
     ]
 );
+
+/// Application-wide state accessible from any context
+///
+/// GlobalState provides access to application-level state that applies across
+/// the entire application. It utilizes GPUI's global mechanism to make this
+/// state available throughout the component hierarchy without explicit passing.
+///
+/// This includes UI configuration like sidebar state, canvas navigation state,
+/// and input tracking. In a multi-window implementation, this would need to be
+/// refactored to per-window state.
+struct GlobalState {
+    hide_sidebar: bool,
+    sidebar_width: Pixels,
+
+    // For panning the canvas with Hand tool
+    drag_start_position: Option<Point<Pixels>>,
+    scroll_start_position: Option<Point<f32>>,
+
+    // For tracking mouse movement
+    last_mouse_position: Option<Point<Pixels>>,
+}
+
+impl GlobalState {
+    // Helper function to adjust a position for sidebar offset
+    fn adjust_position(&self, position: Point<Pixels>) -> Point<Pixels> {
+        let mut adjusted = position;
+        if !self.hide_sidebar {
+            adjusted.x -= self.sidebar_width;
+        }
+        adjusted
+    }
+}
+
+impl GlobalState {
+    pub fn new() -> Self {
+        Self {
+            hide_sidebar: false,
+            sidebar_width: px(260.0),
+            drag_start_position: None,
+            scroll_start_position: None,
+            last_mouse_position: None,
+        }
+    }
+
+    pub fn get(cx: &App) -> &GlobalState {
+        cx.global::<GlobalState>()
+    }
+}
+
+impl Global for GlobalState {}
 
 /// Core application state shared between components
 ///
@@ -106,6 +157,8 @@ struct Luna {
     inspector: Entity<Inspector>,
     /// Sidebar for additional tools and controls
     sidebar: Entity<Sidebar>,
+    /// Layer list showing all elements in the canvas
+    layer_list: Entity<ui::layer_list::LayerList>,
 }
 
 impl Luna {
@@ -115,11 +168,12 @@ impl Luna {
             current_background_color: cx.theme().tokens.surface0,
         });
         let focus_handle = cx.focus_handle();
-        let scene_graph = cx.new(|_| SceneGraph::new());
+        let scene_graph = cx.new(|cx| SceneGraph::new());
         let theme = Theme::default();
         let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
-        let inspector = cx.new(|_| Inspector::new(app_state.clone(), canvas.clone()));
-        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), cx));
+        let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone()));
+        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone()));
+        let layer_list = cx.new(|cx| ui::layer_list::LayerList::new(canvas.clone()));
 
         Luna {
             app_state,
@@ -128,6 +182,7 @@ impl Luna {
             focus_handle,
             inspector,
             sidebar,
+            layer_list,
         }
     }
 
@@ -162,7 +217,7 @@ impl Luna {
     }
 
     fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
-        self.canvas.update(cx, |canvas, _| {
+        self.canvas.update(cx, |canvas, cx| {
             canvas.select_all_nodes();
         });
         cx.notify();
@@ -198,8 +253,9 @@ impl Luna {
 }
 
 impl Render for Luna {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::get_global(cx);
+        let state = GlobalState::get(cx);
 
         div()
             .id("Luna")
@@ -223,7 +279,7 @@ impl Render for Luna {
             })
             .map(|div| match *cx.active_tool().clone() {
                 Tool::Hand => div.cursor_grab(),
-                Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
+                Tool::Frame | Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
                 _ => div.cursor_default(),
             })
             .on_action(cx.listener(Self::activate_hand_tool))
@@ -236,6 +292,7 @@ impl Render for Luna {
             .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
             .child(self.inspector.clone())
             .child(self.sidebar.clone())
+            .child(self.layer_list.clone())
     }
 }
 
@@ -248,6 +305,7 @@ impl Focusable for Luna {
 fn init_globals(cx: &mut App) {
     cx.set_global(GlobalTheme(Arc::new(Theme::default())));
     cx.set_global(GlobalTool(Arc::new(Tool::default())));
+    cx.set_global(GlobalState::new());
 }
 
 /// Application entry point
@@ -267,7 +325,20 @@ fn main() {
                 items: vec![MenuItem::action("Quit", Quit)],
             }]);
 
-            init_keymap(cx);
+            cx.bind_keys([
+                KeyBinding::new("h", HandTool, None),
+                KeyBinding::new("a", SelectionTool, None),
+                KeyBinding::new("r", RectangleTool, None),
+                KeyBinding::new("f", FrameTool, None),
+                KeyBinding::new("escape", Cancel, None),
+                KeyBinding::new("delete", Delete, None),
+                KeyBinding::new("backspace", Delete, None),
+                KeyBinding::new("cmd-a", SelectAll, None),
+                KeyBinding::new("cmd-v", Paste, None),
+                KeyBinding::new("cmd-c", Copy, None),
+                KeyBinding::new("cmd-x", Cut, None),
+            ]);
+
             init_globals(cx);
 
             let window = cx
@@ -284,6 +355,8 @@ fn main() {
                     |window, cx| cx.new(|cx| Luna::new(window, cx)),
                 )
                 .unwrap();
+
+            let view = window.update(cx, |_, _, cx| cx.entity()).unwrap();
 
             cx.on_keyboard_layout_change({
                 move |cx| {
