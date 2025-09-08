@@ -686,8 +686,7 @@ impl LunaCanvas {
         // Clear scene graph but keep the canvas root node
         self.scene_graph.update(cx, |sg, _| {
             sg.clear();
-            // Re-add the canvas root node after clearing
-            sg.add_node(NodeId(0)); // Use a dummy node ID for canvas root
+            // The clear method preserves the root node, no need to re-add anything
         });
 
         self.mark_dirty(cx);

@@ -138,27 +138,25 @@ pub fn deserialize_canvas(
         eprintln!("Canvas now has {} nodes", canvas.nodes().len());
     });
 
-    // Second pass: rebuild hierarchy in scene graph
-    eprintln!("Rebuilding scene graph hierarchy");
+    // Second pass: establish parent-child relationships
+    // The nodes are already in the scene graph from canvas.add_node(),
+    // we just need to set up the hierarchy
+    eprintln!("Rebuilding node hierarchy");
     scene_graph.update(cx, |scene, _| {
-        // Add all nodes to scene graph first
-        for &node_id in id_mapping.values() {
-            scene.add_node(node_id);
-            eprintln!("Added node {:?} to scene graph", node_id);
-        }
-
-        // Then establish parent-child relationships
+        // Only establish parent-child relationships, don't add nodes again
         for relationship in &page.hierarchy {
             if let Some(&parent_id) = id_mapping.get(&relationship.parent_id) {
                 for child_id in &relationship.child_ids {
                     if let Some(&child_node_id) = id_mapping.get(child_id) {
-                        // Add child to parent in scene graph
+                        // The nodes should already exist in scene graph from canvas.add_node
                         if let (Some(parent_scene), Some(child_scene)) = (
                             scene.get_scene_node_for_data_node(parent_id),
                             scene.get_scene_node_for_data_node(child_node_id),
                         ) {
                             scene.add_child(parent_scene, child_scene);
                             eprintln!("Added child {:?} to parent {:?}", child_node_id, parent_id);
+                        } else {
+                            eprintln!("Warning: Could not find scene nodes for hierarchy - parent: {:?}, child: {:?}", parent_id, child_node_id);
                         }
                     }
                 }

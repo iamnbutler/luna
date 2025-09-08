@@ -229,11 +229,6 @@ impl SceneGraph {
         self.get_data_node_id(scene_node_id)
     }
 
-    /// Adds a data node to the scene graph as a child of the root
-    pub fn add_node(&mut self, data_node_id: NodeId) -> SceneNodeId {
-        self.create_node(Some(self.root), Some(data_node_id))
-    }
-
     /// Gets the children of a scene node
     pub fn get_children(&self, node_id: SceneNodeId) -> Vec<SceneNodeId> {
         self.nodes
