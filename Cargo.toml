@@ -13,7 +13,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 publish = false
 
@@ -37,7 +37,6 @@ simplecss = "0.2.2"
 slotmap = "1.0.7"
 smallvec = "1.14.0"
 smol = "2.0"
-
 strum = { version = "0.24", features = ["derive", "strum_macros"] }
 strum_macros = "0.24"
 taffy = "=0.4.4"

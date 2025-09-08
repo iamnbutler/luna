@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "assets"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rust-embed",
 ]
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "canvas"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assets",
  "glam",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "luna"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "assets",
@@ -2728,7 +2728,7 @@ dependencies = [
 
 [[package]]
 name = "luna_core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glam",
  "gpui",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "node"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glam",
  "gpui",
@@ -3740,7 +3740,7 @@ dependencies = [
 
 [[package]]
 name = "project"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4201,7 +4201,7 @@ dependencies = [
 
 [[package]]
 name = "scene_graph"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glam",
  "gpui",
@@ -4804,7 +4804,7 @@ dependencies = [
 
 [[package]]
 name = "theme"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gpui",
  "serde",
@@ -5033,7 +5033,7 @@ dependencies = [
 
 [[package]]
 name = "ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "canvas",
  "gpui",
