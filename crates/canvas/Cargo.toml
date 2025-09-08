@@ -1,0 +1,22 @@
+[package]
+name = "canvas"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "canvas"
+path = "src/canvas.rs"
+
+[dependencies]
+assets = { path = "../assets" }
+glam = { workspace = true }
+gpui = { workspace = true }
+node = { path = "../node" }
+scene_graph = { path = "../scene_graph" }
+theme = { path = "../theme" }
+luna_core = { path = "../core" }
+smallvec = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+simplecss = { workspace = true }

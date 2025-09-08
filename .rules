@@ -1,0 +1,43 @@
+### Edit process
+
+Follow this process before you make each edit:
+
+1. Think about the current problem. If your last attempt created errors or test failures, explain to me what you think went wrong and how you will solve it.
+2. If you aren't confident about a solution, come up with 2-3 ways you _might solve it_ and share them with me.
+3. You choose an option if there are multiple options. Don't wait for my feedback.
+4. Create an implementation plan:
+   4.1. Ask yourself: "Can I use test driven development for this solution? Will the tests that come out of this be useful and actually catch issues introduced to the system? Or are they contrived so I can say I'm doing test driven development?"
+   4.2. Either implement your plan or break the problem down into smaller pieces
+5. Execute your plan. Make any edits you need to make. Use cargo check, cargo test, and your diagnostics tool to check for issues.
+6. If it is helpful, use `cargo run` to run the app (with an automated max 30-second kill switch to kill the task) to be able to access any runtime-specific logs.
+7. Once this logical step of your plan is complete, error free, with passing tests, write a commit message and commit your changes to the current branch. If you are correcting issues from your previous plan, don't just write "implement whatever the previous plan was", write a commit message explaining what you are fixing, and what went wrong with the previous step. Don't limit yourself to 100 characters or whatever, I'd rather have a clear message than a short one.
+8. Finally, if you have finished all your steps and completed the original task I gave you, let me know you are done.
+
+
+### Style Guide
+
+Long range goal: Luna is software design tool in the vein of figma, sketchapp, and old Framer. It can swap between rendering nodes on a canvas, and editing specific nodes and their children in code directly.
+
+Use these points and style guide to inform your plan an implementation:
+
+- Eventually nodes and code will be interchangable. For example, a `FrameNode` would be interchangable with a html `div` with styles on it. A given frame and it's children will be serializable in some data format, or as html.
+- Prefer single files for a single concept. Example: color.rs (handles color), node.rs (defines common node properties.), node/frame.rs (implements node properties and frame-speciifc behavior.)
+- Don't be afraid of large files. As long as it is well organized, a 3000 line file isn't a problem to me. More files doesn't equal better organization.
+- Respect the roles of core components: The data structure for nodes is a flat list. The scene graph manages  spatial relationships between nodes for efficient transformations. Tools represent top level intents, like selecting and moving nodes, creating specific types of nodes, etc. The canvas stores all canvas-related data, while the CanvasElement renders it and is the layer that handles interactions.
+- Avoid rewriting things that already have solid libraries (outside of the scene graph, that should be fullly custom.) For example, the rust Palette crate could handle color operations (we just need to map to gpui colors when we render them.)
+- Remember you can fetch information with your fetch tool. For example, if your knowledge of the Palette crate is out of date, and you need to know about the SRGB type, you could fetch info from docs.rs (https://docs.rs/palette/latest/palette/type.Srgb.html)
+
+### Comments
+
+Comments should be written from the perspective of a senior Rust developer, using clear and concise language. Never write comments that just restate what the code is doing.
+
+In functions, there should only ever be comments that explain non-obvious behavior or for wayfinding in very large functions.
+
+Based off of the target audience mentioned above, review any code and documentation comments you added in this change, as well as in the areas this change touched.
+
+- is this a comment // and is it saying with the code is doing, not explaining something non-obvious, or providing a key point that future developers will need to understand the code?
+- is this a comment // and is it a useful placeholder for future functions or upcoming changes?
+- is this a doc comment ///? If so, is it providing useful context, and writing at the target audience mentioned above? (write in a technical manner as a per of and targeted at senior Rust developers.)
+- is this any kind of comment, and it is describing a behavior or fact that is no longer true or accurate? If so, update or remove it based on your judgement and the above context.
+
+Finally, as you review the code, look at other comments you encounter and update them as needed based on the criteria mentioned above.
