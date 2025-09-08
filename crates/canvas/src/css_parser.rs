@@ -140,7 +140,7 @@ fn parse_length(value: &str) -> Option<f32> {
 /// - HSLA format (hsla(h,s%,l%,a))
 /// - Named colors (red, green, blue, transparent, etc.)
 fn parse_color(value: &str) -> Option<Hsla> {
-    luna_core::color::parse_color(value)
+    core::color::parse_color(value)
 }
 
 /// Parse RGB or RGBA components from a string

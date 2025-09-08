@@ -38,7 +38,7 @@ mod serialization;
 
 // Re-export commonly used items from external crates
 pub use canvas::{canvas_element, tools};
-pub use luna_core::{color, coordinates, interactivity, keymap, util};
+pub use core::{color, coordinates, interactivity, keymap, util};
 pub use node;
 pub use scene_graph;
 pub use theme;

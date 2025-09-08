@@ -19,8 +19,8 @@
 
 pub mod scene_node;
 
+use core::bounds::Bounds as LunaBounds;
 use gpui::{Bounds, Point, Size};
-use luna_core::bounds::Bounds as LunaBounds;
 use node::{AnyNode, NodeCommon, NodeId};
 use slotmap::{KeyData, SlotMap};
 use std::{

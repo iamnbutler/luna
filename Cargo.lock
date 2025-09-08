@@ -641,9 +641,9 @@ name = "canvas"
 version = "0.1.1"
 dependencies = [
  "assets",
+ "core",
  "glam",
  "gpui",
- "luna_core",
  "node",
  "scene_graph",
  "simplecss",
@@ -892,6 +892,18 @@ name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+
+[[package]]
+name = "core"
+version = "0.1.1"
+dependencies = [
+ "glam",
+ "gpui",
+ "palette",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
 
 [[package]]
 name = "core-foundation"
@@ -2700,9 +2712,9 @@ dependencies = [
  "assets",
  "canvas",
  "chrono",
+ "core",
  "glam",
  "gpui",
- "luna_core",
  "node",
  "palette",
  "project",
@@ -2724,18 +2736,6 @@ dependencies = [
  "theme",
  "ui",
  "uuid",
-]
-
-[[package]]
-name = "luna_core"
-version = "0.1.1"
-dependencies = [
- "glam",
- "gpui",
- "palette",
- "serde",
- "serde_json",
- "smallvec",
 ]
 
 [[package]]
@@ -4203,9 +4203,9 @@ dependencies = [
 name = "scene_graph"
 version = "0.1.1"
 dependencies = [
+ "core",
  "glam",
  "gpui",
- "luna_core",
  "node",
  "slotmap",
 ]
@@ -5036,8 +5036,8 @@ name = "ui"
 version = "0.1.1"
 dependencies = [
  "canvas",
+ "core",
  "gpui",
- "luna_core",
  "node",
  "project",
  "regex",

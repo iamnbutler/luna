@@ -9,8 +9,8 @@ name = "scene_graph"
 path = "src/scene_graph.rs"
 
 [dependencies]
+core = { path = "../core" }
 glam = { workspace = true }
 gpui = { workspace = true }
-slotmap = { workspace = true }
 node = { path = "../node" }
-luna_core = { path = "../core" }
+slotmap = { workspace = true }

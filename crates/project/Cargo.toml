@@ -9,11 +9,11 @@ name = "project"
 path = "src/project.rs"
 
 [dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
 gpui = { workspace = true }
 node = { path = "../node" }
-anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-chrono = { workspace = true }
-uuid = { workspace = true }
 smol = { workspace = true }
+uuid = { workspace = true }
