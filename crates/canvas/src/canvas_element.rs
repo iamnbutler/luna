@@ -1214,7 +1214,7 @@ impl CanvasElement {
             window.paint_quad(gpui::fill(rect_bounds, theme.tokens.overlay2.opacity(0.25)));
             window.paint_quad(gpui::outline(
                 rect_bounds,
-                theme.tokens.active_border,
+                hsla(120.0 / 360.0, 1.0, 0.5, 1.0), // Green color
                 BorderStyle::Solid,
             ));
             window.request_animation_frame();
