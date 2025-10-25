@@ -242,6 +242,7 @@ impl Luna {
                         files: true,
                         directories: false,
                         multiple: false,
+                        prompt: None,
                     })
                 })?
                 .await??;
@@ -303,7 +304,7 @@ impl Luna {
                         .ok()
                         .map(std::path::PathBuf::from)
                         .unwrap_or_else(|| std::path::PathBuf::from("/"));
-                    cx.prompt_for_new_path(&home_dir)
+                    cx.prompt_for_new_path(&home_dir, None)
                 })?
                 .await??;
 

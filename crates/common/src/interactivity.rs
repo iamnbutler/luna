@@ -1,5 +1,5 @@
 use glam::Vec2;
-use gpui::{Pixels, Point};
+use gpui::{px, Pixels, Point};
 
 /// Position in drag coordinates (screen pixels)
 #[derive(Clone, Debug, Copy, PartialEq)]
@@ -33,12 +33,12 @@ impl DragPosition {
 
     /// Convert to a GPUI Point with Pixels
     pub fn to_point_pixels(&self) -> Point<Pixels> {
-        Point::new(Pixels(self.0.x), Pixels(self.0.y))
+        Point::new(px(self.0.x), px(self.0.y))
     }
 
     /// Create from a GPUI Point with Pixels
     pub fn from_point_pixels(point: Point<Pixels>) -> Self {
-        Self(Vec2::new(point.x.0, point.y.0))
+        Self(Vec2::new(point.x.into(), point.y.into()))
     }
 
     /// Convert to a regular Point<f32>
@@ -392,13 +392,13 @@ mod tests {
 
     #[test]
     fn test_active_drag() {
-        let start = Point::new(Pixels(10.0), Pixels(20.0));
+        let start = Point::new(px(10.0), px(20.0));
         let mut drag = ActiveDrag::new_selection(start);
 
         assert_eq!(drag.start_position.x(), 10.0);
         assert_eq!(drag.start_position.y(), 20.0);
 
-        drag.update_position(Point::new(Pixels(15.0), Pixels(30.0)));
+        drag.update_position(Point::new(px(15.0), px(30.0)));
 
         let delta = drag.delta();
         assert_eq!(delta.x, 5.0);

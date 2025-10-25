@@ -146,7 +146,10 @@ impl LunaCanvas {
         cx: &mut Context<Self>,
     ) -> Self {
         let initial_viewport_px = window.viewport_size();
-        let initial_viewport = size(initial_viewport_px.width.0, initial_viewport_px.height.0);
+        let initial_viewport = size(
+            initial_viewport_px.width.into(),
+            initial_viewport_px.height.into(),
+        );
 
         // Create an initial viewport with reasonable size
         let viewport = Bounds {
@@ -787,13 +790,10 @@ impl LunaCanvas {
 
         // Convert to gpui::Bounds
         let gpui_viewport = gpui::Bounds {
-            origin: point(
-                gpui::Pixels(viewport.origin.x),
-                gpui::Pixels(viewport.origin.y),
-            ),
+            origin: point(gpui::px(viewport.origin.x), gpui::px(viewport.origin.y)),
             size: size(
-                gpui::Pixels(viewport.size.width),
-                gpui::Pixels(viewport.size.height),
+                gpui::px(viewport.size.width),
+                gpui::px(viewport.size.height),
             ),
         };
 
@@ -847,16 +847,12 @@ impl LunaCanvas {
         b: &gpui::Bounds<gpui::Pixels>,
     ) -> bool {
         // Check if one rectangle is to the left of the other
-        if a.origin.x.0 + a.size.width.0 < b.origin.x.0
-            || b.origin.x.0 + b.size.width.0 < a.origin.x.0
-        {
+        if a.origin.x + a.size.width < b.origin.x || b.origin.x + b.size.width < a.origin.x {
             return false;
         }
 
         // Check if one rectangle is above the other
-        if a.origin.y.0 + a.size.height.0 < b.origin.y.0
-            || b.origin.y.0 + b.size.height.0 < a.origin.y.0
-        {
+        if a.origin.y + a.size.height < b.origin.y || b.origin.y + b.size.height < a.origin.y {
             return false;
         }
 
