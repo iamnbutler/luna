@@ -298,9 +298,9 @@ impl From<gpui::BoxShadow> for Shadow {
     fn from(value: gpui::BoxShadow) -> Self {
         Shadow {
             color: value.color,
-            offset: ShadowOffset::new(value.offset.x.0, value.offset.y.0),
-            blur_radius: value.blur_radius.0,
-            spread_radius: value.spread_radius.0,
+            offset: ShadowOffset::new(value.offset.x.into(), value.offset.y.into()),
+            blur_radius: value.blur_radius.into(),
+            spread_radius: value.spread_radius.into(),
         }
     }
 }

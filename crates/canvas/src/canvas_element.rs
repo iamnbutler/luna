@@ -360,7 +360,7 @@ impl CanvasElement {
         }
 
         let position = event.position;
-        let canvas_point = point(position.x.0, position.y.0);
+        let canvas_point = point(position.x.into(), position.y.into());
 
         let active_tool = cx.active_tool().clone();
 
@@ -483,7 +483,7 @@ impl CanvasElement {
         // if so, clear it and fire any selection events
 
         let position = event.position;
-        let canvas_point = point(position.x.0, position.y.0);
+        let canvas_point = point(position.x, position.y);
         let app_state = canvas.app_state().clone().read(cx);
         let current_background_color = app_state.current_background_color.clone();
         let current_border_color = app_state.current_border_color.clone();
@@ -613,7 +613,7 @@ impl CanvasElement {
         cx: &mut Context<LunaCanvas>,
     ) {
         let position = event.position;
-        let canvas_point = point(position.x.0, position.y.0);
+        let canvas_point = point(position.x, position.y);
         let active_tool = *cx.active_tool().clone();
 
         // Handle active drag operations
@@ -636,10 +636,10 @@ impl CanvasElement {
                     if active_tool == Tool::Selection {
                         // Calculate the selection rectangle in canvas coordinates
                         let start_pos = active_drag.start_position;
-                        let min_x = start_pos.x().min(position.x.0);
-                        let min_y = start_pos.y().min(position.y.0);
-                        let max_x = start_pos.x().max(position.x.0);
-                        let max_y = start_pos.y().max(position.y.0);
+                        let min_x = start_pos.x().min(position.x.into());
+                        let min_y = start_pos.y().min(position.y.into());
+                        let max_x = start_pos.x().max(position.x.into());
+                        let max_y = start_pos.y().max(position.y.into());
 
                         // Convert to canvas coordinates
                         let min_point = canvas.window_to_canvas_point(Point::new(min_x, min_y));
@@ -700,9 +700,10 @@ impl CanvasElement {
 
                         let should_check_parent =
                             if let Some(last_pos) = active_drag.last_parent_check_position {
-                                let distance = ((position.x.0 - last_pos.x).powi(2)
-                                    + (position.y.0 - last_pos.y).powi(2))
-                                .sqrt();
+                                let x: f32 = position.x.into();
+                                let y: f32 = position.y.into();
+                                let distance =
+                                    ((x - last_pos.x).powi(2) + (y - last_pos.y).powi(2)).sqrt();
                                 distance > PARENT_CHECK_THRESHOLD
                             } else {
                                 true // First check
@@ -710,8 +711,10 @@ impl CanvasElement {
 
                         if should_check_parent {
                             // Get current canvas point to check for potential parent frames
-                            let canvas_point = canvas
-                                .window_to_canvas_point(Point::new(position.x.0, position.y.0));
+                            let canvas_point = canvas.window_to_canvas_point(Point::new(
+                                position.x.into(),
+                                position.y.into(),
+                            ));
 
                             // First, check if any selected nodes need to be unparented
                             // (they're no longer inside their parent's bounds)
@@ -813,7 +816,7 @@ impl CanvasElement {
 
                             // Update the last check position in the drag state
                             active_drag.last_parent_check_position =
-                                Some(Point::new(position.x.0, position.y.0));
+                                Some(Point::new(position.x.into(), position.y.into()));
                         }
 
                         // Put the active drag back after modifications
@@ -834,10 +837,11 @@ impl CanvasElement {
                         // Get the selected node
                         let selected_node_id = *canvas.selected_nodes().iter().next().unwrap();
                         if let Some(node) = canvas.get_node_mut(selected_node_id) {
+                            let (x, y): (f32, f32) = (position.x.into(), position.y.into());
                             // Convert window delta to canvas delta
                             let delta = Point::new(
-                                (position.x.0 - active_drag.start_position.x()) / zoom,
-                                (position.y.0 - active_drag.start_position.y()) / zoom,
+                                (x - active_drag.start_position.x()) / zoom,
+                                (y - active_drag.start_position.y()) / zoom,
                             );
 
                             // Check modifiers: shift for aspect ratio, option (alt) for resize from center
@@ -1156,7 +1160,7 @@ impl CanvasElement {
         cx: &mut Context<LunaCanvas>,
     ) {
         let position = event.position;
-        let canvas_point = point(position.x.0, position.y.0);
+        let canvas_point = point(position.x.into(), position.y.into());
 
         // Find node under cursor for hover effect
         let hovered = Self::find_top_node_at_point(canvas, canvas_point, false, cx);
@@ -1184,24 +1188,20 @@ impl CanvasElement {
             _ => return, // Don't draw for other drag types
         }
 
-        let min_x = round_to_pixel(Pixels(
-            active_drag
-                .start_position
-                .x()
-                .min(active_drag.current_position.x()),
-        ));
-        let min_y = round_to_pixel(Pixels(
-            active_drag
-                .start_position
-                .y()
-                .min(active_drag.current_position.y()),
-        ));
-        let width = round_to_pixel(Pixels(
-            (active_drag.start_position.x() - active_drag.current_position.x()).abs(),
-        ));
-        let height = round_to_pixel(Pixels(
-            (active_drag.start_position.y() - active_drag.current_position.y()).abs(),
-        ));
+        let min_x = round_to_pixel(px(active_drag
+            .start_position
+            .x()
+            .min(active_drag.current_position.x())));
+        let min_y = round_to_pixel(px(active_drag
+            .start_position
+            .y()
+            .min(active_drag.current_position.y())));
+        let width = round_to_pixel(px((active_drag.start_position.x()
+            - active_drag.current_position.x())
+        .abs()));
+        let height = round_to_pixel(px((active_drag.start_position.y()
+            - active_drag.current_position.y())
+        .abs()));
 
         window.paint_layer(layout.hitbox.bounds, |window| {
             let position = rounded_point(min_x, min_y);
@@ -1244,11 +1244,11 @@ impl CanvasElement {
         let height = (start_pos.y() - current_pos.y()).abs();
 
         // Round once after all coordinate conversions for pixel-perfect rendering
-        let position = rounded_point(Pixels(min_x), Pixels(min_y));
+        let position = rounded_point(px(min_x), px(min_y));
 
         let rect_bounds = Bounds {
             origin: position,
-            size: Size::new(Pixels(width), Pixels(height)),
+            size: Size::new(px(width), px(height)),
         };
 
         // Read canvas and app_state separately to avoid multiple borrows
@@ -1308,24 +1308,23 @@ impl CanvasElement {
                                 // Mouse wheel input - convert lines to pixels
                                 // Scale lines by a factor to make it feel natural
                                 // Convert lines to pixels - multiply by 30 for natural feel
-                                gpui::Point::new(
-                                    gpui::Pixels(lines.x * 30.0),
-                                    gpui::Pixels(lines.y * 30.0),
-                                )
+                                gpui::Point::new(gpui::px(lines.x * 30.0), gpui::px(lines.y * 30.0))
                             }
                         };
 
+                        let (x, y): (f32, f32) = (delta.x.into(), delta.y.into());
                         // Invert delta for natural feeling panning
-                        let inverted_delta =
-                            gpui::Point::new(gpui::Pixels(-delta.x.0), gpui::Pixels(-delta.y.0));
+                        let inverted_delta = gpui::Point::new(gpui::px(-x), gpui::px(-y));
+                        let (dx, dy): (f32, f32) =
+                            (inverted_delta.x.into(), inverted_delta.y.into());
 
                         // Get current canvas position through getter
                         let current_position = canvas.get_scroll_position();
 
                         // Calculate new position
                         let new_position = gpui::Point::new(
-                            current_position.x + inverted_delta.x.0 / canvas.zoom(),
-                            current_position.y + inverted_delta.y.0 / canvas.zoom(),
+                            current_position.x + dx / canvas.zoom(),
+                            current_position.y + dy / canvas.zoom(),
                         );
 
                         // Update canvas scroll position
@@ -1344,8 +1343,8 @@ impl CanvasElement {
             move |event: &MouseDownEvent, phase, window, cx| {
                 if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
                     // Check if click is outside UI panels (inspector on right, sidebar on left)
-                    let window_width = window.viewport_size().width.0;
-                    let click_x = event.position.x.0;
+                    let window_width: f32 = window.viewport_size().width.into();
+                    let click_x: f32 = event.position.x.into();
 
                     const SIDEBAR_WIDTH: f32 = 220.0; // From Sidebar::INITIAL_WIDTH
                     const INSPECTOR_WIDTH: f32 = 200.0; // From inspector.rs
@@ -1372,8 +1371,8 @@ impl CanvasElement {
             move |event: &MouseUpEvent, phase, window, cx| {
                 if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
                     // Check if release is outside UI panels
-                    let window_width = window.viewport_size().width.0;
-                    let click_x = event.position.x.0;
+                    let window_width: f32 = window.viewport_size().width.into();
+                    let click_x: f32 = event.position.x.into();
 
                     const SIDEBAR_WIDTH: f32 = 220.0;
                     const INSPECTOR_WIDTH: f32 = 200.0;
@@ -1399,8 +1398,8 @@ impl CanvasElement {
             move |event: &MouseMoveEvent, phase, window, cx| {
                 if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
                     // Check if mouse move is outside UI panels
-                    let window_width = window.viewport_size().width.0;
-                    let mouse_x = event.position.x.0;
+                    let window_width: f32 = window.viewport_size().width.into();
+                    let mouse_x: f32 = event.position.x.into();
 
                     const SIDEBAR_WIDTH: f32 = 220.0;
                     const INSPECTOR_WIDTH: f32 = 200.0;
@@ -1510,16 +1509,16 @@ impl CanvasElement {
 
                         // Apply zoom to size
                         let window_size = gpui::Size::new(
-                            gpui::Pixels(canvas_size.x * canvas.zoom()),
-                            gpui::Pixels(canvas_size.y * canvas.zoom()),
+                            gpui::px(canvas_size.x * canvas.zoom()),
+                            gpui::px(canvas_size.y * canvas.zoom()),
                         );
 
                         nodes_to_render.push(NodeRenderInfo {
                             node_id,
                             bounds: gpui::Bounds {
                                 origin: gpui::Point::new(
-                                    gpui::Pixels(window_pos.x),
-                                    gpui::Pixels(window_pos.y),
+                                    gpui::px(window_pos.x),
+                                    gpui::px(window_pos.y),
                                 ),
                                 size: window_size,
                             },
@@ -1572,11 +1571,11 @@ impl CanvasElement {
                         .iter()
                         .map(|shadow| gpui::BoxShadow {
                             offset: gpui::Point::new(
-                                gpui::Pixels(shadow.offset.x()),
-                                gpui::Pixels(shadow.offset.y()),
+                                gpui::px(shadow.offset.x()),
+                                gpui::px(shadow.offset.y()),
                             ),
-                            blur_radius: gpui::Pixels(shadow.blur_radius),
-                            spread_radius: gpui::Pixels(shadow.spread_radius),
+                            blur_radius: gpui::px(shadow.blur_radius),
+                            spread_radius: gpui::px(shadow.spread_radius),
                             color: shadow.color,
                         })
                         .collect();
@@ -1584,7 +1583,7 @@ impl CanvasElement {
                     // Use the dedicated shadow rendering function
                     window.paint_shadows(
                         transformed_bounds,
-                        gpui::Corners::all(gpui::Pixels(node_info.corner_radius)),
+                        gpui::Corners::all(gpui::px(node_info.corner_radius)),
                         &box_shadows,
                     );
                 }
@@ -1647,12 +1646,12 @@ impl CanvasElement {
                     // Create a slightly larger bounds for hover indicator
                     let hover_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            transformed_bounds.origin.x - gpui::Pixels(2.0),
-                            transformed_bounds.origin.y - gpui::Pixels(2.0),
+                            transformed_bounds.origin.x - gpui::px(2.0),
+                            transformed_bounds.origin.y - gpui::px(2.0),
                         ),
                         size: gpui::Size::new(
-                            transformed_bounds.size.width + gpui::Pixels(4.0),
-                            transformed_bounds.size.height + gpui::Pixels(4.0),
+                            transformed_bounds.size.width + gpui::px(4.0),
+                            transformed_bounds.size.height + gpui::px(4.0),
                         ),
                     };
 
@@ -1665,12 +1664,12 @@ impl CanvasElement {
                     // Create a slightly larger bounds for the parent indicator
                     let parent_indicator_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            transformed_bounds.origin.x - gpui::Pixels(3.0),
-                            transformed_bounds.origin.y - gpui::Pixels(3.0),
+                            transformed_bounds.origin.x - gpui::px(3.0),
+                            transformed_bounds.origin.y - gpui::px(3.0),
                         ),
                         size: gpui::Size::new(
-                            transformed_bounds.size.width + gpui::Pixels(6.0),
-                            transformed_bounds.size.height + gpui::Pixels(6.0),
+                            transformed_bounds.size.width + gpui::px(6.0),
+                            transformed_bounds.size.height + gpui::px(6.0),
                         ),
                     };
 
@@ -1684,12 +1683,12 @@ impl CanvasElement {
                     // Make the border thicker for more emphasis
                     let inner_border = gpui::Bounds {
                         origin: gpui::Point::new(
-                            transformed_bounds.origin.x - gpui::Pixels(2.0),
-                            transformed_bounds.origin.y - gpui::Pixels(2.0),
+                            transformed_bounds.origin.x - gpui::px(2.0),
+                            transformed_bounds.origin.y - gpui::px(2.0),
                         ),
                         size: gpui::Size::new(
-                            transformed_bounds.size.width + gpui::Pixels(4.0),
-                            transformed_bounds.size.height + gpui::Pixels(4.0),
+                            transformed_bounds.size.width + gpui::px(4.0),
+                            transformed_bounds.size.height + gpui::px(4.0),
                         ),
                     };
                     window.paint_quad(gpui::outline(
@@ -1728,12 +1727,12 @@ impl CanvasElement {
                     // Use the already calculated world bounds directly
                     let selection_bounds = gpui::Bounds {
                         origin: gpui::Point::new(
-                            node_info.bounds.origin.x - gpui::Pixels(2.0),
-                            node_info.bounds.origin.y - gpui::Pixels(2.0),
+                            node_info.bounds.origin.x - gpui::px(2.0),
+                            node_info.bounds.origin.y - gpui::px(2.0),
                         ),
                         size: gpui::Size::new(
-                            node_info.bounds.size.width + gpui::Pixels(4.0),
-                            node_info.bounds.size.height + gpui::Pixels(4.0),
+                            node_info.bounds.size.width + gpui::px(4.0),
+                            node_info.bounds.size.height + gpui::px(4.0),
                         ),
                     };
 
@@ -1759,37 +1758,34 @@ impl CanvasElement {
                         let corners = [
                             // Top-left
                             (
-                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
-                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.x - gpui::px(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.y - gpui::px(HALF_HANDLE - 0.5),
                             ),
                             // Top-right
                             (
                                 selection_bounds.origin.x + selection_bounds.size.width
-                                    - gpui::Pixels(HALF_HANDLE + 0.5),
-                                selection_bounds.origin.y - gpui::Pixels(HALF_HANDLE - 0.5),
+                                    - gpui::px(HALF_HANDLE + 0.5),
+                                selection_bounds.origin.y - gpui::px(HALF_HANDLE - 0.5),
                             ),
                             // Bottom-left
                             (
-                                selection_bounds.origin.x - gpui::Pixels(HALF_HANDLE - 0.5),
+                                selection_bounds.origin.x - gpui::px(HALF_HANDLE - 0.5),
                                 selection_bounds.origin.y + selection_bounds.size.height
-                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                    - gpui::px(HALF_HANDLE + 0.5),
                             ),
                             // Bottom-right
                             (
                                 selection_bounds.origin.x + selection_bounds.size.width
-                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                    - gpui::px(HALF_HANDLE + 0.5),
                                 selection_bounds.origin.y + selection_bounds.size.height
-                                    - gpui::Pixels(HALF_HANDLE + 0.5),
+                                    - gpui::px(HALF_HANDLE + 0.5),
                             ),
                         ];
 
                         for (x, y) in corners {
                             let handle_bounds = gpui::Bounds {
                                 origin: gpui::Point::new(x, y),
-                                size: gpui::Size::new(
-                                    gpui::Pixels(HANDLE_SIZE),
-                                    gpui::Pixels(HANDLE_SIZE),
-                                ),
+                                size: gpui::Size::new(gpui::px(HANDLE_SIZE), gpui::px(HANDLE_SIZE)),
                             };
 
                             window.paint_quad(gpui::fill(
@@ -1817,12 +1813,22 @@ impl CanvasElement {
 
                 for node_info in &nodes_to_render {
                     if selected_node_ids.contains(&node_info.node_id) {
-                        min_x = min_x.min(node_info.bounds.origin.x.0);
-                        min_y = min_y.min(node_info.bounds.origin.y.0);
-                        max_x =
-                            max_x.max(node_info.bounds.origin.x.0 + node_info.bounds.size.width.0);
-                        max_y =
-                            max_y.max(node_info.bounds.origin.y.0 + node_info.bounds.size.height.0);
+                        // this
+                        let (origin_x, origin_y): (f32, f32) = (
+                            node_info.bounds.origin.x.into(),
+                            node_info.bounds.origin.y.into(),
+                        );
+                        // and this have to be done because
+                        // Pixels.0 (the f32 value) is not pub
+                        // and there is no `.as_f32()` or `.f32()` method
+                        let (bounds_width, bounds_height): (f32, f32) = (
+                            node_info.bounds.size.width.into(),
+                            node_info.bounds.size.height.into(),
+                        );
+                        min_x = min_x.min(origin_x);
+                        min_y = min_y.min(origin_y);
+                        max_x = max_x.max(origin_x + bounds_width);
+                        max_y = max_y.max(origin_y + bounds_height);
                     }
                 }
 
@@ -1831,13 +1837,10 @@ impl CanvasElement {
                 {
                     // Create the group selection bounds with some padding
                     let group_selection_bounds = gpui::Bounds {
-                        origin: gpui::Point::new(
-                            gpui::Pixels(min_x - 5.0),
-                            gpui::Pixels(min_y - 5.0),
-                        ),
+                        origin: gpui::Point::new(gpui::px(min_x - 5.0), gpui::px(min_y - 5.0)),
                         size: gpui::Size::new(
-                            gpui::Pixels(max_x - min_x + 10.0),
-                            gpui::Pixels(max_y - min_y + 10.0),
+                            gpui::px(max_x - min_x + 10.0),
+                            gpui::px(max_y - min_y + 10.0),
                         ),
                     };
 
@@ -1865,6 +1868,7 @@ impl Element for CanvasElement {
     fn request_layout(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>, // todo: bind inspector ids for canvas inspection
         window: &mut gpui::Window,
         cx: &mut gpui::App,
     ) -> (gpui::LayoutId, ()) {
@@ -1890,6 +1894,7 @@ impl Element for CanvasElement {
     fn prepaint(
         &mut self,
         id: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: gpui::Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut gpui::Window,
@@ -1909,7 +1914,7 @@ impl Element for CanvasElement {
                 // todo: we probably need somethink like zed::editor::EditorSnapshot here
 
                 let style = self.style.clone();
-                let hitbox = window.insert_hitbox(bounds, false);
+                let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::BlockMouse); // todo: this was a bool, is BlockMouse right?
 
                 // Check for active drags in the canvas itself
                 let has_active_drag = {
@@ -1930,6 +1935,7 @@ impl Element for CanvasElement {
     fn paint(
         &mut self,
         _: Option<&gpui::GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
         bounds: gpui::Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         layout: &mut Self::PrepaintState,
@@ -1979,6 +1985,11 @@ impl Element for CanvasElement {
                 }
             });
         })
+    }
+
+    // todo: source location for inspector
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
     }
 }
 

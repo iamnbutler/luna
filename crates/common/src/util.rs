@@ -11,7 +11,7 @@
 
 #![allow(unused, dead_code)]
 
-use gpui::{Keystroke, Modifiers, Pixels, Point};
+use gpui::{px, Keystroke, Modifiers, Pixels, Point};
 
 /// Rounds a floating-point pixel value to the nearest integer pixel
 ///
@@ -19,7 +19,7 @@ use gpui::{Keystroke, Modifiers, Pixels, Point};
 /// which is essential for crisp rendering on displays. Without proper rounding,
 /// elements can appear blurry due to anti-aliasing across pixel boundaries.
 pub fn round_to_pixel(value: Pixels) -> Pixels {
-    Pixels(value.0.round())
+    value.round()
 }
 
 /// Creates a Point with both x and y coordinates rounded to integer pixels
