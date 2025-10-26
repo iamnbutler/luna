@@ -153,7 +153,11 @@ impl InteractivePropertyInput {
         self.content = match &self.value {
             None => String::new(),
             Some(values) if values.is_empty() => String::new(),
-            Some(values) if values.len() == 1 => format!("{}", values[0]),
+            Some(values) if values.len() == 1 => {
+                // Round to one decimal place for display
+                let rounded = (values[0] * 10.0).round() / 10.0;
+                format!("{}", rounded)
+            }
             Some(_) => String::from("Mixed"),
         };
 

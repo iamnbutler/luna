@@ -96,6 +96,7 @@ pub struct Inspector {
     corner_radius_input: Entity<InteractivePropertyInput>,
     // Track last selection to avoid unnecessary updates
     last_selection: HashSet<NodeId>,
+    needs_property_update: bool,
 }
 
 impl Inspector {
@@ -152,9 +153,9 @@ impl Inspector {
             )
         });
 
-        Self {
+        let mut inspector = Self {
             state,
-            canvas,
+            canvas: canvas.clone(),
             properties: InspectorProperties::default(),
             x_input,
             y_input,
@@ -163,7 +164,24 @@ impl Inspector {
             border_width_input,
             corner_radius_input,
             last_selection: HashSet::new(),
-        }
+            needs_property_update: true,
+        };
+
+        // Subscribe to canvas changes
+        cx.observe(&canvas, |inspector: &mut Inspector, canvas, cx| {
+            let current_selection = canvas.read(cx).selected_nodes().clone();
+            let selection_changed = current_selection != inspector.last_selection;
+            if selection_changed {
+                inspector.last_selection = current_selection;
+            }
+            // Update properties on any canvas change (selection change or node modification)
+            inspector.needs_property_update = true;
+            cx.notify();
+        })
+        .detach();
+
+        // Initial selection will be empty
+        inspector
     }
 
     /// Updates the inspector properties based on the currently selected nodes
@@ -538,11 +556,10 @@ impl Render for Inspector {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::default();
 
-        // Check if selection has changed
-        let current_selection = self.canvas.read(cx).selected_nodes().clone();
-        let selection_changed = current_selection != self.last_selection;
-        if selection_changed {
-            self.last_selection = current_selection;
+        // Update properties if needed (deferred from observer)
+        if self.needs_property_update {
+            self.needs_property_update = false;
+            self.update_selected_node_properties(window, cx);
         }
 
         // Update properties - skip focused inputs to prevent disrupting user input
