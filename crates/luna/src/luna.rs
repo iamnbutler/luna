@@ -304,7 +304,7 @@ impl Luna {
                         .ok()
                         .map(std::path::PathBuf::from)
                         .unwrap_or_else(|| std::path::PathBuf::from("/"));
-                    cx.prompt_for_new_path(&home_dir, None)
+                    cx.prompt_for_new_path(&home_dir, Some("untitled.luna"))
                 })?
                 .await??;
 
