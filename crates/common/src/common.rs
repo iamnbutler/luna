@@ -9,5 +9,7 @@ pub mod color;
 pub mod coordinates;
 pub mod interactivity;
 pub mod keymap;
+#[cfg(test)]
+pub mod test;
 pub mod transform;
 pub mod util;

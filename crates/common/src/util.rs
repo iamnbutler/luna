@@ -9,9 +9,7 @@
 //! - Input processing (keystroke parsing and creation)
 //! - General-purpose helpers that are shared across multiple components
 
-#![allow(unused, dead_code)]
-
-use gpui::{px, Keystroke, Modifiers, Pixels, Point};
+use gpui::{Keystroke, Modifiers, Pixels, Point};
 
 /// Rounds a floating-point pixel value to the nearest integer pixel
 ///
@@ -100,5 +98,15 @@ pub fn keystroke_builder(str: &str) -> Keystroke {
         modifiers,
         key: key.into(),
         key_char,
+    }
+}
+
+pub trait PixelsExt {
+    fn f32(self) -> f32;
+}
+
+impl PixelsExt for gpui::Pixels {
+    fn f32(self) -> f32 {
+        self.into()
     }
 }

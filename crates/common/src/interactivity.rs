@@ -1,6 +1,8 @@
 use glam::Vec2;
 use gpui::{px, Pixels, Point};
 
+use crate::util::PixelsExt as _;
+
 /// Position in drag coordinates (screen pixels)
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub struct DragPosition(Vec2);
@@ -38,7 +40,7 @@ impl DragPosition {
 
     /// Create from a GPUI Point with Pixels
     pub fn from_point_pixels(point: Point<Pixels>) -> Self {
-        Self(Vec2::new(point.x.into(), point.y.into()))
+        Self(Vec2::new(point.x.f32(), point.y.f32()))
     }
 
     /// Convert to a regular Point<f32>
