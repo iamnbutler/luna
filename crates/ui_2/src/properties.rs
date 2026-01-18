@@ -5,10 +5,10 @@ use crate::input::{input, InputColors, InputState, InputStateEvent};
 use canvas_2::Canvas;
 use glam::Vec2;
 use gpui::{
-    div, px, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Subscription, Window,
+    div, px, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
+    Styled, Subscription, Window,
 };
-use node_2::{ShapeId, ShapeKind};
+use node_2::{ShapeId, ShapeKind, Stroke};
 use theme_2::Theme;
 
 /// Properties panel showing details of selected shapes.
@@ -21,10 +21,14 @@ pub struct PropertiesPanel {
     // Input states for size
     w_input: Entity<InputState>,
     h_input: Entity<InputState>,
+    // Input states for stroke
+    stroke_width_input: Entity<InputState>,
+    stroke_color_input: Entity<InputState>,
     // Track current selection and values to know when to update inputs
     last_selection_id: Option<ShapeId>,
     last_position: Vec2,
     last_size: Vec2,
+    last_stroke: Option<Stroke>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -34,12 +38,16 @@ impl PropertiesPanel {
         let y_input = cx.new(|cx| InputState::new_singleline(cx));
         let w_input = cx.new(|cx| InputState::new_singleline(cx));
         let h_input = cx.new(|cx| InputState::new_singleline(cx));
+        let stroke_width_input = cx.new(|cx| InputState::new_singleline(cx));
+        let stroke_color_input = cx.new(|cx| InputState::new_singleline(cx));
 
         // Subscribe to input changes
         let x_sub = cx.subscribe(&x_input, Self::on_x_changed);
         let y_sub = cx.subscribe(&y_input, Self::on_y_changed);
         let w_sub = cx.subscribe(&w_input, Self::on_w_changed);
         let h_sub = cx.subscribe(&h_input, Self::on_h_changed);
+        let stroke_width_sub = cx.subscribe(&stroke_width_input, Self::on_stroke_width_changed);
+        let stroke_color_sub = cx.subscribe(&stroke_color_input, Self::on_stroke_color_changed);
 
         // Subscribe to canvas changes to update inputs
         let canvas_sub = cx.subscribe(&canvas, Self::on_canvas_changed);
@@ -51,10 +59,21 @@ impl PropertiesPanel {
             y_input,
             w_input,
             h_input,
+            stroke_width_input,
+            stroke_color_input,
             last_selection_id: None,
             last_position: Vec2::ZERO,
             last_size: Vec2::ZERO,
-            _subscriptions: vec![x_sub, y_sub, w_sub, h_sub, canvas_sub],
+            last_stroke: None,
+            _subscriptions: vec![
+                x_sub,
+                y_sub,
+                w_sub,
+                h_sub,
+                stroke_width_sub,
+                stroke_color_sub,
+                canvas_sub,
+            ],
         }
     }
 
@@ -76,18 +95,20 @@ impl PropertiesPanel {
                 .shapes
                 .iter()
                 .find(|s| canvas.selection.contains(&s.id))
-                .map(|shape| (shape.id, shape.position, shape.size))
+                .map(|shape| (shape.id, shape.position, shape.size, shape.stroke.clone()))
         };
 
-        if let Some((shape_id, position, size)) = shape_data {
+        if let Some((shape_id, position, size, stroke)) = shape_data {
             let selection_changed = self.last_selection_id != Some(shape_id);
             let position_changed = self.last_position != position;
             let size_changed = self.last_size != size;
+            let stroke_changed = self.last_stroke != stroke;
 
             // Update tracking
             self.last_selection_id = Some(shape_id);
             self.last_position = position;
             self.last_size = size;
+            self.last_stroke = stroke.clone();
 
             // Update inputs if values changed, but only if not focused (avoid fighting with user)
             if selection_changed || position_changed {
@@ -115,10 +136,26 @@ impl PropertiesPanel {
                     });
                 }
             }
+
+            if selection_changed || stroke_changed {
+                if let Some(s) = &stroke {
+                    if !self.stroke_width_input.focus_handle(cx).is_focused(window) {
+                        self.stroke_width_input.update(cx, |input, cx| {
+                            input.set_content(format!("{:.0}", s.width), cx);
+                        });
+                    }
+                    if !self.stroke_color_input.focus_handle(cx).is_focused(window) {
+                        self.stroke_color_input.update(cx, |input, cx| {
+                            input.set_content(hsla_to_hex(s.color), cx);
+                        });
+                    }
+                }
+            }
         } else {
             self.last_selection_id = None;
             self.last_position = Vec2::ZERO;
             self.last_size = Vec2::ZERO;
+            self.last_stroke = None;
         }
     }
 
@@ -234,6 +271,72 @@ impl PropertiesPanel {
         }
     }
 
+    fn on_stroke_width_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_stroke_width(cx);
+        }
+    }
+
+    fn on_stroke_color_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_stroke_color(cx);
+        }
+    }
+
+    fn apply_stroke_width(&mut self, cx: &mut Context<Self>) {
+        let value = self.stroke_width_input.read(cx).content().to_string();
+        if let Ok(width) = value.parse::<f32>() {
+            if width >= 0.0 {
+                self.canvas.update(cx, |canvas, cx| {
+                    if let Some(shape) = canvas
+                        .shapes
+                        .iter_mut()
+                        .find(|s| canvas.selection.contains(&s.id))
+                    {
+                        if let Some(stroke) = &mut shape.stroke {
+                            stroke.width = width;
+                        } else {
+                            // Create stroke with default color if none exists
+                            shape.stroke = Some(Stroke::new(self.theme.default_stroke, width));
+                        }
+                        cx.notify();
+                    }
+                });
+            }
+        }
+    }
+
+    fn apply_stroke_color(&mut self, cx: &mut Context<Self>) {
+        let value = self.stroke_color_input.read(cx).content().to_string();
+        if let Some(color) = hex_to_hsla(&value) {
+            self.canvas.update(cx, |canvas, cx| {
+                if let Some(shape) = canvas
+                    .shapes
+                    .iter_mut()
+                    .find(|s| canvas.selection.contains(&s.id))
+                {
+                    if let Some(stroke) = &mut shape.stroke {
+                        stroke.color = color;
+                    } else {
+                        // Create stroke with default width if none exists
+                        shape.stroke = Some(Stroke::new(color, 2.0));
+                    }
+                    cx.notify();
+                }
+            });
+        }
+    }
+
     fn input_colors(&self) -> InputColors {
         InputColors {
             selection: self.theme.selection.opacity(0.3),
@@ -321,12 +424,40 @@ impl Render for PropertiesPanel {
                     theme,
                     shape.fill.as_ref().map(|f| f.color),
                 ))
-                // Stroke (read-only for now)
-                .child(property_section_stroke(
-                    "Stroke",
-                    theme,
-                    shape.stroke.as_ref(),
-                ))
+                // Stroke
+                .child(
+                    v_stack()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.ui_text_muted)
+                                .child("Stroke"),
+                        )
+                        .child(
+                            h_stack()
+                                .gap(px(8.0))
+                                .items_center()
+                                .child(stroke_color_swatch(
+                                    shape.stroke.as_ref().map(|s| s.color),
+                                    theme,
+                                ))
+                                .child(input_field(
+                                    "",
+                                    &self.stroke_color_input,
+                                    theme,
+                                    &colors,
+                                    cx,
+                                ))
+                                .child(input_field(
+                                    "W",
+                                    &self.stroke_width_input,
+                                    theme,
+                                    &colors,
+                                    cx,
+                                )),
+                        ),
+                )
         } else {
             div()
                 .text_sm()
@@ -418,41 +549,107 @@ fn property_section_color(
         )
 }
 
-fn property_section_stroke(
-    label: &str,
-    theme: &Theme,
-    stroke: Option<&node_2::Stroke>,
-) -> impl IntoElement {
-    v_stack()
-        .gap(px(4.0))
-        .child(
-            div()
-                .text_xs()
-                .text_color(theme.ui_text_muted)
-                .child(label.to_string()),
-        )
-        .child(if let Some(s) = stroke {
-            h_stack()
-                .gap(px(8.0))
-                .child(
-                    div()
-                        .size(px(20.0))
-                        .rounded(px(2.0))
-                        .border_1()
-                        .border_color(theme.ui_border)
-                        .bg(s.color),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(theme.ui_text)
-                        .child(format!("{:.0}px", s.width)),
-                )
-        } else {
-            h_stack().child(div().text_xs().text_color(theme.ui_text_muted).child("None"))
-        })
+fn stroke_color_swatch(color: Option<Hsla>, theme: &Theme) -> impl IntoElement {
+    div()
+        .size(px(20.0))
+        .rounded(px(2.0))
+        .border_1()
+        .border_color(theme.ui_border)
+        .bg(color.unwrap_or(gpui::hsla(0.0, 0.0, 0.9, 1.0)))
 }
 
 fn format_color(c: gpui::Hsla) -> String {
     format!("hsla({:.0}, {:.0}%, {:.0}%)", c.h * 360.0, c.s * 100.0, c.l * 100.0)
+}
+
+/// Convert HSLA color to hex string (e.g., "#FF0000")
+fn hsla_to_hex(c: Hsla) -> String {
+    // Convert HSL to RGB
+    let (r, g, b) = hsl_to_rgb(c.h, c.s, c.l);
+    format!("#{:02X}{:02X}{:02X}", r, g, b)
+}
+
+/// Convert hex string to HSLA color
+fn hex_to_hsla(hex: &str) -> Option<Hsla> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 {
+        return None;
+    }
+
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+
+    let (h, s, l) = rgb_to_hsl(r, g, b);
+    Some(gpui::hsla(h, s, l, 1.0))
+}
+
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+    if s == 0.0 {
+        let v = (l * 255.0) as u8;
+        return (v, v, v);
+    }
+
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let p = 2.0 * l - q;
+
+    let r = hue_to_rgb(p, q, h + 1.0 / 3.0);
+    let g = hue_to_rgb(p, q, h);
+    let b = hue_to_rgb(p, q, h - 1.0 / 3.0);
+
+    ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+}
+
+fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 1.0 / 2.0 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
+    p
+}
+
+fn rgb_to_hsl(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
+    let r = r as f32 / 255.0;
+    let g = g as f32 / 255.0;
+    let b = b as f32 / 255.0;
+
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let l = (max + min) / 2.0;
+
+    if max == min {
+        return (0.0, 0.0, l);
+    }
+
+    let d = max - min;
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
+
+    let h = if max == r {
+        ((g - b) / d + if g < b { 6.0 } else { 0.0 }) / 6.0
+    } else if max == g {
+        ((b - r) / d + 2.0) / 6.0
+    } else {
+        ((r - g) / d + 4.0) / 6.0
+    };
+
+    (h, s, l)
 }
