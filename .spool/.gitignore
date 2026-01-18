@@ -1,0 +1,12 @@
+# Derived files - rebuilt from events on checkout/merge
+# These are caches for fast queries, not source of truth
+
+# Task index: maps task_id -> status, date range, file locations
+.index.json
+
+# Materialized state: current snapshot of all tasks
+.state.json
+
+# Any temporary files from tooling
+*.tmp
+*.bak

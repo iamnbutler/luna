@@ -3,10 +3,13 @@ members = [
     "crates/assets",
     "crates/common",
     "crates/node",
+    "crates/node_2",
     "crates/luna",
     "crates/theme",
+    "crates/theme_2",
     "crates/ui",
     "crates/canvas",
+    "crates/canvas_2",
     "crates/scene_graph",
     "crates/project",
 ]
