@@ -44,4 +44,5 @@ taffy = { workspace = true }
 theme = { path = "../theme" }
 theme_2 = { path = "../theme_2" }
 ui = { path = "../ui" }
+ui_2 = { path = "../ui_2" }
 uuid = { workspace = true }

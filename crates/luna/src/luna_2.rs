@@ -7,11 +7,12 @@ use canvas_2::{Canvas, CanvasElement, CanvasEvent, Tool};
 use glam::Vec2;
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable,
-    IntoElement, KeyBinding, Menu, MenuItem, Subscription, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowOptions,
+    IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Styled, Subscription, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowOptions,
 };
 use node_2::Shape;
 use theme_2::Theme;
+use ui_2::{LayerList, PropertiesPanel};
 
 mod assets;
 
@@ -33,6 +34,8 @@ actions!(
 /// Main application component
 struct Luna {
     canvas: Entity<Canvas>,
+    layer_list: Entity<LayerList>,
+    properties: Entity<PropertiesPanel>,
     focus_handle: FocusHandle,
     theme: Theme,
     _subscriptions: Vec<Subscription>,
@@ -43,6 +46,8 @@ impl Luna {
         let theme = Theme::light();
         let focus_handle = cx.focus_handle();
         let canvas = cx.new(|cx| Canvas::new(theme.clone(), cx));
+        let layer_list = cx.new(|_| LayerList::new(canvas.clone(), theme.clone()));
+        let properties = cx.new(|_| PropertiesPanel::new(canvas.clone(), theme.clone()));
 
         // Add some example shapes
         canvas.update(cx, |canvas, cx| {
@@ -59,6 +64,8 @@ impl Luna {
 
         Luna {
             canvas,
+            layer_list,
+            properties,
             focus_handle,
             theme,
             _subscriptions: vec![canvas_subscription],
@@ -167,6 +174,7 @@ impl Render for Luna {
             .left_0()
             .size_full()
             .flex()
+            .flex_row()
             .font_family("Berkeley Mono")
             .text_xs()
             .bg(self.theme.ui_background)
@@ -182,7 +190,27 @@ impl Render for Luna {
             .on_action(cx.listener(Self::delete_selected))
             .on_action(cx.listener(Self::handle_cancel))
             .on_action(cx.listener(Self::new_file))
-            .child(CanvasElement::new(self.canvas.clone()))
+            // Left: Layer list
+            .child(
+                div()
+                    .p(px(8.0))
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.layer_list.clone()),
+            )
+            // Center: Canvas (takes remaining space)
+            .child(
+                div()
+                    .flex_1()
+                    .h_full()
+                    .child(CanvasElement::new(self.canvas.clone())),
+            )
+            // Right: Properties panel
+            .child(
+                div()
+                    .p(px(8.0))
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.properties.clone()),
+            )
     }
 }
 

@@ -1,0 +1,12 @@
+[package]
+name = "ui_2"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+canvas_2 = { path = "../canvas_2" }
+glam = { workspace = true }
+gpui = { workspace = true }
+node_2 = { path = "../node_2" }
+theme_2 = { path = "../theme_2" }

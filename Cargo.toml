@@ -8,6 +8,7 @@ members = [
     "crates/theme",
     "crates/theme_2",
     "crates/ui",
+    "crates/ui_2",
     "crates/canvas",
     "crates/canvas_2",
     "crates/scene_graph",
