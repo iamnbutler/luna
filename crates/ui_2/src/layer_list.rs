@@ -36,15 +36,16 @@ impl Render for LayerList {
             .map(|(idx, shape)| {
                 let id = shape.id;
                 let is_selected = selection.contains(&id);
-                let kind_label = match shape.kind {
+                let kind_icon = match shape.kind {
                     ShapeKind::Rectangle => "▢",
                     ShapeKind::Ellipse => "○",
                 };
-                let name: SharedString = format!("{} Shape {}", kind_label, shapes.len() - idx).into();
+                let name: SharedString = format!("Shape {}", shapes.len() - idx).into();
                 let item_id: SharedString = format!("layer-{}", id).into();
 
                 LayerItem {
                     id: item_id,
+                    icon: kind_icon.into(),
                     name,
                     is_selected,
                     theme: theme.clone(),
@@ -70,6 +71,7 @@ impl Render for LayerList {
 /// A single layer item.
 struct LayerItem {
     id: SharedString,
+    icon: SharedString,
     name: SharedString,
     is_selected: bool,
     theme: Theme,
@@ -92,10 +94,15 @@ impl IntoElement for LayerItem {
         };
 
         let hover_bg = self.theme.hover;
+        let muted = self.theme.ui_text_muted;
 
         div()
             .id(self.id.clone())
             .w_full()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(6.0))
             .px(px(8.0))
             .py(px(4.0))
             .bg(bg)
@@ -106,6 +113,16 @@ impl IntoElement for LayerItem {
             .text_color(self.theme.ui_text)
             .cursor_pointer()
             .hover(move |d| d.bg(hover_bg))
+            // Fixed-width icon container
+            .child(
+                div()
+                    .w(px(16.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(muted)
+                    .child(self.icon),
+            )
             .child(self.name)
     }
 }
