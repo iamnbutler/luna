@@ -1,9 +1,9 @@
 use crate::canvas::{Canvas, DragState, Tool};
 use glam::Vec2;
 use gpui::{
-    point, px, size, App, BorderStyle, Bounds, ContentMask, DispatchPhase, Element, ElementId,
-    Entity, Hitbox, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
+    point, px, size, transparent_black, App, BorderStyle, Bounds, ContentMask, DispatchPhase,
+    Element, ElementId, Entity, Hitbox, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, PaintQuad, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
 };
 use node_2::ShapeKind;
 
@@ -130,23 +130,30 @@ impl Element for CanvasElement {
 
                 // Paint stroke
                 if let Some(stroke) = &shape.stroke {
+                    let stroke_width = px(stroke.width * viewport.zoom);
                     match shape.kind {
                         ShapeKind::Rectangle => {
-                            window.paint_quad(gpui::outline(
-                                screen_bounds,
-                                stroke.color,
-                                BorderStyle::Solid,
-                            ).corner_radii(corner_radius));
+                            window.paint_quad(PaintQuad {
+                                bounds: screen_bounds,
+                                corner_radii: corner_radius.into(),
+                                background: transparent_black().into(),
+                                border_widths: stroke_width.into(),
+                                border_color: stroke.color.into(),
+                                border_style: BorderStyle::Solid,
+                            });
                         }
                         ShapeKind::Ellipse => {
                             let w: f32 = screen_bounds.size.width.into();
                             let h: f32 = screen_bounds.size.height.into();
                             let radius = px(w.min(h) / 2.0);
-                            window.paint_quad(gpui::outline(
-                                screen_bounds,
-                                stroke.color,
-                                BorderStyle::Solid,
-                            ).corner_radii(radius));
+                            window.paint_quad(PaintQuad {
+                                bounds: screen_bounds,
+                                corner_radii: radius.into(),
+                                background: transparent_black().into(),
+                                border_widths: stroke_width.into(),
+                                border_color: stroke.color.into(),
+                                border_style: BorderStyle::Solid,
+                            });
                         }
                     }
                 }
