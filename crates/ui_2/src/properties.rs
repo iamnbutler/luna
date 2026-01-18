@@ -1,27 +1,229 @@
 //! Properties panel for selected shapes.
 
 use crate::components::{h_stack, panel, v_stack};
+use crate::input::{input, InputColors, InputState, InputStateEvent};
 use canvas_2::Canvas;
 use gpui::{
-    div, px, Context, Entity, IntoElement, ParentElement, Render, Styled, Window,
+    div, px, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription,
+    Window,
 };
-use node_2::ShapeKind;
+use node_2::{ShapeId, ShapeKind};
 use theme_2::Theme;
 
 /// Properties panel showing details of selected shapes.
 pub struct PropertiesPanel {
     canvas: Entity<Canvas>,
     theme: Theme,
+    // Input states for position
+    x_input: Entity<InputState>,
+    y_input: Entity<InputState>,
+    // Input states for size
+    w_input: Entity<InputState>,
+    h_input: Entity<InputState>,
+    // Track current selection to know when to update inputs
+    last_selection_id: Option<ShapeId>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl PropertiesPanel {
-    pub fn new(canvas: Entity<Canvas>, theme: Theme) -> Self {
-        Self { canvas, theme }
+    pub fn new(canvas: Entity<Canvas>, theme: Theme, cx: &mut Context<Self>) -> Self {
+        let x_input = cx.new(|cx| InputState::new_singleline(cx));
+        let y_input = cx.new(|cx| InputState::new_singleline(cx));
+        let w_input = cx.new(|cx| InputState::new_singleline(cx));
+        let h_input = cx.new(|cx| InputState::new_singleline(cx));
+
+        // Subscribe to input changes
+        let x_sub = cx.subscribe(&x_input, Self::on_x_changed);
+        let y_sub = cx.subscribe(&y_input, Self::on_y_changed);
+        let w_sub = cx.subscribe(&w_input, Self::on_w_changed);
+        let h_sub = cx.subscribe(&h_input, Self::on_h_changed);
+
+        // Subscribe to canvas changes to update inputs
+        let canvas_sub = cx.subscribe(&canvas, Self::on_canvas_changed);
+
+        Self {
+            canvas,
+            theme,
+            x_input,
+            y_input,
+            w_input,
+            h_input,
+            last_selection_id: None,
+            _subscriptions: vec![x_sub, y_sub, w_sub, h_sub, canvas_sub],
+        }
+    }
+
+    fn on_canvas_changed(
+        &mut self,
+        _canvas: Entity<Canvas>,
+        _event: &canvas_2::CanvasEvent,
+        cx: &mut Context<Self>,
+    ) {
+        // Refresh inputs when canvas changes
+        self.sync_inputs_from_canvas(cx);
+    }
+
+    fn sync_inputs_from_canvas(&mut self, cx: &mut Context<Self>) {
+        // Extract data from canvas first to avoid borrow issues
+        let shape_data = {
+            let canvas = self.canvas.read(cx);
+            canvas
+                .shapes
+                .iter()
+                .find(|s| canvas.selection.contains(&s.id))
+                .map(|shape| (shape.id, shape.position, shape.size))
+        };
+
+        if let Some((shape_id, position, size)) = shape_data {
+            // Only update if selection changed or this is first sync
+            if self.last_selection_id != Some(shape_id) {
+                self.last_selection_id = Some(shape_id);
+
+                // Update input values
+                self.x_input.update(cx, |input, cx| {
+                    input.set_content(format!("{:.0}", position.x), cx);
+                });
+                self.y_input.update(cx, |input, cx| {
+                    input.set_content(format!("{:.0}", position.y), cx);
+                });
+                self.w_input.update(cx, |input, cx| {
+                    input.set_content(format!("{:.0}", size.x), cx);
+                });
+                self.h_input.update(cx, |input, cx| {
+                    input.set_content(format!("{:.0}", size.y), cx);
+                });
+            }
+        } else {
+            self.last_selection_id = None;
+        }
+    }
+
+    fn on_x_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_position_x(cx);
+        }
+    }
+
+    fn on_y_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_position_y(cx);
+        }
+    }
+
+    fn on_w_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_size_w(cx);
+        }
+    }
+
+    fn on_h_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_size_h(cx);
+        }
+    }
+
+    fn apply_position_x(&mut self, cx: &mut Context<Self>) {
+        let value = self.x_input.read(cx).content().to_string();
+        if let Ok(x) = value.parse::<f32>() {
+            self.canvas.update(cx, |canvas, cx| {
+                if let Some(shape) = canvas
+                    .shapes
+                    .iter_mut()
+                    .find(|s| canvas.selection.contains(&s.id))
+                {
+                    shape.position.x = x;
+                    cx.notify();
+                }
+            });
+        }
+    }
+
+    fn apply_position_y(&mut self, cx: &mut Context<Self>) {
+        let value = self.y_input.read(cx).content().to_string();
+        if let Ok(y) = value.parse::<f32>() {
+            self.canvas.update(cx, |canvas, cx| {
+                if let Some(shape) = canvas
+                    .shapes
+                    .iter_mut()
+                    .find(|s| canvas.selection.contains(&s.id))
+                {
+                    shape.position.y = y;
+                    cx.notify();
+                }
+            });
+        }
+    }
+
+    fn apply_size_w(&mut self, cx: &mut Context<Self>) {
+        let value = self.w_input.read(cx).content().to_string();
+        if let Ok(w) = value.parse::<f32>() {
+            if w > 0.0 {
+                self.canvas.update(cx, |canvas, cx| {
+                    if let Some(shape) = canvas
+                        .shapes
+                        .iter_mut()
+                        .find(|s| canvas.selection.contains(&s.id))
+                    {
+                        shape.size.x = w;
+                        cx.notify();
+                    }
+                });
+            }
+        }
+    }
+
+    fn apply_size_h(&mut self, cx: &mut Context<Self>) {
+        let value = self.h_input.read(cx).content().to_string();
+        if let Ok(h) = value.parse::<f32>() {
+            if h > 0.0 {
+                self.canvas.update(cx, |canvas, cx| {
+                    if let Some(shape) = canvas
+                        .shapes
+                        .iter_mut()
+                        .find(|s| canvas.selection.contains(&s.id))
+                    {
+                        shape.size.y = h;
+                        cx.notify();
+                    }
+                });
+            }
+        }
+    }
+
+    fn input_colors(&self) -> InputColors {
+        InputColors {
+            selection: self.theme.selection.opacity(0.3),
+            cursor: self.theme.selection,
+            placeholder: self.theme.ui_text_muted,
+        }
     }
 }
 
 impl Render for PropertiesPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Sync inputs if needed
+        self.sync_inputs_from_canvas(cx);
+
         let canvas = self.canvas.read(cx);
         let theme = &self.theme;
 
@@ -31,6 +233,8 @@ impl Render for PropertiesPanel {
             .iter()
             .filter(|s| canvas.selection.contains(&s.id))
             .collect();
+
+        let colors = self.input_colors();
 
         let content = if selected.is_empty() {
             div()
@@ -54,30 +258,46 @@ impl Render for PropertiesPanel {
                         .child(kind_name),
                 )
                 // Position
-                .child(property_section(
-                    "Position",
-                    theme,
-                    vec![
-                        ("X", format!("{:.0}", shape.position.x)),
-                        ("Y", format!("{:.0}", shape.position.y)),
-                    ],
-                ))
+                .child(
+                    v_stack()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.ui_text_muted)
+                                .child("Position"),
+                        )
+                        .child(
+                            h_stack()
+                                .gap(px(8.0))
+                                .child(input_field("X", &self.x_input, theme, &colors, cx))
+                                .child(input_field("Y", &self.y_input, theme, &colors, cx)),
+                        ),
+                )
                 // Size
-                .child(property_section(
-                    "Size",
-                    theme,
-                    vec![
-                        ("W", format!("{:.0}", shape.size.x)),
-                        ("H", format!("{:.0}", shape.size.y)),
-                    ],
-                ))
-                // Fill
+                .child(
+                    v_stack()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.ui_text_muted)
+                                .child("Size"),
+                        )
+                        .child(
+                            h_stack()
+                                .gap(px(8.0))
+                                .child(input_field("W", &self.w_input, theme, &colors, cx))
+                                .child(input_field("H", &self.h_input, theme, &colors, cx)),
+                        ),
+                )
+                // Fill (read-only for now)
                 .child(property_section_color(
                     "Fill",
                     theme,
                     shape.fill.as_ref().map(|f| f.color),
                 ))
-                // Stroke
+                // Stroke (read-only for now)
                 .child(property_section_stroke(
                     "Stroke",
                     theme,
@@ -104,29 +324,13 @@ impl Render for PropertiesPanel {
     }
 }
 
-fn property_section(
+fn input_field(
     label: &str,
+    input_state: &Entity<InputState>,
     theme: &Theme,
-    values: Vec<(&str, String)>,
+    colors: &InputColors,
+    cx: &gpui::App,
 ) -> impl IntoElement {
-    v_stack()
-        .gap(px(4.0))
-        .child(
-            div()
-                .text_xs()
-                .text_color(theme.ui_text_muted)
-                .child(label.to_string()),
-        )
-        .child(
-            h_stack()
-                .gap(px(8.0))
-                .children(values.into_iter().map(|(name, value)| {
-                    property_field(name, &value, theme)
-                })),
-        )
-}
-
-fn property_field(label: &str, value: &str, theme: &Theme) -> impl IntoElement {
     h_stack()
         .gap(px(4.0))
         .child(
@@ -137,7 +341,8 @@ fn property_field(label: &str, value: &str, theme: &Theme) -> impl IntoElement {
                 .child(label.to_string()),
         )
         .child(
-            div()
+            input(input_state, cx)
+                .colors(colors.clone())
                 .px(px(6.0))
                 .py(px(2.0))
                 .bg(theme_2::hsla(0.0, 0.0, 0.95, 1.0))
@@ -146,8 +351,7 @@ fn property_field(label: &str, value: &str, theme: &Theme) -> impl IntoElement {
                 .rounded(px(2.0))
                 .text_xs()
                 .text_color(theme.ui_text)
-                .min_w(px(48.0))
-                .child(value.to_string()),
+                .min_w(px(48.0)),
         )
 }
 
@@ -225,7 +429,5 @@ fn property_section_stroke(
 }
 
 fn format_color(c: gpui::Hsla) -> String {
-    // Convert to hex-like display
-    let r = (c.l * 255.0) as u8;
     format!("hsla({:.0}, {:.0}%, {:.0}%)", c.h * 360.0, c.s * 100.0, c.l * 100.0)
 }

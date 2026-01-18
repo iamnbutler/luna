@@ -12,7 +12,7 @@ use gpui::{
 };
 use node_2::Shape;
 use theme_2::Theme;
-use ui_2::{LayerList, PropertiesPanel};
+use ui_2::{bind_input_keys, LayerList, PropertiesPanel};
 
 mod assets;
 
@@ -47,7 +47,7 @@ impl Luna {
         let focus_handle = cx.focus_handle();
         let canvas = cx.new(|cx| Canvas::new(theme.clone(), cx));
         let layer_list = cx.new(|_| LayerList::new(canvas.clone(), theme.clone()));
-        let properties = cx.new(|_| PropertiesPanel::new(canvas.clone(), theme.clone()));
+        let properties = cx.new(|cx| PropertiesPanel::new(canvas.clone(), theme.clone(), cx));
 
         // Add some example shapes
         canvas.update(cx, |canvas, cx| {
@@ -267,6 +267,7 @@ fn main() {
         ]);
 
         init_keymap(cx);
+        bind_input_keys(cx, None);
 
         let window = cx
             .open_window(
