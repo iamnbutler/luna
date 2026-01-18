@@ -9,3 +9,9 @@
 {"v":1,"op":"complete","id":"mkj1zzz6-4h89","ts":"2026-01-18T01:35:03.013383Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkj200tk-q40j","ts":"2026-01-18T01:35:03.041182Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkj204ct-bn5g","ts":"2026-01-18T01:38:04.823209Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mkj2uj46-om3z","ts":"2026-01-18T01:48:17.862392Z","by":"@iamnbutler","branch":"main","d":{"description":"Build a reusable input component for number pickers, text editing, layer renaming","priority":"p1","tags":["ui"],"title":"Create modular input component for numbers/text"}}
+{"v":1,"op":"complete","id":"mkj202qq-6rp0","ts":"2026-01-18T01:49:42.894593Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkj203op-t2zq","ts":"2026-01-18T01:49:42.922143Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkj2uj46-om3z","ts":"2026-01-18T02:11:43.844520Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mkj3op5g-lnav","ts":"2026-01-18T02:11:45.364463Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","title":"Wire input components into PropertiesPanel"}}
+{"v":1,"op":"complete","id":"mkj3op5g-lnav","ts":"2026-01-18T02:15:18.655262Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
