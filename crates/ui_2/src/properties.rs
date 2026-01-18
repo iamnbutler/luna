@@ -2,11 +2,11 @@
 
 use crate::components::{h_stack, panel, v_stack};
 use crate::input::{input, InputColors, InputState, InputStateEvent};
-use canvas_2::Canvas;
+use canvas_2::{Canvas, CanvasEvent};
 use glam::Vec2;
 use gpui::{
-    div, px, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
-    Styled, Subscription, Window,
+    div, px, AppContext, Context, Entity, EventEmitter, Focusable, Hsla, IntoElement,
+    ParentElement, Render, Styled, Subscription, Window,
 };
 use node_2::{ShapeId, ShapeKind, Stroke};
 use theme_2::Theme;
@@ -213,6 +213,7 @@ impl PropertiesPanel {
                     .find(|s| canvas.selection.contains(&s.id))
                 {
                     shape.position.x = x;
+                    cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                 }
             });
@@ -229,6 +230,7 @@ impl PropertiesPanel {
                     .find(|s| canvas.selection.contains(&s.id))
                 {
                     shape.position.y = y;
+                    cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                 }
             });
@@ -246,6 +248,7 @@ impl PropertiesPanel {
                         .find(|s| canvas.selection.contains(&s.id))
                     {
                         shape.size.x = w;
+                        cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }
                 });
@@ -264,6 +267,7 @@ impl PropertiesPanel {
                         .find(|s| canvas.selection.contains(&s.id))
                     {
                         shape.size.y = h;
+                        cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }
                 });
@@ -295,6 +299,7 @@ impl PropertiesPanel {
 
     fn apply_stroke_width(&mut self, cx: &mut Context<Self>) {
         let value = self.stroke_width_input.read(cx).content().to_string();
+        let default_color = self.theme.default_stroke;
         if let Ok(width) = value.parse::<f32>() {
             if width >= 0.0 {
                 self.canvas.update(cx, |canvas, cx| {
@@ -307,8 +312,9 @@ impl PropertiesPanel {
                             stroke.width = width;
                         } else {
                             // Create stroke with default color if none exists
-                            shape.stroke = Some(Stroke::new(self.theme.default_stroke, width));
+                            shape.stroke = Some(Stroke::new(default_color, width));
                         }
+                        cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }
                 });
@@ -331,6 +337,7 @@ impl PropertiesPanel {
                         // Create stroke with default width if none exists
                         shape.stroke = Some(Stroke::new(color, 2.0));
                     }
+                    cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                 }
             });
