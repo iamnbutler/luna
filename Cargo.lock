@@ -1052,7 +1052,7 @@ checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
  "serde",
  "termcolor",
- "unicode-width 0.1.14",
+ "unicode-width",
 ]
 
 [[package]]
@@ -3335,11 +3335,13 @@ dependencies = [
  "anyhow",
  "assets",
  "canvas",
+ "canvas_2",
  "chrono",
  "common",
  "glam",
  "gpui",
  "node",
+ "node_2",
  "palette",
  "project",
  "quadtree_rs",
@@ -3359,7 +3361,9 @@ dependencies = [
  "strum_macros 0.24.3",
  "taffy 0.4.4",
  "theme",
+ "theme_2",
  "ui",
+ "ui_2",
  "uuid",
 ]
 
@@ -5015,7 +5019,7 @@ dependencies = [
  "nix 0.29.0",
  "radix_trie",
  "unicode-segmentation",
- "unicode-width 0.2.2",
+ "unicode-width",
  "utf8parse",
  "windows-sys 0.59.0",
 ]
@@ -6225,6 +6229,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ui_2"
+version = "0.1.1"
+dependencies = [
+ "canvas_2",
+ "glam",
+ "gpui",
+ "node_2",
+ "smol",
+ "theme_2",
+ "unicode-bidi",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "unicase"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6232,9 +6250,9 @@ checksum = "75b844d17643ee918803943289730bec8aac480150456169e647ed0b576ba539"
 
 [[package]]
 name = "unicode-bidi"
-version = "0.3.18"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
+checksum = "5ab17db44d7388991a428b2ee655ce0c212e862eff1768a455c58f9aad6e7893"
 
 [[package]]
 name = "unicode-bidi-mirroring"
@@ -6295,12 +6313,6 @@ name = "unicode-vo"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
-
-[[package]]
-name = "unicode-width"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"

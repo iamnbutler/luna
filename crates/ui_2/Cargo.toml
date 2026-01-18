@@ -9,4 +9,7 @@ canvas_2 = { path = "../canvas_2" }
 glam = { workspace = true }
 gpui = { workspace = true }
 node_2 = { path = "../node_2" }
+smol = { workspace = true }
 theme_2 = { path = "../theme_2" }
+unicode-bidi = { workspace = true }
+unicode-segmentation = { workspace = true }

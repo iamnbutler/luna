@@ -43,4 +43,6 @@ smol = "=2.0"
 strum = { version = "=0.24", features = ["derive", "strum_macros"] }
 strum_macros = "=0.24"
 taffy = "=0.4.4"
+unicode-bidi = "=0.3.17"
+unicode-segmentation = "=1.12.0"
 uuid = { version = "=1.16.0", features = ["v4"] }
