@@ -332,26 +332,27 @@ fn input_field(
     cx: &gpui::App,
 ) -> impl IntoElement {
     h_stack()
+        .flex_1()
         .gap(px(4.0))
         .child(
             div()
                 .text_xs()
                 .text_color(theme.ui_text_muted)
-                .w(px(16.0))
+                .w(px(14.0))
                 .child(label.to_string()),
         )
         .child(
             input(input_state, cx)
                 .colors(colors.clone())
+                .flex_1()
+                .h(px(22.0))
                 .px(px(6.0))
-                .py(px(2.0))
                 .bg(theme_2::hsla(0.0, 0.0, 0.95, 1.0))
                 .border_1()
                 .border_color(theme.ui_border)
                 .rounded(px(2.0))
                 .text_xs()
-                .text_color(theme.ui_text)
-                .min_w(px(48.0)),
+                .text_color(theme.ui_text),
         )
 }
 
