@@ -3,8 +3,8 @@
 use crate::components::{panel, v_stack};
 use canvas_2::Canvas;
 use gpui::{
-    div, px, Context, Div, Entity, InteractiveElement, IntoElement,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
+    div, px, Context, Div, Entity, InteractiveElement, IntoElement, ParentElement, Render,
+    SharedString, Styled, Window,
 };
 use node_2::ShapeKind;
 use theme_2::Theme;

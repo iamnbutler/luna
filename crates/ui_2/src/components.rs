@@ -1,9 +1,6 @@
 //! Basic UI components.
 
-use gpui::{
-    div, prelude::*, px, ClickEvent, Div, ElementId, InteractiveElement, IntoElement,
-    ParentElement, SharedString, StatefulInteractiveElement, Styled, Window,
-};
+use gpui::{div, px, Div, ElementId, InteractiveElement, IntoElement, ParentElement, SharedString, Styled};
 use theme_2::Theme;
 
 /// Horizontal stack layout.

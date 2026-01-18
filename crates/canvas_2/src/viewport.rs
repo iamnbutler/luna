@@ -67,7 +67,6 @@ impl Viewport {
 
         // Adjust offset to keep the point under cursor fixed
         if self.zoom != old_zoom {
-            let scale_change = self.zoom / old_zoom;
             self.offset.x = screen_point.x / self.zoom - (screen_point.x / old_zoom - self.offset.x);
             self.offset.y = screen_point.y / self.zoom - (screen_point.y / old_zoom - self.offset.y);
         }

@@ -5,8 +5,8 @@ use crate::input::{input, InputColors, InputState, InputStateEvent};
 use canvas_2::{Canvas, CanvasEvent};
 use glam::Vec2;
 use gpui::{
-    div, px, AppContext, Context, Entity, EventEmitter, Focusable, Hsla, IntoElement,
-    ParentElement, Render, Styled, Subscription, Window,
+    div, px, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
+    Styled, Subscription, Window,
 };
 use node_2::{ShapeId, ShapeKind, Stroke};
 use theme_2::Theme;
