@@ -3,9 +3,10 @@
 use crate::components::{h_stack, panel, v_stack};
 use crate::input::{input, InputColors, InputState, InputStateEvent};
 use canvas_2::Canvas;
+use glam::Vec2;
 use gpui::{
-    div, px, AppContext, Context, Entity, IntoElement, ParentElement, Render, Styled, Subscription,
-    Window,
+    div, px, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Subscription, Window,
 };
 use node_2::{ShapeId, ShapeKind};
 use theme_2::Theme;
@@ -20,8 +21,10 @@ pub struct PropertiesPanel {
     // Input states for size
     w_input: Entity<InputState>,
     h_input: Entity<InputState>,
-    // Track current selection to know when to update inputs
+    // Track current selection and values to know when to update inputs
     last_selection_id: Option<ShapeId>,
+    last_position: Vec2,
+    last_size: Vec2,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -49,6 +52,8 @@ impl PropertiesPanel {
             w_input,
             h_input,
             last_selection_id: None,
+            last_position: Vec2::ZERO,
+            last_size: Vec2::ZERO,
             _subscriptions: vec![x_sub, y_sub, w_sub, h_sub, canvas_sub],
         }
     }
@@ -59,11 +64,11 @@ impl PropertiesPanel {
         _event: &canvas_2::CanvasEvent,
         cx: &mut Context<Self>,
     ) {
-        // Refresh inputs when canvas changes
-        self.sync_inputs_from_canvas(cx);
+        // Trigger re-render to sync inputs
+        cx.notify();
     }
 
-    fn sync_inputs_from_canvas(&mut self, cx: &mut Context<Self>) {
+    fn sync_inputs_from_canvas(&mut self, window: &Window, cx: &mut Context<Self>) {
         // Extract data from canvas first to avoid borrow issues
         let shape_data = {
             let canvas = self.canvas.read(cx);
@@ -75,26 +80,45 @@ impl PropertiesPanel {
         };
 
         if let Some((shape_id, position, size)) = shape_data {
-            // Only update if selection changed or this is first sync
-            if self.last_selection_id != Some(shape_id) {
-                self.last_selection_id = Some(shape_id);
+            let selection_changed = self.last_selection_id != Some(shape_id);
+            let position_changed = self.last_position != position;
+            let size_changed = self.last_size != size;
 
-                // Update input values
-                self.x_input.update(cx, |input, cx| {
-                    input.set_content(format!("{:.0}", position.x), cx);
-                });
-                self.y_input.update(cx, |input, cx| {
-                    input.set_content(format!("{:.0}", position.y), cx);
-                });
-                self.w_input.update(cx, |input, cx| {
-                    input.set_content(format!("{:.0}", size.x), cx);
-                });
-                self.h_input.update(cx, |input, cx| {
-                    input.set_content(format!("{:.0}", size.y), cx);
-                });
+            // Update tracking
+            self.last_selection_id = Some(shape_id);
+            self.last_position = position;
+            self.last_size = size;
+
+            // Update inputs if values changed, but only if not focused (avoid fighting with user)
+            if selection_changed || position_changed {
+                if !self.x_input.focus_handle(cx).is_focused(window) {
+                    self.x_input.update(cx, |input, cx| {
+                        input.set_content(format!("{:.0}", position.x), cx);
+                    });
+                }
+                if !self.y_input.focus_handle(cx).is_focused(window) {
+                    self.y_input.update(cx, |input, cx| {
+                        input.set_content(format!("{:.0}", position.y), cx);
+                    });
+                }
+            }
+
+            if selection_changed || size_changed {
+                if !self.w_input.focus_handle(cx).is_focused(window) {
+                    self.w_input.update(cx, |input, cx| {
+                        input.set_content(format!("{:.0}", size.x), cx);
+                    });
+                }
+                if !self.h_input.focus_handle(cx).is_focused(window) {
+                    self.h_input.update(cx, |input, cx| {
+                        input.set_content(format!("{:.0}", size.y), cx);
+                    });
+                }
             }
         } else {
             self.last_selection_id = None;
+            self.last_position = Vec2::ZERO;
+            self.last_size = Vec2::ZERO;
         }
     }
 
@@ -220,9 +244,9 @@ impl PropertiesPanel {
 }
 
 impl Render for PropertiesPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Sync inputs if needed
-        self.sync_inputs_from_canvas(cx);
+        self.sync_inputs_from_canvas(window, cx);
 
         let canvas = self.canvas.read(cx);
         let theme = &self.theme;
