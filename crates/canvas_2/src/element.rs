@@ -329,7 +329,7 @@ fn handle_mouse_down(
                     if !canvas.selection.contains(&shape_id) {
                         canvas.select(shape_id, add_to_selection, cx);
                     }
-                    canvas.start_move(cx);
+                    canvas.start_move(canvas_pos, cx);
                 } else {
                     canvas.clear_selection(cx);
                 }
@@ -364,20 +364,8 @@ fn handle_mouse_move(
         let drag = canvas.drag.clone();
 
         match drag {
-            Some(DragState::MovingShapes { start_positions }) => {
-                if let Some((_, first_start)) = start_positions.first() {
-                    let screen_start = canvas.viewport.canvas_to_screen(*first_start);
-                    let delta = Vec2::new(local_x - screen_start.x, local_y - screen_start.y)
-                        / canvas.viewport.zoom;
-
-                    // Update positions directly
-                    for (id, start_pos) in &start_positions {
-                        if let Some(shape) = canvas.shapes.iter_mut().find(|s| s.id == *id) {
-                            shape.position = *start_pos + delta;
-                        }
-                    }
-                    cx.notify();
-                }
+            Some(DragState::MovingShapes { .. }) => {
+                canvas.update_move(canvas_pos, cx);
             }
             Some(DragState::DrawingShape { shape_id, start }) => {
                 // Calculate size and position (handle negative drag)

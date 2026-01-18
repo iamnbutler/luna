@@ -28,7 +28,10 @@ pub enum CanvasEvent {
 #[derive(Clone, Debug)]
 pub enum DragState {
     /// Dragging selected shapes
-    MovingShapes { start_positions: Vec<(ShapeId, Vec2)> },
+    MovingShapes {
+        start_mouse: Vec2,
+        start_positions: Vec<(ShapeId, Vec2)>,
+    },
     /// Drawing a new shape
     DrawingShape { shape_id: ShapeId, start: Vec2 },
     /// Panning the canvas
@@ -213,7 +216,7 @@ impl Canvas {
     }
 
     /// Start moving selected shapes.
-    pub fn start_move(&mut self, _cx: &mut Context<Self>) {
+    pub fn start_move(&mut self, start_mouse: Vec2, _cx: &mut Context<Self>) {
         let positions: Vec<_> = self
             .shapes
             .iter()
@@ -222,17 +225,22 @@ impl Canvas {
             .collect();
 
         self.drag = Some(DragState::MovingShapes {
+            start_mouse,
             start_positions: positions,
         });
     }
 
     /// Update shape positions during move.
-    pub fn update_move(&mut self, delta: Vec2, cx: &mut Context<Self>) {
-        // Copy start positions to avoid borrow issues
-        let positions: Vec<_> = match &self.drag {
-            Some(DragState::MovingShapes { start_positions }) => start_positions.clone(),
+    pub fn update_move(&mut self, current_mouse: Vec2, cx: &mut Context<Self>) {
+        // Copy data to avoid borrow issues
+        let (start_mouse, positions): (Vec2, Vec<_>) = match &self.drag {
+            Some(DragState::MovingShapes { start_mouse, start_positions }) => {
+                (*start_mouse, start_positions.clone())
+            }
             _ => return,
         };
+
+        let delta = current_mouse - start_mouse;
 
         for (id, start_pos) in positions {
             if let Some(shape) = self.get_shape_mut(id) {
