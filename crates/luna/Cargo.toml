@@ -8,15 +8,21 @@ publish.workspace = true
 name = "Luna"
 path = "src/luna.rs"
 
+[[bin]]
+name = "Luna2"
+path = "src/luna_2.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 assets = { path = "../assets" }
 canvas = { path = "../canvas" }
+canvas_2 = { path = "../canvas_2" }
 chrono = { workspace = true }
 common = { path = "../common" }
 glam = { workspace = true }
 gpui = { workspace = true }
 node = { path = "../node" }
+node_2 = { path = "../node_2" }
 palette = { workspace = true }
 project = { path = "../project" }
 quadtree_rs = { workspace = true }
@@ -36,5 +42,6 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 taffy = { workspace = true }
 theme = { path = "../theme" }
+theme_2 = { path = "../theme_2" }
 ui = { path = "../ui" }
 uuid = { workspace = true }
