@@ -6,6 +6,6 @@ mod canvas;
 mod element;
 mod viewport;
 
-pub use canvas::{Canvas, CanvasEvent, Tool};
+pub use canvas::{Canvas, CanvasEvent, DragState, ResizeHandle, Tool};
 pub use element::CanvasElement;
 pub use viewport::Viewport;

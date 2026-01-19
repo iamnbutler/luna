@@ -1,4 +1,4 @@
-use crate::canvas::{Canvas, DragState, Tool};
+use crate::canvas::{Canvas, DragState, ResizeHandle, Tool};
 use glam::Vec2;
 use gpui::{
     point, px, size, transparent_black, App, BorderStyle, Bounds, ContentMask, DispatchPhase,
@@ -6,6 +6,9 @@ use gpui::{
     MouseUpEvent, PaintQuad, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
 };
 use node_2::ShapeKind;
+
+/// Size of resize handles in pixels.
+const HANDLE_SIZE: f32 = 8.0;
 
 /// A GPUI element that renders and handles interaction for a Canvas.
 pub struct CanvasElement {
@@ -259,7 +262,7 @@ impl Element for CanvasElement {
 }
 
 fn paint_selection_handles(window: &mut Window, bounds: Bounds<Pixels>, color: gpui::Hsla) {
-    let handle_size = px(8.0);
+    let handle_size = px(HANDLE_SIZE);
     let half = handle_size / 2.0;
 
     let corners = [
@@ -286,6 +289,37 @@ fn paint_selection_handles(window: &mut Window, bounds: Bounds<Pixels>, color: g
         window.paint_quad(gpui::fill(handle_bounds, gpui::white()));
         window.paint_quad(gpui::outline(handle_bounds, color, BorderStyle::Solid));
     }
+}
+
+/// Check if a screen point (relative to canvas element origin) hits a resize handle.
+/// Returns the handle if hit.
+fn hit_test_resize_handle(
+    screen_point: Vec2,
+    selection_bounds: Bounds<Pixels>,
+) -> Option<ResizeHandle> {
+    let hit_radius = HANDLE_SIZE; // Slightly larger hit area
+
+    let origin_x: f32 = selection_bounds.origin.x.into();
+    let origin_y: f32 = selection_bounds.origin.y.into();
+    let width: f32 = selection_bounds.size.width.into();
+    let height: f32 = selection_bounds.size.height.into();
+
+    let corners = [
+        (ResizeHandle::TopLeft, Vec2::new(origin_x, origin_y)),
+        (ResizeHandle::TopRight, Vec2::new(origin_x + width, origin_y)),
+        (ResizeHandle::BottomLeft, Vec2::new(origin_x, origin_y + height)),
+        (ResizeHandle::BottomRight, Vec2::new(origin_x + width, origin_y + height)),
+    ];
+
+    for (handle, center) in corners {
+        let dx = screen_point.x - center.x;
+        let dy = screen_point.y - center.y;
+        if dx.abs() <= hit_radius && dy.abs() <= hit_radius {
+            return Some(handle);
+        }
+    }
+
+    None
 }
 
 fn selection_bounds_from_shapes(
@@ -327,12 +361,31 @@ fn handle_mouse_down(
     let local_x: f32 = (event.position.x - bounds.origin.x).into();
     let local_y: f32 = (event.position.y - bounds.origin.y).into();
     let local_pos = point(local_x, local_y);
+    let local_vec = Vec2::new(local_x, local_y);
 
     canvas.update(cx, |canvas, cx| {
         let canvas_pos = canvas.viewport.screen_to_canvas(local_pos);
 
         match canvas.tool {
             Tool::Select => {
+                // First check if clicking on a resize handle (only if something is selected)
+                if !canvas.selection.is_empty() {
+                    if let Some((min, max)) = canvas.selection_bounds() {
+                        let screen_min = canvas.viewport.canvas_to_screen(min);
+                        let screen_max = canvas.viewport.canvas_to_screen(max);
+                        let selection_screen_bounds = Bounds {
+                            origin: point(px(screen_min.x), px(screen_min.y)),
+                            size: size(px(screen_max.x - screen_min.x), px(screen_max.y - screen_min.y)),
+                        };
+
+                        if let Some(handle) = hit_test_resize_handle(local_vec, selection_screen_bounds) {
+                            canvas.start_resize(handle, canvas_pos, cx);
+                            return;
+                        }
+                    }
+                }
+
+                // Then check if clicking on a shape
                 if let Some(shape_id) = canvas.shape_at_point(canvas_pos) {
                     let add_to_selection = event.modifiers.shift;
                     if !canvas.selection.contains(&shape_id) {
@@ -376,6 +429,9 @@ fn handle_mouse_move(
             Some(DragState::MovingShapes { .. }) => {
                 canvas.update_move(canvas_pos, cx);
             }
+            Some(DragState::ResizingShapes { .. }) => {
+                canvas.update_resize(canvas_pos, cx);
+            }
             Some(DragState::DrawingShape { shape_id, start }) => {
                 // Calculate size and position (handle negative drag)
                 let min = Vec2::new(start.x.min(canvas_pos.x), start.y.min(canvas_pos.y));
@@ -415,6 +471,9 @@ fn handle_mouse_up(canvas: &Entity<Canvas>, event: &MouseUpEvent, cx: &mut App) 
         match &canvas.drag {
             Some(DragState::MovingShapes { .. }) => {
                 canvas.finish_move(cx);
+            }
+            Some(DragState::ResizingShapes { .. }) => {
+                canvas.finish_resize(cx);
             }
             Some(DragState::DrawingShape { .. }) => {
                 canvas.finish_draw(cx);

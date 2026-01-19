@@ -24,6 +24,25 @@ pub enum CanvasEvent {
     ContentChanged,
 }
 
+/// Resize handle positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResizeHandle {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl ResizeHandle {
+    /// All handles in order.
+    pub const ALL: [ResizeHandle; 4] = [
+        ResizeHandle::TopLeft,
+        ResizeHandle::TopRight,
+        ResizeHandle::BottomLeft,
+        ResizeHandle::BottomRight,
+    ];
+}
+
 /// Active drag operation.
 #[derive(Clone, Debug)]
 pub enum DragState {
@@ -31,6 +50,14 @@ pub enum DragState {
     MovingShapes {
         start_mouse: Vec2,
         start_positions: Vec<(ShapeId, Vec2)>,
+    },
+    /// Resizing selected shapes
+    ResizingShapes {
+        handle: ResizeHandle,
+        start_mouse: Vec2,
+        start_bounds: (Vec2, Vec2), // (min, max) in canvas coords
+        shape_ids: Vec<ShapeId>,
+        start_shape_data: Vec<(ShapeId, Vec2, Vec2)>, // (id, position, size)
     },
     /// Drawing a new shape
     DrawingShape { shape_id: ShapeId, start: Vec2 },
@@ -253,6 +280,98 @@ impl Canvas {
     /// Finish moving shapes.
     pub fn finish_move(&mut self, cx: &mut Context<Self>) {
         if matches!(self.drag, Some(DragState::MovingShapes { .. })) {
+            self.drag = None;
+            cx.emit(CanvasEvent::ContentChanged);
+            cx.notify();
+        }
+    }
+
+    /// Start resizing selected shapes.
+    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: Vec2, _cx: &mut Context<Self>) {
+        let Some((min, max)) = self.selection_bounds() else {
+            return;
+        };
+
+        let shape_ids: Vec<_> = self.selection.iter().copied().collect();
+        let start_shape_data: Vec<_> = self
+            .shapes
+            .iter()
+            .filter(|s| self.selection.contains(&s.id))
+            .map(|s| (s.id, s.position, s.size))
+            .collect();
+
+        self.drag = Some(DragState::ResizingShapes {
+            handle,
+            start_mouse,
+            start_bounds: (min, max),
+            shape_ids,
+            start_shape_data,
+        });
+    }
+
+    /// Update shape sizes during resize.
+    pub fn update_resize(&mut self, current_mouse: Vec2, cx: &mut Context<Self>) {
+        let (handle, start_mouse, start_bounds, start_shape_data) = match &self.drag {
+            Some(DragState::ResizingShapes {
+                handle,
+                start_mouse,
+                start_bounds,
+                start_shape_data,
+                ..
+            }) => (*handle, *start_mouse, *start_bounds, start_shape_data.clone()),
+            _ => return,
+        };
+
+        let (start_min, start_max) = start_bounds;
+        let start_size = start_max - start_min;
+
+        // Calculate new bounds based on which handle is being dragged
+        let delta = current_mouse - start_mouse;
+        let (new_min, new_max) = match handle {
+            ResizeHandle::TopLeft => (start_min + delta, start_max),
+            ResizeHandle::TopRight => (
+                Vec2::new(start_min.x, start_min.y + delta.y),
+                Vec2::new(start_max.x + delta.x, start_max.y),
+            ),
+            ResizeHandle::BottomLeft => (
+                Vec2::new(start_min.x + delta.x, start_min.y),
+                Vec2::new(start_max.x, start_max.y + delta.y),
+            ),
+            ResizeHandle::BottomRight => (start_min, start_max + delta),
+        };
+
+        // Ensure minimum size
+        let min_size = 1.0;
+        let new_size = (new_max - new_min).max(Vec2::splat(min_size));
+        let new_min = match handle {
+            ResizeHandle::TopLeft => new_max - new_size,
+            ResizeHandle::TopRight => Vec2::new(new_max.x - new_size.x, new_max.y - new_size.y),
+            ResizeHandle::BottomLeft => Vec2::new(new_max.x - new_size.x, new_min.y),
+            ResizeHandle::BottomRight => new_min,
+        };
+
+        // Scale factor
+        let scale = Vec2::new(
+            if start_size.x > 0.0 { new_size.x / start_size.x } else { 1.0 },
+            if start_size.y > 0.0 { new_size.y / start_size.y } else { 1.0 },
+        );
+
+        // Update each shape proportionally
+        for (id, orig_pos, orig_size) in start_shape_data {
+            if let Some(shape) = self.get_shape_mut(id) {
+                // Calculate relative position within original bounds
+                let rel_pos = orig_pos - start_min;
+                // Scale position and size
+                shape.position = new_min + rel_pos * scale;
+                shape.size = orig_size * scale;
+            }
+        }
+        cx.notify();
+    }
+
+    /// Finish resizing shapes.
+    pub fn finish_resize(&mut self, cx: &mut Context<Self>) {
+        if matches!(self.drag, Some(DragState::ResizingShapes { .. })) {
             self.drag = None;
             cx.emit(CanvasEvent::ContentChanged);
             cx.notify();
