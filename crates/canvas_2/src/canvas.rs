@@ -343,10 +343,15 @@ impl Canvas {
         // Ensure minimum size
         let min_size = 1.0;
         let new_size = (new_max - new_min).max(Vec2::splat(min_size));
+        // Recalculate new_min based on which corner is anchored
         let new_min = match handle {
+            // TopLeft: bottom-right corner is anchored
             ResizeHandle::TopLeft => new_max - new_size,
-            ResizeHandle::TopRight => Vec2::new(new_max.x - new_size.x, new_max.y - new_size.y),
+            // TopRight: bottom-left corner is anchored (new_min.x stays, recalc new_min.y)
+            ResizeHandle::TopRight => Vec2::new(new_min.x, new_max.y - new_size.y),
+            // BottomLeft: top-right corner is anchored (new_min.y stays, recalc new_min.x)
             ResizeHandle::BottomLeft => Vec2::new(new_max.x - new_size.x, new_min.y),
+            // BottomRight: top-left corner is anchored
             ResizeHandle::BottomRight => new_min,
         };
 
