@@ -2,6 +2,7 @@
 //!
 //! A streamlined version of Luna focused on basic shape drawing and manipulation.
 
+use api::DebugServer;
 use assets::Assets;
 use canvas_2::{Canvas, CanvasElement, CanvasEvent, Tool};
 use glam::Vec2;
@@ -11,6 +12,7 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowOptions,
 };
 use node_2::Shape;
+use std::sync::Arc;
 use theme_2::Theme;
 use ui_2::{bind_input_keys, LayerList, PropertiesPanel};
 
@@ -39,6 +41,7 @@ struct Luna {
     properties: Entity<PropertiesPanel>,
     focus_handle: FocusHandle,
     theme: Theme,
+    debug_server: Option<Arc<DebugServer>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -63,12 +66,22 @@ impl Luna {
 
         let canvas_subscription = cx.subscribe(&canvas, Self::handle_canvas_event);
 
+        // Start debug server if enabled
+        let debug_server = if DebugServer::should_start() {
+            let server = Arc::new(DebugServer::new());
+            server.start();
+            Some(server)
+        } else {
+            None
+        };
+
         Luna {
             canvas,
             layer_list,
             properties,
             focus_handle,
             theme,
+            debug_server,
             _subscriptions: vec![canvas_subscription],
         }
     }
@@ -172,6 +185,11 @@ impl Luna {
 
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Process any pending debug server requests
+        if let Some(ref server) = self.debug_server {
+            server.process_pending(&self.canvas, cx);
+        }
+
         div()
             .id("Luna")
             .key_context("luna")

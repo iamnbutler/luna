@@ -21,6 +21,16 @@ pub fn execute_command(
     canvas.update(cx, |canvas, cx| execute_command_inner(canvas, command, cx))
 }
 
+/// Execute a command against a canvas from within a view context.
+/// Use this when you have access to &mut Context<T> rather than &mut App.
+pub fn execute_command_in_context<T: 'static>(
+    canvas: &Entity<Canvas>,
+    command: Command,
+    cx: &mut Context<T>,
+) -> CommandResult {
+    canvas.update(cx, |canvas, cx| execute_command_inner(canvas, command, cx))
+}
+
 fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context<Canvas>) -> CommandResult {
     match command {
         Command::CreateShape {
@@ -281,6 +291,16 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
 
 /// Execute a query against a canvas.
 pub fn execute_query(canvas: &Entity<Canvas>, query: Query, cx: &gpui::App) -> QueryResult {
+    let canvas = canvas.read(cx);
+    execute_query_inner(canvas, query)
+}
+
+/// Execute a query against a canvas from within a view context.
+pub fn execute_query_in_context<T: 'static>(
+    canvas: &Entity<Canvas>,
+    query: Query,
+    cx: &Context<T>,
+) -> QueryResult {
     let canvas = canvas.read(cx);
     execute_query_inner(canvas, query)
 }

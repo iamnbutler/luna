@@ -14,6 +14,7 @@ path = "src/luna_2.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+api = { path = "../api" }
 assets = { path = "../assets" }
 canvas = { path = "../canvas" }
 canvas_2 = { path = "../canvas_2" }

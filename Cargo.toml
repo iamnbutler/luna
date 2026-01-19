@@ -2,6 +2,7 @@
 members = [
     "crates/api",
     "crates/assets",
+    "crates/cli",
     "crates/common",
     "crates/node",
     "crates/node_2",
@@ -24,6 +25,7 @@ publish = false
 
 [workspace.dependencies]
 anyhow = "=1.0.97"
+clap = { version = "=4.5.4", features = ["derive"] }
 chrono = "=0.4"
 glam = { version = "=0.30.5", features = ["serde"] }
 gpui = { version = "=0.2.2", features = ["test-support", "inspector"] }

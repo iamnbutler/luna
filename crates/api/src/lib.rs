@@ -24,9 +24,13 @@
 mod command;
 mod executor;
 mod query;
+mod server;
 mod target;
 
 pub use command::*;
-pub use executor::{execute_command, execute_query};
+pub use executor::{
+    execute_command, execute_command_in_context, execute_query, execute_query_in_context,
+};
 pub use query::*;
+pub use server::{process_message, DebugServer};
 pub use target::*;
