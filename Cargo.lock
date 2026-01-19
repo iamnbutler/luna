@@ -5443,9 +5443,9 @@ dependencies = [
 
 [[package]]
 name = "spool"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81ea527ec72f97b7c13eb6d29b814fbef21e4ad63aad3e27c7579dca086be107"
+checksum = "dd47c862be4e512f2488b8778ca8589263621899f2131000a923ec25ff7f91e2"
 dependencies = [
  "anyhow",
  "chrono",
