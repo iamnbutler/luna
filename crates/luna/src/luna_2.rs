@@ -21,6 +21,7 @@ actions!(
     [
         Cancel,
         Delete,
+        Duplicate,
         EllipseTool,
         HandTool,
         NewFile,
@@ -143,6 +144,12 @@ impl Luna {
         });
     }
 
+    fn duplicate_selected(&mut self, _: &Duplicate, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.duplicate_selected(cx);
+        });
+    }
+
     fn handle_cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, cx| {
             if canvas.tool != Tool::Select {
@@ -188,6 +195,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .on_action(cx.listener(Self::activate_ellipse_tool))
             .on_action(cx.listener(Self::delete_selected))
+            .on_action(cx.listener(Self::duplicate_selected))
             .on_action(cx.listener(Self::handle_cancel))
             .on_action(cx.listener(Self::new_file))
             // Left: Layer list
@@ -228,6 +236,7 @@ fn init_keymap(cx: &mut App) {
         KeyBinding::new("o", EllipseTool, None),
         KeyBinding::new("escape", Cancel, None),
         KeyBinding::new("cmd-n", NewFile, None),
+        KeyBinding::new("cmd-d", Duplicate, None),
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("delete", Delete, None),
         KeyBinding::new("backspace", Delete, None),
@@ -253,7 +262,10 @@ fn main() {
             },
             Menu {
                 name: "Edit".into(),
-                items: vec![MenuItem::action("Delete", Delete)],
+                items: vec![
+                    MenuItem::action("Duplicate", Duplicate),
+                    MenuItem::action("Delete", Delete),
+                ],
             },
             Menu {
                 name: "Tools".into(),

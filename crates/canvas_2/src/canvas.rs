@@ -183,6 +183,38 @@ impl Canvas {
         }
     }
 
+    /// Duplicate selected shapes with a slight offset.
+    pub fn duplicate_selected(&mut self, cx: &mut Context<Self>) {
+        let offset = Vec2::new(20.0, 20.0);
+        let to_duplicate: Vec<_> = self
+            .shapes
+            .iter()
+            .filter(|s| self.selection.contains(&s.id))
+            .cloned()
+            .collect();
+
+        if to_duplicate.is_empty() {
+            return;
+        }
+
+        // Clear current selection
+        self.selection.clear();
+
+        // Create duplicates with new IDs and offset positions
+        for mut shape in to_duplicate {
+            shape.id = ShapeId::new();
+            shape.position += offset;
+            let new_id = shape.id;
+            self.shapes.push(shape);
+            self.selection.insert(new_id);
+            cx.emit(CanvasEvent::ShapeAdded(new_id));
+        }
+
+        cx.emit(CanvasEvent::SelectionChanged);
+        cx.emit(CanvasEvent::ContentChanged);
+        cx.notify();
+    }
+
     /// Move selected shapes by a delta.
     pub fn move_selected(&mut self, delta: Vec2, cx: &mut Context<Self>) {
         for shape in &mut self.shapes {
