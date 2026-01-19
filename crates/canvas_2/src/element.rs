@@ -354,14 +354,22 @@ fn handle_mouse_down(
     bounds: Bounds<Pixels>,
     cx: &mut App,
 ) {
-    if event.button != MouseButton::Left {
-        return;
-    }
-
     let local_x: f32 = (event.position.x - bounds.origin.x).into();
     let local_y: f32 = (event.position.y - bounds.origin.y).into();
     let local_pos = point(local_x, local_y);
     let local_vec = Vec2::new(local_x, local_y);
+
+    // Middle mouse button always pans
+    if event.button == MouseButton::Middle {
+        canvas.update(cx, |canvas, _cx| {
+            canvas.start_pan(local_vec);
+        });
+        return;
+    }
+
+    if event.button != MouseButton::Left {
+        return;
+    }
 
     canvas.update(cx, |canvas, cx| {
         let canvas_pos = canvas.viewport.screen_to_canvas(local_pos);
@@ -397,7 +405,7 @@ fn handle_mouse_down(
                 }
             }
             Tool::Pan => {
-                canvas.start_pan();
+                canvas.start_pan(local_vec);
             }
             Tool::Rectangle => {
                 canvas.start_draw(ShapeKind::Rectangle, canvas_pos, cx);
@@ -418,6 +426,7 @@ fn handle_mouse_move(
     let local_x: f32 = (event.position.x - bounds.origin.x).into();
     let local_y: f32 = (event.position.y - bounds.origin.y).into();
     let local_pos = point(local_x, local_y);
+    let local_vec = Vec2::new(local_x, local_y);
 
     canvas.update(cx, |canvas, cx| {
         let canvas_pos = canvas.viewport.screen_to_canvas(local_pos);
@@ -443,9 +452,8 @@ fn handle_mouse_move(
                 }
                 cx.notify();
             }
-            Some(DragState::Panning) => {
-                // For panning we need previous position - store it or use a different approach
-                // For now, skip delta-based panning in mouse move
+            Some(DragState::Panning { .. }) => {
+                canvas.update_pan(local_vec, cx);
             }
             Some(DragState::Selecting { .. }) => {
                 // TODO: implement drag selection
@@ -463,6 +471,14 @@ fn handle_mouse_move(
 }
 
 fn handle_mouse_up(canvas: &Entity<Canvas>, event: &MouseUpEvent, cx: &mut App) {
+    // Handle middle button release for panning
+    if event.button == MouseButton::Middle {
+        canvas.update(cx, |canvas, _cx| {
+            canvas.finish_pan();
+        });
+        return;
+    }
+
     if event.button != MouseButton::Left {
         return;
     }
@@ -478,7 +494,7 @@ fn handle_mouse_up(canvas: &Entity<Canvas>, event: &MouseUpEvent, cx: &mut App) 
             Some(DragState::DrawingShape { .. }) => {
                 canvas.finish_draw(cx);
             }
-            Some(DragState::Panning) => {
+            Some(DragState::Panning { .. }) => {
                 canvas.finish_pan();
             }
             Some(DragState::Selecting { .. }) => {
@@ -500,16 +516,23 @@ fn handle_scroll(
     let local_pos = point(local_x, local_y);
 
     // Get scroll delta
-    let delta_y: f32 = match event.delta {
-        ScrollDelta::Pixels(p) => p.y.into(),
-        ScrollDelta::Lines(l) => l.y * 20.0, // Approximate pixels per line
+    let (delta_x, delta_y): (f32, f32) = match event.delta {
+        ScrollDelta::Pixels(p) => (p.x.into(), p.y.into()),
+        ScrollDelta::Lines(l) => (l.x * 20.0, l.y * 20.0), // Approximate pixels per line
     };
 
-    // Zoom with scroll wheel
-    let factor = if delta_y > 0.0 { 1.1 } else { 0.9 };
-
     canvas.update(cx, |canvas, cx| {
-        canvas.zoom_at(local_pos, factor, cx);
+        // Platform modifier (Cmd on macOS, Ctrl on others) + scroll = zoom
+        let zoom_modifier = event.modifiers.platform;
+        if zoom_modifier {
+            let factor = if delta_y > 0.0 { 1.1 } else { 0.9 };
+            canvas.zoom_at(local_pos, factor, cx);
+        } else {
+            // Regular scroll = pan
+            let pan_delta = Vec2::new(delta_x, delta_y);
+            canvas.viewport.pan(pan_delta);
+            cx.notify();
+        }
     });
 }
 

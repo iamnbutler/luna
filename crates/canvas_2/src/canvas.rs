@@ -62,7 +62,7 @@ pub enum DragState {
     /// Drawing a new shape
     DrawingShape { shape_id: ShapeId, start: Vec2 },
     /// Panning the canvas
-    Panning,
+    Panning { last_screen_pos: Vec2 },
     /// Drag-selecting shapes
     Selecting { start: Vec2 },
 }
@@ -379,21 +379,23 @@ impl Canvas {
     }
 
     /// Start panning.
-    pub fn start_pan(&mut self) {
-        self.drag = Some(DragState::Panning);
+    pub fn start_pan(&mut self, screen_pos: Vec2) {
+        self.drag = Some(DragState::Panning { last_screen_pos: screen_pos });
     }
 
-    /// Update pan.
-    pub fn update_pan(&mut self, delta: Vec2, cx: &mut Context<Self>) {
-        if matches!(self.drag, Some(DragState::Panning)) {
+    /// Update pan with new screen position.
+    pub fn update_pan(&mut self, current_screen_pos: Vec2, cx: &mut Context<Self>) {
+        if let Some(DragState::Panning { last_screen_pos }) = &mut self.drag {
+            let delta = current_screen_pos - *last_screen_pos;
             self.viewport.pan(delta);
+            *last_screen_pos = current_screen_pos;
             cx.notify();
         }
     }
 
     /// Finish panning.
     pub fn finish_pan(&mut self) {
-        if matches!(self.drag, Some(DragState::Panning)) {
+        if matches!(self.drag, Some(DragState::Panning { .. })) {
             self.drag = None;
         }
     }
