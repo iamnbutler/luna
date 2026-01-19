@@ -16,3 +16,4 @@
 {"v":1,"op":"create","id":"mkkrsip4-e9it","ts":"2026-01-19T06:14:20.584470Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"persistence","title":"Save/load .luna files"}}
 {"v":1,"op":"create","id":"mkkrsipv-zjcy","ts":"2026-01-19T06:14:20.611456Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"polish","title":"Keyboard shortcuts help overlay"}}
 {"v":1,"op":"create","id":"mkkrsiqm-m6nd","ts":"2026-01-19T06:14:20.638091Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"polish","title":"Better zoom controls (zoom to fit, zoom percentage)"}}
+{"v":1,"op":"complete","id":"mkkrsim6-1x4g","ts":"2026-01-19T06:18:44.476578Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}

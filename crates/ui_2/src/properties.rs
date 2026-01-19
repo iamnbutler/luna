@@ -26,12 +26,15 @@ pub struct PropertiesPanel {
     // Input states for stroke
     stroke_width_input: Entity<InputState>,
     stroke_color_input: Entity<InputState>,
+    // Input state for corner radius
+    corner_radius_input: Entity<InputState>,
     // Track current selection and values to know when to update inputs
     last_selection_id: Option<ShapeId>,
     last_position: Vec2,
     last_size: Vec2,
     last_fill: Option<Fill>,
     last_stroke: Option<Stroke>,
+    last_corner_radius: f32,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -44,6 +47,7 @@ impl PropertiesPanel {
         let fill_color_input = cx.new(|cx| InputState::new_singleline(cx));
         let stroke_width_input = cx.new(|cx| InputState::new_singleline(cx));
         let stroke_color_input = cx.new(|cx| InputState::new_singleline(cx));
+        let corner_radius_input = cx.new(|cx| InputState::new_singleline(cx));
 
         // Subscribe to input changes
         let x_sub = cx.subscribe(&x_input, Self::on_x_changed);
@@ -53,6 +57,8 @@ impl PropertiesPanel {
         let fill_color_sub = cx.subscribe(&fill_color_input, Self::on_fill_color_changed);
         let stroke_width_sub = cx.subscribe(&stroke_width_input, Self::on_stroke_width_changed);
         let stroke_color_sub = cx.subscribe(&stroke_color_input, Self::on_stroke_color_changed);
+        let corner_radius_sub =
+            cx.subscribe(&corner_radius_input, Self::on_corner_radius_changed);
 
         // Subscribe to canvas changes to update inputs
         let canvas_sub = cx.subscribe(&canvas, Self::on_canvas_changed);
@@ -67,11 +73,13 @@ impl PropertiesPanel {
             fill_color_input,
             stroke_width_input,
             stroke_color_input,
+            corner_radius_input,
             last_selection_id: None,
             last_position: Vec2::ZERO,
             last_size: Vec2::ZERO,
             last_fill: None,
             last_stroke: None,
+            last_corner_radius: 0.0,
             _subscriptions: vec![
                 x_sub,
                 y_sub,
@@ -80,6 +88,7 @@ impl PropertiesPanel {
                 fill_color_sub,
                 stroke_width_sub,
                 stroke_color_sub,
+                corner_radius_sub,
                 canvas_sub,
             ],
         }
@@ -110,16 +119,18 @@ impl PropertiesPanel {
                         shape.size,
                         shape.fill.clone(),
                         shape.stroke.clone(),
+                        shape.corner_radius,
                     )
                 })
         };
 
-        if let Some((shape_id, position, size, fill, stroke)) = shape_data {
+        if let Some((shape_id, position, size, fill, stroke, corner_radius)) = shape_data {
             let selection_changed = self.last_selection_id != Some(shape_id);
             let position_changed = self.last_position != position;
             let size_changed = self.last_size != size;
             let fill_changed = self.last_fill != fill;
             let stroke_changed = self.last_stroke != stroke;
+            let corner_radius_changed = self.last_corner_radius != corner_radius;
 
             // Update tracking
             self.last_selection_id = Some(shape_id);
@@ -127,6 +138,7 @@ impl PropertiesPanel {
             self.last_size = size;
             self.last_fill = fill.clone();
             self.last_stroke = stroke.clone();
+            self.last_corner_radius = corner_radius;
 
             // Update inputs if values changed, but only if not focused (avoid fighting with user)
             if selection_changed || position_changed {
@@ -181,12 +193,21 @@ impl PropertiesPanel {
                     }
                 }
             }
+
+            if selection_changed || corner_radius_changed {
+                if !self.corner_radius_input.focus_handle(cx).is_focused(window) {
+                    self.corner_radius_input.update(cx, |input, cx| {
+                        input.set_content(format!("{:.0}", corner_radius), cx);
+                    });
+                }
+            }
         } else {
             self.last_selection_id = None;
             self.last_position = Vec2::ZERO;
             self.last_size = Vec2::ZERO;
             self.last_fill = None;
             self.last_stroke = None;
+            self.last_corner_radius = 0.0;
         }
     }
 
@@ -416,6 +437,36 @@ impl PropertiesPanel {
         }
     }
 
+    fn on_corner_radius_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_corner_radius(cx);
+        }
+    }
+
+    fn apply_corner_radius(&mut self, cx: &mut Context<Self>) {
+        let value = self.corner_radius_input.read(cx).content().to_string();
+        if let Ok(radius) = value.parse::<f32>() {
+            if radius >= 0.0 {
+                self.canvas.update(cx, |canvas, cx| {
+                    if let Some(shape) = canvas
+                        .shapes
+                        .iter_mut()
+                        .find(|s| canvas.selection.contains(&s.id))
+                    {
+                        shape.corner_radius = radius;
+                        cx.emit(CanvasEvent::ContentChanged);
+                        cx.notify();
+                    }
+                });
+            }
+        }
+    }
+
     fn input_colors(&self) -> InputColors {
         InputColors {
             selection: self.theme.selection.opacity(0.3),
@@ -497,6 +548,28 @@ impl Render for PropertiesPanel {
                                 .child(input_field("H", &self.h_input, theme, &colors, cx)),
                         ),
                 )
+                // Corner Radius (only for rectangles)
+                .children(if shape.kind == ShapeKind::Rectangle {
+                    Some(
+                        v_stack()
+                            .gap(px(4.0))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.ui_text_muted)
+                                    .child("Corner Radius"),
+                            )
+                            .child(input_field(
+                                "",
+                                &self.corner_radius_input,
+                                theme,
+                                &colors,
+                                cx,
+                            )),
+                    )
+                } else {
+                    None
+                })
                 // Fill
                 .child(
                     v_stack()
