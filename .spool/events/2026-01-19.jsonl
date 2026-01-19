@@ -21,3 +21,4 @@
 {"v":1,"op":"complete","id":"mkkrrb76-9wpq","ts":"2026-01-19T12:46:09.340277Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkkrrb85-zrvm","ts":"2026-01-19T12:48:38.616314Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkkrrb8y-ixol","ts":"2026-01-19T12:49:32.858438Z","by":"@iamnbutler","branch":"main","d":{"resolution":"Implemented via Cmd/Ctrl+scroll. GPUI doesn't expose separate pinch events."}}
+{"v":1,"op":"complete","id":"mkkrsiof-rgub","ts":"2026-01-19T13:03:07.890093Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
