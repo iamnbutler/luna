@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+canvas_2 = { path = "../canvas_2" }
 glam.workspace = true
 gpui.workspace = true
 node_2 = { path = "../node_2" }
