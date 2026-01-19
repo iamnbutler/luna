@@ -359,7 +359,7 @@ impl Canvas {
 
         // Calculate new bounds based on which handle is being dragged
         let delta = current_mouse - start_mouse;
-        let (new_min, new_max) = match handle {
+        let (raw_min, raw_max) = match handle {
             ResizeHandle::TopLeft => (start_min + delta, start_max),
             ResizeHandle::TopRight => (
                 Vec2::new(start_min.x, start_min.y + delta.y),
@@ -372,22 +372,19 @@ impl Canvas {
             ResizeHandle::BottomRight => (start_min, start_max + delta),
         };
 
+        // Handle axis flipping - normalize so min < max on each axis
+        let new_min = Vec2::new(raw_min.x.min(raw_max.x), raw_min.y.min(raw_max.y));
+        let new_max = Vec2::new(raw_min.x.max(raw_max.x), raw_min.y.max(raw_max.y));
+
+        // Check if axes are flipped relative to original
+        let flip_x = raw_min.x > raw_max.x;
+        let flip_y = raw_min.y > raw_max.y;
+
         // Ensure minimum size
         let min_size = 1.0;
         let new_size = (new_max - new_min).max(Vec2::splat(min_size));
-        // Recalculate new_min based on which corner is anchored
-        let new_min = match handle {
-            // TopLeft: bottom-right corner is anchored
-            ResizeHandle::TopLeft => new_max - new_size,
-            // TopRight: bottom-left corner is anchored (new_min.x stays, recalc new_min.y)
-            ResizeHandle::TopRight => Vec2::new(new_min.x, new_max.y - new_size.y),
-            // BottomLeft: top-right corner is anchored (new_min.y stays, recalc new_min.x)
-            ResizeHandle::BottomLeft => Vec2::new(new_max.x - new_size.x, new_min.y),
-            // BottomRight: top-left corner is anchored
-            ResizeHandle::BottomRight => new_min,
-        };
 
-        // Scale factor
+        // Scale factor (use absolute values since we handle flipping separately)
         let scale = Vec2::new(
             if start_size.x > 0.0 { new_size.x / start_size.x } else { 1.0 },
             if start_size.y > 0.0 { new_size.y / start_size.y } else { 1.0 },
@@ -396,8 +393,15 @@ impl Canvas {
         // Update each shape proportionally
         for (id, orig_pos, orig_size) in start_shape_data {
             if let Some(shape) = self.get_shape_mut(id) {
-                // Calculate relative position within original bounds
+                // Calculate relative position within original bounds (0 to 1)
                 let rel_pos = orig_pos - start_min;
+
+                // Apply flip: if flipped, mirror the relative position
+                let rel_pos = Vec2::new(
+                    if flip_x { start_size.x - rel_pos.x - orig_size.x } else { rel_pos.x },
+                    if flip_y { start_size.y - rel_pos.y - orig_size.y } else { rel_pos.y },
+                );
+
                 // Scale position and size
                 shape.position = new_min + rel_pos * scale;
                 shape.size = orig_size * scale;
