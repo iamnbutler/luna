@@ -458,7 +458,9 @@ impl PropertiesPanel {
                         .iter_mut()
                         .find(|s| canvas.selection.contains(&s.id))
                     {
-                        shape.corner_radius = radius;
+                        // Clamp corner radius to half the smaller dimension to prevent overlap
+                        let max_radius = shape.size.x.min(shape.size.y) / 2.0;
+                        shape.corner_radius = radius.min(max_radius);
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }

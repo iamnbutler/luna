@@ -106,7 +106,9 @@ impl Element for CanvasElement {
                     continue;
                 }
 
-                let corner_radius = px(shape.corner_radius * viewport.zoom);
+                // Clamp corner radius to half the smaller dimension to prevent overlap
+                let max_radius = shape.size.x.min(shape.size.y) / 2.0;
+                let corner_radius = px(shape.corner_radius.min(max_radius) * viewport.zoom);
 
                 // Paint fill
                 if let Some(fill) = &shape.fill {
