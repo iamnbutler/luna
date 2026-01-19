@@ -22,3 +22,12 @@
 {"v":1,"op":"complete","id":"mkkrrb85-zrvm","ts":"2026-01-19T12:48:38.616314Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkkrrb8y-ixol","ts":"2026-01-19T12:49:32.858438Z","by":"@iamnbutler","branch":"main","d":{"resolution":"Implemented via Cmd/Ctrl+scroll. GPUI doesn't expose separate pinch events."}}
 {"v":1,"op":"complete","id":"mkkrsiof-rgub","ts":"2026-01-19T13:03:07.890093Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mklaaeti-9f7r","ts":"2026-01-19T14:52:08.454879Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"api","title":"Define Luna command/action types"}}
+{"v":1,"op":"create","id":"mklaag7p-twc6","ts":"2026-01-19T14:52:10.261957Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"api","title":"Add query API for canvas state"}}
+{"v":1,"op":"create","id":"mklaai01-ueqo","ts":"2026-01-19T14:52:12.577532Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"api","title":"Command executor with batch support"}}
+{"v":1,"op":"create","id":"mklaajc7-wapf","ts":"2026-01-19T14:52:14.311478Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"agent","title":"LLM integration foundation"}}
+{"v":1,"op":"create","id":"mklaakp6-rc37","ts":"2026-01-19T14:52:16.074450Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"agent","title":"Natural language to API command translation"}}
+{"v":1,"op":"create","id":"mklaamh5-n20j","ts":"2026-01-19T14:52:18.377268Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"agent","title":"Conversational UI panel"}}
+{"v":1,"op":"create","id":"mklaau2e-o3gn","ts":"2026-01-19T14:52:28.214963Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"api","title":"Action recording and playback (macros)"}}
+{"v":1,"op":"complete","id":"mklaaeti-9f7r","ts":"2026-01-19T15:40:56.670438Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mklchdrq-4sam","ts":"2026-01-19T15:53:32.918709Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"api","title":"CLI for attaching to Luna process (send commands, get logs)"}}

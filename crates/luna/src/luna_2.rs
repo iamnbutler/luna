@@ -70,6 +70,27 @@ impl Luna {
         let debug_server = if DebugServer::should_start() {
             let server = Arc::new(DebugServer::new());
             server.start();
+
+            // Spawn a background task to poll for pending requests
+            let server_clone = server.clone();
+            cx.spawn(async move |this, cx| {
+                loop {
+                    // Check every 50ms for pending requests
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(50))
+                        .await;
+
+                    // If there are pending requests, trigger a re-render
+                    if server_clone.has_pending() {
+                        this.update(cx, |_, cx| {
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+
             Some(server)
         } else {
             None
