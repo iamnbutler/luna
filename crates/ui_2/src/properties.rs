@@ -8,7 +8,7 @@ use gpui::{
     div, px, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
     Styled, Subscription, Window,
 };
-use node_2::{ShapeId, ShapeKind, Stroke};
+use node_2::{Fill, ShapeId, ShapeKind, Stroke};
 use theme_2::Theme;
 
 /// Properties panel showing details of selected shapes.
@@ -21,6 +21,8 @@ pub struct PropertiesPanel {
     // Input states for size
     w_input: Entity<InputState>,
     h_input: Entity<InputState>,
+    // Input states for fill
+    fill_color_input: Entity<InputState>,
     // Input states for stroke
     stroke_width_input: Entity<InputState>,
     stroke_color_input: Entity<InputState>,
@@ -28,6 +30,7 @@ pub struct PropertiesPanel {
     last_selection_id: Option<ShapeId>,
     last_position: Vec2,
     last_size: Vec2,
+    last_fill: Option<Fill>,
     last_stroke: Option<Stroke>,
     _subscriptions: Vec<Subscription>,
 }
@@ -38,6 +41,7 @@ impl PropertiesPanel {
         let y_input = cx.new(|cx| InputState::new_singleline(cx));
         let w_input = cx.new(|cx| InputState::new_singleline(cx));
         let h_input = cx.new(|cx| InputState::new_singleline(cx));
+        let fill_color_input = cx.new(|cx| InputState::new_singleline(cx));
         let stroke_width_input = cx.new(|cx| InputState::new_singleline(cx));
         let stroke_color_input = cx.new(|cx| InputState::new_singleline(cx));
 
@@ -46,6 +50,7 @@ impl PropertiesPanel {
         let y_sub = cx.subscribe(&y_input, Self::on_y_changed);
         let w_sub = cx.subscribe(&w_input, Self::on_w_changed);
         let h_sub = cx.subscribe(&h_input, Self::on_h_changed);
+        let fill_color_sub = cx.subscribe(&fill_color_input, Self::on_fill_color_changed);
         let stroke_width_sub = cx.subscribe(&stroke_width_input, Self::on_stroke_width_changed);
         let stroke_color_sub = cx.subscribe(&stroke_color_input, Self::on_stroke_color_changed);
 
@@ -59,17 +64,20 @@ impl PropertiesPanel {
             y_input,
             w_input,
             h_input,
+            fill_color_input,
             stroke_width_input,
             stroke_color_input,
             last_selection_id: None,
             last_position: Vec2::ZERO,
             last_size: Vec2::ZERO,
+            last_fill: None,
             last_stroke: None,
             _subscriptions: vec![
                 x_sub,
                 y_sub,
                 w_sub,
                 h_sub,
+                fill_color_sub,
                 stroke_width_sub,
                 stroke_color_sub,
                 canvas_sub,
@@ -95,19 +103,29 @@ impl PropertiesPanel {
                 .shapes
                 .iter()
                 .find(|s| canvas.selection.contains(&s.id))
-                .map(|shape| (shape.id, shape.position, shape.size, shape.stroke.clone()))
+                .map(|shape| {
+                    (
+                        shape.id,
+                        shape.position,
+                        shape.size,
+                        shape.fill.clone(),
+                        shape.stroke.clone(),
+                    )
+                })
         };
 
-        if let Some((shape_id, position, size, stroke)) = shape_data {
+        if let Some((shape_id, position, size, fill, stroke)) = shape_data {
             let selection_changed = self.last_selection_id != Some(shape_id);
             let position_changed = self.last_position != position;
             let size_changed = self.last_size != size;
+            let fill_changed = self.last_fill != fill;
             let stroke_changed = self.last_stroke != stroke;
 
             // Update tracking
             self.last_selection_id = Some(shape_id);
             self.last_position = position;
             self.last_size = size;
+            self.last_fill = fill.clone();
             self.last_stroke = stroke.clone();
 
             // Update inputs if values changed, but only if not focused (avoid fighting with user)
@@ -137,6 +155,18 @@ impl PropertiesPanel {
                 }
             }
 
+            if selection_changed || fill_changed {
+                if !self.fill_color_input.focus_handle(cx).is_focused(window) {
+                    let content = fill
+                        .as_ref()
+                        .map(|f| hsla_to_hex(f.color))
+                        .unwrap_or_default();
+                    self.fill_color_input.update(cx, |input, cx| {
+                        input.set_content(content, cx);
+                    });
+                }
+            }
+
             if selection_changed || stroke_changed {
                 if let Some(s) = &stroke {
                     if !self.stroke_width_input.focus_handle(cx).is_focused(window) {
@@ -155,6 +185,7 @@ impl PropertiesPanel {
             self.last_selection_id = None;
             self.last_position = Vec2::ZERO;
             self.last_size = Vec2::ZERO;
+            self.last_fill = None;
             self.last_stroke = None;
         }
     }
@@ -200,6 +231,17 @@ impl PropertiesPanel {
     ) {
         if matches!(event, InputStateEvent::TextChanged) {
             self.apply_size_h(cx);
+        }
+    }
+
+    fn on_fill_color_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_fill_color(cx);
         }
     }
 
@@ -272,6 +314,36 @@ impl PropertiesPanel {
                     }
                 });
             }
+        }
+    }
+
+    fn apply_fill_color(&mut self, cx: &mut Context<Self>) {
+        let value = self.fill_color_input.read(cx).content().to_string();
+        if value.is_empty() {
+            // Empty value removes fill
+            self.canvas.update(cx, |canvas, cx| {
+                if let Some(shape) = canvas
+                    .shapes
+                    .iter_mut()
+                    .find(|s| canvas.selection.contains(&s.id))
+                {
+                    shape.fill = None;
+                    cx.emit(CanvasEvent::ContentChanged);
+                    cx.notify();
+                }
+            });
+        } else if let Some(color) = hex_to_hsla(&value) {
+            self.canvas.update(cx, |canvas, cx| {
+                if let Some(shape) = canvas
+                    .shapes
+                    .iter_mut()
+                    .find(|s| canvas.selection.contains(&s.id))
+                {
+                    shape.fill = Some(Fill::new(color));
+                    cx.emit(CanvasEvent::ContentChanged);
+                    cx.notify();
+                }
+            });
         }
     }
 
@@ -425,12 +497,33 @@ impl Render for PropertiesPanel {
                                 .child(input_field("H", &self.h_input, theme, &colors, cx)),
                         ),
                 )
-                // Fill (read-only for now)
-                .child(property_section_color(
-                    "Fill",
-                    theme,
-                    shape.fill.as_ref().map(|f| f.color),
-                ))
+                // Fill
+                .child(
+                    v_stack()
+                        .gap(px(4.0))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(theme.ui_text_muted)
+                                .child("Fill"),
+                        )
+                        .child(
+                            h_stack()
+                                .gap(px(8.0))
+                                .items_center()
+                                .child(color_swatch(
+                                    shape.fill.as_ref().map(|f| f.color),
+                                    theme,
+                                ))
+                                .child(input_field(
+                                    "",
+                                    &self.fill_color_input,
+                                    theme,
+                                    &colors,
+                                    cx,
+                                )),
+                        ),
+                )
                 // Stroke
                 .child(
                     v_stack()
@@ -445,7 +538,7 @@ impl Render for PropertiesPanel {
                             h_stack()
                                 .gap(px(8.0))
                                 .items_center()
-                                .child(stroke_color_swatch(
+                                .child(color_swatch(
                                     shape.stroke.as_ref().map(|s| s.color),
                                     theme,
                                 ))
@@ -518,55 +611,13 @@ fn input_field(
         )
 }
 
-fn property_section_color(
-    label: &str,
-    theme: &Theme,
-    color: Option<gpui::Hsla>,
-) -> impl IntoElement {
-    v_stack()
-        .gap(px(4.0))
-        .child(
-            div()
-                .text_xs()
-                .text_color(theme.ui_text_muted)
-                .child(label.to_string()),
-        )
-        .child(
-            h_stack().gap(px(8.0)).child(if let Some(c) = color {
-                h_stack()
-                    .gap(px(4.0))
-                    .child(
-                        div()
-                            .size(px(20.0))
-                            .rounded(px(2.0))
-                            .border_1()
-                            .border_color(theme.ui_border)
-                            .bg(c),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.ui_text)
-                            .child(format_color(c)),
-                    )
-            } else {
-                h_stack()
-                    .child(div().text_xs().text_color(theme.ui_text_muted).child("None"))
-            }),
-        )
-}
-
-fn stroke_color_swatch(color: Option<Hsla>, theme: &Theme) -> impl IntoElement {
+fn color_swatch(color: Option<Hsla>, theme: &Theme) -> impl IntoElement {
     div()
         .size(px(20.0))
         .rounded(px(2.0))
         .border_1()
         .border_color(theme.ui_border)
         .bg(color.unwrap_or(gpui::hsla(0.0, 0.0, 0.9, 1.0)))
-}
-
-fn format_color(c: gpui::Hsla) -> String {
-    format!("hsla({:.0}, {:.0}%, {:.0}%)", c.h * 360.0, c.s * 100.0, c.l * 100.0)
 }
 
 /// Convert HSLA color to hex string (e.g., "#FF0000")

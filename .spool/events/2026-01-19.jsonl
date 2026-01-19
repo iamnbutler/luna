@@ -1,0 +1,18 @@
+{"v":1,"op":"create","id":"mkkrp5bs-6znl","ts":"2026-01-19T06:11:43.288240Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","tags":["canvas"],"title":"Resize shapes via drag handles"}}
+{"v":1,"op":"create","id":"mkkrp5cg-zyuw","ts":"2026-01-19T06:11:43.312588Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","tags":["canvas"],"title":"Drag to pan canvas (hand tool / space+drag)"}}
+{"v":1,"op":"create","id":"mkkrp5d6-udvj","ts":"2026-01-19T06:11:43.338166Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","tags":["canvas"],"title":"Pinch to zoom on trackpad"}}
+{"v":1,"op":"complete","id":"mkkrp5bs-6znl","ts":"2026-01-19T06:13:17.437379Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkkrp5cg-zyuw","ts":"2026-01-19T06:13:17.462926Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkkrp5d6-udvj","ts":"2026-01-19T06:13:17.485971Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkj201zr-syxz","ts":"2026-01-19T06:13:17.510305Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mkkrrb76-9wpq","ts":"2026-01-19T06:13:24.210478Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"canvas","title":"Resize shapes via drag handles"}}
+{"v":1,"op":"create","id":"mkkrrb85-zrvm","ts":"2026-01-19T06:13:24.245707Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"canvas","title":"Drag to pan canvas (hand tool / space+drag)"}}
+{"v":1,"op":"create","id":"mkkrrb8y-ixol","ts":"2026-01-19T06:13:24.274761Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"canvas","title":"Pinch to zoom on trackpad"}}
+{"v":1,"op":"create","id":"mkkrrb9t-r459","ts":"2026-01-19T06:13:24.305445Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"persistence","title":"Create project_2 crate for simplified persistence"}}
+{"v":1,"op":"create","id":"mkkrsim6-1x4g","ts":"2026-01-19T06:14:20.479002Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"ui","title":"Add fill color editing to properties panel"}}
+{"v":1,"op":"create","id":"mkkrsimx-204d","ts":"2026-01-19T06:14:20.505576Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"ui","title":"Add corner radius editing for rectangles"}}
+{"v":1,"op":"create","id":"mkkrsino-pq1s","ts":"2026-01-19T06:14:20.532349Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"canvas","title":"Add undo/redo support"}}
+{"v":1,"op":"create","id":"mkkrsiof-rgub","ts":"2026-01-19T06:14:20.559959Z","by":"@iamnbutler","branch":"main","d":{"priority":"p2","stream":"canvas","title":"Add shape duplication (cmd+d)"}}
+{"v":1,"op":"create","id":"mkkrsip4-e9it","ts":"2026-01-19T06:14:20.584470Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"persistence","title":"Save/load .luna files"}}
+{"v":1,"op":"create","id":"mkkrsipv-zjcy","ts":"2026-01-19T06:14:20.611456Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"polish","title":"Keyboard shortcuts help overlay"}}
+{"v":1,"op":"create","id":"mkkrsiqm-m6nd","ts":"2026-01-19T06:14:20.638091Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"polish","title":"Better zoom controls (zoom to fit, zoom percentage)"}}
