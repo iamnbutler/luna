@@ -31,3 +31,7 @@
 {"v":1,"op":"create","id":"mklaau2e-o3gn","ts":"2026-01-19T14:52:28.214963Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3","stream":"api","title":"Action recording and playback (macros)"}}
 {"v":1,"op":"complete","id":"mklaaeti-9f7r","ts":"2026-01-19T15:40:56.670438Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"create","id":"mklchdrq-4sam","ts":"2026-01-19T15:53:32.918709Z","by":"@iamnbutler","branch":"main","d":{"priority":"p1","stream":"api","title":"CLI for attaching to Luna process (send commands, get logs)"}}
+{"v":1,"op":"complete","id":"mklaag7p-twc6","ts":"2026-01-19T17:12:48.238548Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mklaai01-ueqo","ts":"2026-01-19T17:12:48.259862Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mklchdrq-4sam","ts":"2026-01-19T17:12:48.282781Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mklis0w2-wvo7","ts":"2026-01-19T18:49:47.138530Z","by":"@iamnbutler","branch":"main","d":{"description":"Adobe-style vertical tool rail on the left side (before layer list) for selecting tools: pointer/select, hand/pan, rectangle, ellipse. Use existing icons from crates/assets (arrow_pointer, hand, square, etc). Should highlight the active tool and switch on click.","priority":"p1","stream":"ui","title":"Add tool rail to left side of UI"}}
