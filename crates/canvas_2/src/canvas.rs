@@ -267,6 +267,8 @@ impl Canvas {
             // Select the newly drawn shape
             self.selection.clear();
             self.selection.insert(shape_id);
+            // Switch back to Select tool
+            self.tool = Tool::Select;
             cx.emit(CanvasEvent::ShapeAdded(shape_id));
             cx.emit(CanvasEvent::SelectionChanged);
             cx.emit(CanvasEvent::ContentChanged);

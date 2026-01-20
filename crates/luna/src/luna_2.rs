@@ -14,7 +14,7 @@ use gpui::{
 use node_2::Shape;
 use std::sync::Arc;
 use theme_2::Theme;
-use ui_2::{bind_input_keys, LayerList, PropertiesPanel};
+use ui_2::{bind_input_keys, LayerList, PropertiesPanel, ToolRail};
 
 mod assets;
 
@@ -37,6 +37,7 @@ actions!(
 /// Main application component
 struct Luna {
     canvas: Entity<Canvas>,
+    tool_rail: Entity<ToolRail>,
     layer_list: Entity<LayerList>,
     properties: Entity<PropertiesPanel>,
     focus_handle: FocusHandle,
@@ -50,6 +51,7 @@ impl Luna {
         let theme = Theme::light();
         let focus_handle = cx.focus_handle();
         let canvas = cx.new(|cx| Canvas::new(theme.clone(), cx));
+        let tool_rail = cx.new(|_| ToolRail::new(canvas.clone(), theme.clone()));
         let layer_list = cx.new(|_| LayerList::new(canvas.clone(), theme.clone()));
         let properties = cx.new(|cx| PropertiesPanel::new(canvas.clone(), theme.clone(), cx));
 
@@ -98,6 +100,7 @@ impl Luna {
 
         Luna {
             canvas,
+            tool_rail,
             layer_list,
             properties,
             focus_handle,
@@ -237,6 +240,12 @@ impl Render for Luna {
             .on_action(cx.listener(Self::duplicate_selected))
             .on_action(cx.listener(Self::handle_cancel))
             .on_action(cx.listener(Self::new_file))
+            // Far left: Tool rail
+            .child(
+                div()
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.tool_rail.clone()),
+            )
             // Left: Layer list
             .child(
                 div()
