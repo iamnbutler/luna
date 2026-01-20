@@ -4,9 +4,9 @@ use crate::components::{panel, v_stack};
 use canvas_2::Canvas;
 use gpui::{
     div, px, Context, Div, Entity, InteractiveElement, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window,
+    SharedString, StatefulInteractiveElement, Styled, Window,
 };
-use node_2::ShapeKind;
+use node_2::{ShapeId, ShapeKind};
 use theme_2::Theme;
 
 /// Layer list panel showing all shapes.
@@ -45,10 +45,12 @@ impl Render for LayerList {
 
                 LayerItem {
                     id: item_id,
+                    shape_id: id,
                     icon: kind_icon.into(),
                     name,
                     is_selected,
                     theme: theme.clone(),
+                    canvas: self.canvas.clone(),
                 }
             })
             .collect();
@@ -71,10 +73,12 @@ impl Render for LayerList {
 /// A single layer item.
 struct LayerItem {
     id: SharedString,
+    shape_id: ShapeId,
     icon: SharedString,
     name: SharedString,
     is_selected: bool,
     theme: Theme,
+    canvas: Entity<Canvas>,
 }
 
 impl IntoElement for LayerItem {
@@ -95,6 +99,8 @@ impl IntoElement for LayerItem {
 
         let hover_bg = self.theme.hover;
         let muted = self.theme.ui_text_muted;
+        let shape_id = self.shape_id;
+        let canvas = self.canvas;
 
         div()
             .id(self.id.clone())
@@ -113,6 +119,11 @@ impl IntoElement for LayerItem {
             .text_color(self.theme.ui_text)
             .cursor_pointer()
             .hover(move |d| d.bg(hover_bg))
+            .on_click(move |_, _window, cx| {
+                canvas.update(cx, |canvas, cx| {
+                    canvas.select(shape_id, false, cx);
+                });
+            })
             // Fixed-width icon container
             .child(
                 div()
