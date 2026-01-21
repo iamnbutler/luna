@@ -18,6 +18,7 @@ api = { path = "../api" }
 assets = { path = "../assets" }
 canvas = { path = "../canvas" }
 canvas_2 = { path = "../canvas_2" }
+interchange = { path = "../interchange" }
 chrono = { workspace = true }
 common = { path = "../common" }
 glam = { workspace = true }

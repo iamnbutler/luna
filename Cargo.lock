@@ -3375,6 +3375,7 @@ dependencies = [
  "common",
  "glam",
  "gpui",
+ "interchange",
  "node",
  "node_2",
  "palette",

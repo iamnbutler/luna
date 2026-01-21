@@ -8,10 +8,12 @@ use canvas_2::{Canvas, CanvasElement, CanvasEvent, Tool};
 use glam::Vec2;
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable,
-    IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Styled, Subscription, TitlebarOptions,
-    Window, WindowBackgroundAppearance, WindowOptions,
+    IntoElement, KeyBinding, Menu, MenuItem, ParentElement, PathPromptOptions, Styled, Subscription,
+    TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
 };
+use interchange::{Document, Project};
 use node_2::Shape;
+use std::path::PathBuf;
 use std::sync::Arc;
 use theme_2::Theme;
 use ui_2::{bind_input_keys, LayerList, PropertiesPanel, ToolRail};
@@ -27,8 +29,11 @@ actions!(
         EllipseTool,
         HandTool,
         NewFile,
+        OpenProject,
         Quit,
         RectangleTool,
+        SaveProject,
+        SaveProjectAs,
         SelectAll,
         SelectionTool,
     ]
@@ -43,6 +48,8 @@ struct Luna {
     focus_handle: FocusHandle,
     theme: Theme,
     debug_server: Option<Arc<DebugServer>>,
+    /// Current project path (for save-in-place)
+    project_path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -106,6 +113,7 @@ impl Luna {
             focus_handle,
             theme,
             debug_server,
+            project_path: None,
             _subscriptions: vec![canvas_subscription],
         }
     }
@@ -204,6 +212,95 @@ impl Luna {
             canvas.selection.clear();
             cx.notify();
         });
+        self.project_path = None;
+    }
+
+    fn save_project(&mut self, _: &SaveProject, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(path) = &self.project_path {
+            // Save to existing path
+            self.save_to_path(path.clone(), cx);
+        } else {
+            // No path yet, prompt for one
+            self.save_project_as(&SaveProjectAs, _window, cx);
+        }
+    }
+
+    fn save_project_as(&mut self, _: &SaveProjectAs, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let path = cx
+                .update(|cx| {
+                    cx.prompt_for_new_path(
+                        &std::env::current_dir().unwrap_or_default(),
+                        Some("untitled.luna"),
+                    )
+                })?
+                .await??;
+
+            if let Some(path) = path {
+                this.update(cx, |this, cx| {
+                    this.project_path = Some(path.clone());
+                    this.save_to_path(path, cx);
+                })?;
+            }
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn save_to_path(&self, path: PathBuf, cx: &mut Context<Self>) {
+        let shapes: Vec<Shape> = self.canvas.read(cx).shapes.clone();
+        let doc = Document::new(shapes);
+        let project = Project::from_document("Untitled", doc);
+
+        if let Err(e) = project.save(&path) {
+            eprintln!("Failed to save project: {}", e);
+        } else {
+            eprintln!("Saved to {}", path.display());
+        }
+    }
+
+    fn open_project(&mut self, _: &OpenProject, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let paths = cx
+                .update(|cx| {
+                    cx.prompt_for_paths(PathPromptOptions {
+                        files: true,
+                        directories: true,
+                        multiple: false,
+                        prompt: Some("Open Luna Project".into()),
+                    })
+                })?
+                .await??;
+
+            if let Some(paths) = paths {
+                if let Some(path) = paths.first() {
+                    this.update(cx, |this, cx| {
+                        this.load_from_path(path.clone(), cx);
+                    })?;
+                }
+            }
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn load_from_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        match Project::load(&path) {
+            Ok(project) => {
+                if let Some(doc) = project.default_page() {
+                    self.canvas.update(cx, |canvas, cx| {
+                        canvas.shapes = doc.shapes.clone();
+                        canvas.selection.clear();
+                        cx.notify();
+                    });
+                    self.project_path = Some(path.clone());
+                    eprintln!("Loaded project from {}", path.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to load project: {}", e);
+            }
+        }
     }
 }
 
@@ -240,6 +337,9 @@ impl Render for Luna {
             .on_action(cx.listener(Self::duplicate_selected))
             .on_action(cx.listener(Self::handle_cancel))
             .on_action(cx.listener(Self::new_file))
+            .on_action(cx.listener(Self::save_project))
+            .on_action(cx.listener(Self::save_project_as))
+            .on_action(cx.listener(Self::open_project))
             // Far left: Tool rail
             .child(
                 div()
@@ -284,6 +384,9 @@ fn init_keymap(cx: &mut App) {
         KeyBinding::new("o", EllipseTool, None),
         KeyBinding::new("escape", Cancel, None),
         KeyBinding::new("cmd-n", NewFile, None),
+        KeyBinding::new("cmd-s", SaveProject, None),
+        KeyBinding::new("cmd-shift-s", SaveProjectAs, None),
+        KeyBinding::new("cmd-o", OpenProject, None),
         KeyBinding::new("cmd-d", Duplicate, None),
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("delete", Delete, None),
@@ -306,7 +409,13 @@ fn main() {
             },
             Menu {
                 name: "File".into(),
-                items: vec![MenuItem::action("New", NewFile)],
+                items: vec![
+                    MenuItem::action("New", NewFile),
+                    MenuItem::action("Open...", OpenProject),
+                    MenuItem::separator(),
+                    MenuItem::action("Save", SaveProject),
+                    MenuItem::action("Save As...", SaveProjectAs),
+                ],
             },
             Menu {
                 name: "Edit".into(),
