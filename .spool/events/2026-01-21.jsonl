@@ -2,3 +2,5 @@
 {"v":1,"op":"create","id":"mknd0uq7-tjft","ts":"2026-01-21T01:44:13.711454Z","by":"@iamnbutler","branch":"main","d":{"description":"Add kdl crate to workspace, create interchange crate with serialize/deserialize for current canvas state","priority":"p1","stream":"interchange","title":"Add KDL dependency and create format module"}}
 {"v":1,"op":"create","id":"mknd11lu-iva3","ts":"2026-01-21T01:44:22.626984Z","by":"@iamnbutler","branch":"main","d":{"description":"Serialize current canvas shapes to .kdl file","priority":"p1","stream":"interchange","title":"Export canvas to KDL format"}}
 {"v":1,"op":"create","id":"mknd136q-k2l9","ts":"2026-01-21T01:44:24.674875Z","by":"@iamnbutler","branch":"main","d":{"description":"Parse .kdl file and load shapes into canvas","priority":"p1","stream":"interchange","title":"Import canvas from KDL format"}}
+{"v":1,"op":"complete","id":"mknd0uq7-tjft","ts":"2026-01-21T01:48:19.920743Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkn2vljs-9cfi","ts":"2026-01-21T01:48:25.957063Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
