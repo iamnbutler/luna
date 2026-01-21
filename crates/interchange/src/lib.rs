@@ -3,7 +3,14 @@
 //! KDL-based interchange format for Luna canvas documents.
 //! Pure data, no expressions - what you see is what's there.
 //!
-//! # Example
+//! # Package Format
+//!
+//! A `.luna` project is a folder containing:
+//! - `manifest.kdl` - Project metadata
+//! - `pages/*.kdl` - One file per page/canvas
+//! - `assets/` - Linked resources (future)
+//!
+//! # Document Format
 //!
 //! ```kdl
 //! document version="0.1" {
@@ -17,6 +24,10 @@
 //!   }
 //! }
 //! ```
+
+mod project;
+
+pub use project::Project;
 
 use glam::Vec2;
 use kdl::{KdlDocument, KdlEntry, KdlNode};

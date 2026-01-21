@@ -4,3 +4,4 @@
 {"v":1,"op":"create","id":"mknd136q-k2l9","ts":"2026-01-21T01:44:24.674875Z","by":"@iamnbutler","branch":"main","d":{"description":"Parse .kdl file and load shapes into canvas","priority":"p1","stream":"interchange","title":"Import canvas from KDL format"}}
 {"v":1,"op":"complete","id":"mknd0uq7-tjft","ts":"2026-01-21T01:48:19.920743Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkn2vljs-9cfi","ts":"2026-01-21T01:48:25.957063Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mknywk6f-wgaf","ts":"2026-01-21T11:56:44.967962Z","by":"@iamnbutler","branch":"main","d":{"description":"Folder-based package format: project.luna/ contains manifest.kdl, pages/*.kdl, assets/, shaders/. Start simple: manifest + single canvas.kdl","priority":"p1","stream":"interchange","title":"Implement .luna package format"}}
