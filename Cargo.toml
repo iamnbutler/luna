@@ -4,6 +4,7 @@ members = [
     "crates/assets",
     "crates/cli",
     "crates/common",
+    "crates/interchange",
     "crates/node",
     "crates/node_2",
     "crates/luna",
@@ -28,6 +29,7 @@ anyhow = "=1.0.97"
 clap = { version = "=4.5.4", features = ["derive"] }
 chrono = "=0.4"
 glam = { version = "=0.30.5", features = ["serde"] }
+kdl = "=6.5.0"
 gpui = { version = "=0.2.2", features = ["test-support", "inspector"] }
 palette = "=0.7.6"
 quadtree_rs = "=0.1.3"

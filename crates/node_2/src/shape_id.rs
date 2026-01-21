@@ -9,6 +9,22 @@ impl ShapeId {
     pub fn new() -> Self {
         Self(uuid::Uuid::new_v4())
     }
+
+    /// Create a ShapeId from a string (UUID or short ID).
+    /// If parsing fails, generates a new ID.
+    pub fn from_str(s: &str) -> Self {
+        // Try parsing as full UUID first
+        if let Ok(uuid) = uuid::Uuid::parse_str(s) {
+            return Self(uuid);
+        }
+        // Otherwise generate new (we don't store short form)
+        Self::new()
+    }
+
+    /// Get the full UUID string.
+    pub fn to_uuid_string(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl Default for ShapeId {

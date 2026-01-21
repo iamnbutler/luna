@@ -1,7 +1,43 @@
 # Luna Canvas Interchange Format (LCIF)
 
-**Status:** Draft / Exploration
+**Status:** Implemented (basic shapes)
 **Version:** 0.1.0
+**Format:** KDL (https://kdl.dev)
+
+## Implemented Format
+
+```kdl
+document version="0.1" {
+  rect "uuid-here" x=100.0 y=100.0 width=150.0 height=100.0 {
+    fill h=0.5 s=0.8 l=0.5 a=1.0
+    stroke width=2.0 h=0.0 s=0.0 l=0.0 a=1.0
+    radius 8.0
+  }
+  ellipse "uuid-here" x=300.0 y=150.0 width=120.0 height=120.0 {
+    stroke width=2.0 h=0.0 s=0.0 l=0.0 a=1.0
+  }
+}
+```
+
+### Node types
+
+- `document` - Root node with `version` property
+- `rect` - Rectangle shape
+- `ellipse` - Ellipse shape
+
+### Shape properties
+
+- First argument: UUID string (shape ID)
+- `x`, `y` - Position (f64)
+- `width`, `height` - Size (f64)
+
+### Shape children
+
+- `fill` - Fill color with `h`, `s`, `l`, `a` (HSLA, 0-1 range)
+- `stroke` - Stroke with `width` and `h`, `s`, `l`, `a`
+- `radius` - Corner radius (f64, positional argument)
+
+---
 
 ## Goals
 
