@@ -5,7 +5,8 @@ use gpui::{
     Element, ElementId, Entity, Hitbox, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, PaintQuad, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
 };
-use node_2::ShapeKind;
+use node_2::{CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind};
+use std::collections::HashSet;
 
 /// Size of resize handles in pixels.
 const HANDLE_SIZE: f32 = 8.0;
@@ -91,98 +92,21 @@ impl Element for CanvasElement {
         // Paint background
         window.paint_quad(gpui::fill(bounds, theme.canvas_background));
 
-        // Set up content mask for clipping
+        // Set up content mask for clipping to canvas bounds
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            // Paint shapes
-            for shape in &shapes {
-                let screen_bounds = viewport.canvas_to_screen_bounds(shape.position, shape.size);
-                let screen_bounds = Bounds {
-                    origin: point(
-                        bounds.origin.x + px(screen_bounds.origin.x),
-                        bounds.origin.y + px(screen_bounds.origin.y),
-                    ),
-                    size: size(px(screen_bounds.size.width), px(screen_bounds.size.height)),
-                };
-
-                // Skip if not visible
-                if !bounds.intersects(&screen_bounds) {
-                    continue;
-                }
-
-                // Clamp corner radius to half the smaller dimension to prevent overlap
-                let max_radius = shape.size.x.min(shape.size.y) / 2.0;
-                let corner_radius = px(shape.corner_radius.min(max_radius) * viewport.zoom);
-
-                // Paint fill
-                if let Some(fill) = &shape.fill {
-                    match shape.kind {
-                        ShapeKind::Rectangle => {
-                            window.paint_quad(
-                                gpui::fill(screen_bounds, fill.color).corner_radii(corner_radius),
-                            );
-                        }
-                        ShapeKind::Ellipse => {
-                            // For ellipse, use corner radius = half the smaller dimension
-                            let w: f32 = screen_bounds.size.width.into();
-                            let h: f32 = screen_bounds.size.height.into();
-                            let radius = px(w.min(h) / 2.0);
-                            window.paint_quad(
-                                gpui::fill(screen_bounds, fill.color).corner_radii(radius),
-                            );
-                        }
-                    }
-                }
-
-                // Paint stroke
-                if let Some(stroke) = &shape.stroke {
-                    let stroke_width = px(stroke.width * viewport.zoom);
-                    match shape.kind {
-                        ShapeKind::Rectangle => {
-                            window.paint_quad(PaintQuad {
-                                bounds: screen_bounds,
-                                corner_radii: corner_radius.into(),
-                                background: transparent_black().into(),
-                                border_widths: stroke_width.into(),
-                                border_color: stroke.color.into(),
-                                border_style: BorderStyle::Solid,
-                            });
-                        }
-                        ShapeKind::Ellipse => {
-                            let w: f32 = screen_bounds.size.width.into();
-                            let h: f32 = screen_bounds.size.height.into();
-                            let radius = px(w.min(h) / 2.0);
-                            window.paint_quad(PaintQuad {
-                                bounds: screen_bounds,
-                                corner_radii: radius.into(),
-                                background: transparent_black().into(),
-                                border_widths: stroke_width.into(),
-                                border_color: stroke.color.into(),
-                                border_style: BorderStyle::Solid,
-                            });
-                        }
-                    }
-                }
-
-                // Paint hover indicator
-                if hovered == Some(shape.id) && !selection.contains(&shape.id) {
-                    window.paint_quad(gpui::outline(
-                        screen_bounds,
-                        theme.hover,
-                        BorderStyle::Solid,
-                    ).corner_radii(corner_radius));
-                }
-
-                // Paint selection indicator
-                if selection.contains(&shape.id) {
-                    window.paint_quad(gpui::outline(
-                        screen_bounds,
-                        theme.selection,
-                        BorderStyle::Solid,
-                    ).corner_radii(corner_radius));
-
-                    // Paint corner handles
-                    paint_selection_handles(window, screen_bounds, theme.selection);
-                }
+            // Paint only root shapes (shapes with no parent)
+            // Children are painted recursively by their parent frames
+            for shape in shapes.iter().filter(|s| s.parent.is_none()) {
+                paint_shape_recursive(
+                    shape,
+                    &shapes,
+                    &selection,
+                    hovered,
+                    &viewport,
+                    &theme,
+                    bounds,
+                    window,
+                );
             }
 
             // Paint multi-selection bounding box
@@ -337,12 +261,13 @@ fn selection_bounds_from_shapes(
     let mut max = Vec2::new(f32::MIN, f32::MIN);
 
     for shape in selected {
+        let canvas_max = CanvasPoint(shape.position.0 + shape.size.0);
         let screen_min = viewport.canvas_to_screen(shape.position);
-        let screen_max = viewport.canvas_to_screen(shape.position + shape.size);
-        min.x = min.x.min(screen_min.x);
-        min.y = min.y.min(screen_min.y);
-        max.x = max.x.max(screen_max.x);
-        max.y = max.y.max(screen_max.y);
+        let screen_max = viewport.canvas_to_screen(canvas_max);
+        min.x = min.x.min(screen_min.x());
+        min.y = min.y.min(screen_min.y());
+        max.x = max.x.max(screen_max.x());
+        max.y = max.y.max(screen_max.y());
     }
 
     Some((min, max))
@@ -356,13 +281,13 @@ fn handle_mouse_down(
 ) {
     let local_x: f32 = (event.position.x - bounds.origin.x).into();
     let local_y: f32 = (event.position.y - bounds.origin.y).into();
-    let local_pos = point(local_x, local_y);
+    let screen_pos = ScreenPoint::new(local_x, local_y);
     let local_vec = Vec2::new(local_x, local_y);
 
     // Middle mouse button always pans
     if event.button == MouseButton::Middle {
         canvas.update(cx, |canvas, _cx| {
-            canvas.start_pan(local_vec);
+            canvas.start_pan(screen_pos);
         });
         return;
     }
@@ -372,7 +297,7 @@ fn handle_mouse_down(
     }
 
     canvas.update(cx, |canvas, cx| {
-        let canvas_pos = canvas.viewport.screen_to_canvas(local_pos);
+        let canvas_pos = canvas.viewport.screen_to_canvas(screen_pos);
 
         match canvas.tool {
             Tool::Select => {
@@ -382,8 +307,8 @@ fn handle_mouse_down(
                         let screen_min = canvas.viewport.canvas_to_screen(min);
                         let screen_max = canvas.viewport.canvas_to_screen(max);
                         let selection_screen_bounds = Bounds {
-                            origin: point(px(screen_min.x), px(screen_min.y)),
-                            size: size(px(screen_max.x - screen_min.x), px(screen_max.y - screen_min.y)),
+                            origin: point(px(screen_min.x()), px(screen_min.y())),
+                            size: size(px(screen_max.x() - screen_min.x()), px(screen_max.y() - screen_min.y())),
                         };
 
                         if let Some(handle) = hit_test_resize_handle(local_vec, selection_screen_bounds) {
@@ -405,13 +330,16 @@ fn handle_mouse_down(
                 }
             }
             Tool::Pan => {
-                canvas.start_pan(local_vec);
+                canvas.start_pan(screen_pos);
             }
             Tool::Rectangle => {
                 canvas.start_draw(ShapeKind::Rectangle, canvas_pos, cx);
             }
             Tool::Ellipse => {
                 canvas.start_draw(ShapeKind::Ellipse, canvas_pos, cx);
+            }
+            Tool::Frame => {
+                canvas.start_draw(ShapeKind::Frame, canvas_pos, cx);
             }
         }
     });
@@ -425,11 +353,10 @@ fn handle_mouse_move(
 ) {
     let local_x: f32 = (event.position.x - bounds.origin.x).into();
     let local_y: f32 = (event.position.y - bounds.origin.y).into();
-    let local_pos = point(local_x, local_y);
-    let local_vec = Vec2::new(local_x, local_y);
+    let screen_pos = ScreenPoint::new(local_x, local_y);
 
     canvas.update(cx, |canvas, cx| {
-        let canvas_pos = canvas.viewport.screen_to_canvas(local_pos);
+        let canvas_pos = canvas.viewport.screen_to_canvas(screen_pos);
 
         // Clone drag state to avoid borrow issues
         let drag = canvas.drag.clone();
@@ -443,17 +370,17 @@ fn handle_mouse_move(
             }
             Some(DragState::DrawingShape { shape_id, start }) => {
                 // Calculate size and position (handle negative drag)
-                let min = Vec2::new(start.x.min(canvas_pos.x), start.y.min(canvas_pos.y));
-                let max = Vec2::new(start.x.max(canvas_pos.x), start.y.max(canvas_pos.y));
+                let min = Vec2::new(start.x().min(canvas_pos.x()), start.y().min(canvas_pos.y()));
+                let max = Vec2::new(start.x().max(canvas_pos.x()), start.y().max(canvas_pos.y()));
 
                 if let Some(shape) = canvas.shapes.iter_mut().find(|s| s.id == shape_id) {
-                    shape.position = min;
-                    shape.size = max - min;
+                    shape.position = CanvasPoint(min);
+                    shape.size = CanvasSize(max - min);
                 }
                 cx.notify();
             }
             Some(DragState::Panning { .. }) => {
-                canvas.update_pan(local_vec, cx);
+                canvas.update_pan(screen_pos, cx);
             }
             Some(DragState::Selecting { .. }) => {
                 // TODO: implement drag selection
@@ -534,6 +461,136 @@ fn handle_scroll(
             cx.notify();
         }
     });
+}
+
+/// Paint a shape and its children recursively.
+///
+/// For frames with `clip_children` enabled, children are rendered within
+/// a content mask that clips to the frame's bounds.
+fn paint_shape_recursive(
+    shape: &Shape,
+    all_shapes: &[Shape],
+    selection: &HashSet<ShapeId>,
+    hovered: Option<ShapeId>,
+    viewport: &crate::Viewport,
+    theme: &theme_2::Theme,
+    canvas_bounds: Bounds<Pixels>,
+    window: &mut Window,
+) {
+    // Calculate world position for this shape
+    let world_pos = shape.world_position(all_shapes);
+
+    // Convert to screen coordinates
+    let screen_rect = viewport.canvas_to_screen_bounds(world_pos, shape.size);
+    let screen_bounds = Bounds {
+        origin: point(
+            canvas_bounds.origin.x + px(screen_rect.origin.x),
+            canvas_bounds.origin.y + px(screen_rect.origin.y),
+        ),
+        size: size(px(screen_rect.size.width), px(screen_rect.size.height)),
+    };
+
+    // Skip if not visible
+    if !canvas_bounds.intersects(&screen_bounds) {
+        return;
+    }
+
+    // Clamp corner radius to half the smaller dimension
+    let max_radius = shape.size.width().min(shape.size.height()) / 2.0;
+    let corner_radius = px(shape.corner_radius.min(max_radius) * viewport.zoom);
+
+    // Paint fill
+    if let Some(fill) = &shape.fill {
+        match shape.kind {
+            ShapeKind::Rectangle | ShapeKind::Frame => {
+                window.paint_quad(
+                    gpui::fill(screen_bounds, fill.color).corner_radii(corner_radius),
+                );
+            }
+            ShapeKind::Ellipse => {
+                let w: f32 = screen_bounds.size.width.into();
+                let h: f32 = screen_bounds.size.height.into();
+                let radius = px(w.min(h) / 2.0);
+                window.paint_quad(
+                    gpui::fill(screen_bounds, fill.color).corner_radii(radius),
+                );
+            }
+        }
+    }
+
+    // Paint stroke
+    if let Some(stroke) = &shape.stroke {
+        let stroke_width = px(stroke.width * viewport.zoom);
+        match shape.kind {
+            ShapeKind::Rectangle | ShapeKind::Frame => {
+                window.paint_quad(PaintQuad {
+                    bounds: screen_bounds,
+                    corner_radii: corner_radius.into(),
+                    background: transparent_black().into(),
+                    border_widths: stroke_width.into(),
+                    border_color: stroke.color.into(),
+                    border_style: BorderStyle::Solid,
+                });
+            }
+            ShapeKind::Ellipse => {
+                let w: f32 = screen_bounds.size.width.into();
+                let h: f32 = screen_bounds.size.height.into();
+                let radius = px(w.min(h) / 2.0);
+                window.paint_quad(PaintQuad {
+                    bounds: screen_bounds,
+                    corner_radii: radius.into(),
+                    background: transparent_black().into(),
+                    border_widths: stroke_width.into(),
+                    border_color: stroke.color.into(),
+                    border_style: BorderStyle::Solid,
+                });
+            }
+        }
+    }
+
+    // Paint hover indicator
+    if hovered == Some(shape.id) && !selection.contains(&shape.id) {
+        window.paint_quad(
+            gpui::outline(screen_bounds, theme.hover, BorderStyle::Solid)
+                .corner_radii(corner_radius),
+        );
+    }
+
+    // Paint selection indicator
+    if selection.contains(&shape.id) {
+        window.paint_quad(
+            gpui::outline(screen_bounds, theme.selection, BorderStyle::Solid)
+                .corner_radii(corner_radius),
+        );
+        paint_selection_handles(window, screen_bounds, theme.selection);
+    }
+
+    // Paint children (for frames)
+    if !shape.children.is_empty() {
+        // Optionally clip children to frame bounds
+        let clip_mask = if shape.clip_children {
+            Some(ContentMask { bounds: screen_bounds })
+        } else {
+            None
+        };
+
+        window.with_content_mask(clip_mask, |window| {
+            for child_id in &shape.children {
+                if let Some(child) = all_shapes.iter().find(|s| s.id == *child_id) {
+                    paint_shape_recursive(
+                        child,
+                        all_shapes,
+                        selection,
+                        hovered,
+                        viewport,
+                        theme,
+                        canvas_bounds,
+                        window,
+                    );
+                }
+            }
+        });
+    }
 }
 
 // Helper trait for Canvas to clone state for rendering

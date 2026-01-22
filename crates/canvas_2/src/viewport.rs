@@ -1,5 +1,6 @@
 use glam::Vec2;
 use gpui::{Bounds, Point, Size};
+use node_2::{CanvasPoint, CanvasSize, ScreenPoint};
 
 /// Camera/viewport state for the canvas.
 #[derive(Clone, Debug)]
@@ -25,32 +26,40 @@ impl Viewport {
     }
 
     /// Convert a point from screen coordinates to canvas coordinates.
-    pub fn screen_to_canvas(&self, screen_point: Point<f32>) -> Vec2 {
-        Vec2::new(
-            (screen_point.x / self.zoom) - self.offset.x,
-            (screen_point.y / self.zoom) - self.offset.y,
+    pub fn screen_to_canvas(&self, screen_point: ScreenPoint) -> CanvasPoint {
+        CanvasPoint::new(
+            (screen_point.x() / self.zoom) - self.offset.x,
+            (screen_point.y() / self.zoom) - self.offset.y,
         )
     }
 
     /// Convert a point from canvas coordinates to screen coordinates.
-    pub fn canvas_to_screen(&self, canvas_point: Vec2) -> Point<f32> {
+    pub fn canvas_to_screen(&self, canvas_point: CanvasPoint) -> ScreenPoint {
+        ScreenPoint::new(
+            (canvas_point.x() + self.offset.x) * self.zoom,
+            (canvas_point.y() + self.offset.y) * self.zoom,
+        )
+    }
+
+    /// Convert a point from canvas coordinates to a GPUI Point (for rendering).
+    pub fn canvas_to_screen_point(&self, canvas_point: CanvasPoint) -> Point<f32> {
         Point::new(
-            (canvas_point.x + self.offset.x) * self.zoom,
-            (canvas_point.y + self.offset.y) * self.zoom,
+            (canvas_point.x() + self.offset.x) * self.zoom,
+            (canvas_point.y() + self.offset.y) * self.zoom,
         )
     }
 
     /// Convert a size from canvas to screen coordinates.
-    pub fn canvas_to_screen_size(&self, size: Vec2) -> Size<f32> {
+    pub fn canvas_to_screen_size(&self, size: CanvasSize) -> Size<f32> {
         Size {
-            width: size.x * self.zoom,
-            height: size.y * self.zoom,
+            width: size.width() * self.zoom,
+            height: size.height() * self.zoom,
         }
     }
 
     /// Convert canvas bounds to screen bounds.
-    pub fn canvas_to_screen_bounds(&self, position: Vec2, size: Vec2) -> Bounds<f32> {
-        let origin = self.canvas_to_screen(position);
+    pub fn canvas_to_screen_bounds(&self, position: CanvasPoint, size: CanvasSize) -> Bounds<f32> {
+        let origin = self.canvas_to_screen_point(position);
         let size = self.canvas_to_screen_size(size);
         Bounds { origin, size }
     }

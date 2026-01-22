@@ -1,7 +1,7 @@
 use crate::Viewport;
 use glam::Vec2;
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, Hsla, Point};
-use node_2::{Shape, ShapeId, ShapeKind, Stroke};
+use node_2::{CanvasDelta, CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind, Stroke};
 use std::collections::HashSet;
 use theme_2::Theme;
 
@@ -13,6 +13,7 @@ pub enum Tool {
     Pan,
     Rectangle,
     Ellipse,
+    Frame,
 }
 
 /// Events emitted by the canvas.
@@ -48,23 +49,23 @@ impl ResizeHandle {
 pub enum DragState {
     /// Dragging selected shapes
     MovingShapes {
-        start_mouse: Vec2,
-        start_positions: Vec<(ShapeId, Vec2)>,
+        start_mouse: CanvasPoint,
+        start_positions: Vec<(ShapeId, CanvasPoint)>,
     },
     /// Resizing selected shapes
     ResizingShapes {
         handle: ResizeHandle,
-        start_mouse: Vec2,
-        start_bounds: (Vec2, Vec2), // (min, max) in canvas coords
+        start_mouse: CanvasPoint,
+        start_bounds: (CanvasPoint, CanvasPoint), // (min, max) in canvas coords
         shape_ids: Vec<ShapeId>,
-        start_shape_data: Vec<(ShapeId, Vec2, Vec2)>, // (id, position, size)
+        start_shape_data: Vec<(ShapeId, CanvasPoint, CanvasSize)>, // (id, position, size)
     },
     /// Drawing a new shape
-    DrawingShape { shape_id: ShapeId, start: Vec2 },
+    DrawingShape { shape_id: ShapeId, start: CanvasPoint },
     /// Panning the canvas
-    Panning { last_screen_pos: Vec2 },
+    Panning { last_screen_pos: ScreenPoint },
     /// Drag-selecting shapes
-    Selecting { start: Vec2 },
+    Selecting { start: CanvasPoint },
 }
 
 /// The canvas state.
@@ -146,14 +147,53 @@ impl Canvas {
         self.shapes.iter_mut().find(|s| s.id == id)
     }
 
-    /// Find the topmost shape at a canvas point.
-    pub fn shape_at_point(&self, point: Vec2) -> Option<ShapeId> {
-        // Iterate in reverse for z-order (top to bottom)
-        self.shapes
+    /// Find the deepest shape at a canvas point.
+    ///
+    /// For frames with children, recursively checks children first to find
+    /// the deepest (most nested) shape at the point.
+    pub fn shape_at_point(&self, point: CanvasPoint) -> Option<ShapeId> {
+        self.shape_at_point_recursive(point, None)
+    }
+
+    /// Recursive helper for shape_at_point.
+    /// If parent_id is Some, only checks children of that parent.
+    fn shape_at_point_recursive(
+        &self,
+        point: CanvasPoint,
+        parent_id: Option<ShapeId>,
+    ) -> Option<ShapeId> {
+        // Get shapes at this level (matching parent)
+        let shapes_at_level: Vec<_> = self
+            .shapes
             .iter()
-            .rev()
-            .find(|s| s.contains_point(point))
-            .map(|s| s.id)
+            .filter(|s| s.parent == parent_id)
+            .collect();
+
+        // Iterate in reverse for z-order (top to bottom)
+        for shape in shapes_at_level.iter().rev() {
+            // Calculate world position for hit testing
+            let world_pos = shape.world_position(&self.shapes);
+            let world_bounds_min = world_pos;
+            let world_bounds_max = CanvasPoint(world_pos.0 + shape.size.0);
+
+            let hit = point.0.x >= world_bounds_min.0.x
+                && point.0.x <= world_bounds_max.0.x
+                && point.0.y >= world_bounds_min.0.y
+                && point.0.y <= world_bounds_max.0.y;
+
+            if hit {
+                // If this shape has children, check them first (they render on top)
+                if !shape.children.is_empty() {
+                    if let Some(child_hit) = self.shape_at_point_recursive(point, Some(shape.id)) {
+                        return Some(child_hit);
+                    }
+                }
+                // No child hit, return this shape
+                return Some(shape.id);
+            }
+        }
+
+        None
     }
 
     /// Select a shape, optionally adding to selection.
@@ -175,6 +215,107 @@ impl Canvas {
         }
     }
 
+    /// Add a shape as a child of a frame.
+    ///
+    /// Converts the child's position from absolute canvas coordinates to
+    /// relative coordinates (relative to parent's origin).
+    pub fn add_child(&mut self, child_id: ShapeId, parent_id: ShapeId, cx: &mut Context<Self>) {
+        // Get parent's world position
+        let parent_world = self
+            .get_shape(parent_id)
+            .map(|p| p.world_position(&self.shapes));
+
+        let Some(parent_world) = parent_world else {
+            return;
+        };
+
+        // Update child: convert position to relative and set parent
+        if let Some(child) = self.get_shape_mut(child_id) {
+            // Convert absolute position to relative (subtract parent's world position)
+            let child_world = child.position;
+            child.position = CanvasPoint(child_world.0 - parent_world.0);
+            child.parent = Some(parent_id);
+        }
+
+        // Update parent: add child to children list
+        if let Some(parent) = self.get_shape_mut(parent_id) {
+            if !parent.children.contains(&child_id) {
+                parent.children.push(child_id);
+            }
+        }
+
+        cx.emit(CanvasEvent::ContentChanged);
+        cx.notify();
+    }
+
+    /// Remove a shape from its parent.
+    ///
+    /// Converts the child's position from relative coordinates back to
+    /// absolute canvas coordinates.
+    pub fn unparent(&mut self, child_id: ShapeId, cx: &mut Context<Self>) {
+        // Get child's current parent and world position before unparenting
+        let (parent_id, child_world) = {
+            let Some(child) = self.get_shape(child_id) else {
+                return;
+            };
+            let Some(parent_id) = child.parent else {
+                return; // Already unparented
+            };
+            (parent_id, child.world_position(&self.shapes))
+        };
+
+        // Update child: convert position to absolute and clear parent
+        if let Some(child) = self.get_shape_mut(child_id) {
+            child.position = child_world;
+            child.parent = None;
+        }
+
+        // Update parent: remove child from children list
+        if let Some(parent) = self.get_shape_mut(parent_id) {
+            parent.children.retain(|&id| id != child_id);
+        }
+
+        cx.emit(CanvasEvent::ContentChanged);
+        cx.notify();
+    }
+
+    /// Find the topmost frame that fully contains a shape's bounds.
+    ///
+    /// Returns None if no frame contains the shape.
+    fn find_containing_frame(&self, shape_id: ShapeId) -> Option<ShapeId> {
+        let shape = self.get_shape(shape_id)?;
+        let shape_min = shape.position.0;
+        let shape_max = shape.position.0 + shape.size.0;
+
+        // Find frames (in reverse z-order to get topmost first)
+        self.shapes
+            .iter()
+            .rev()
+            .filter(|s| s.kind == ShapeKind::Frame && s.id != shape_id)
+            .find(|frame| {
+                let frame_world = frame.world_position(&self.shapes);
+                let frame_min = frame_world.0;
+                let frame_max = frame_world.0 + frame.size.0;
+
+                // Check if shape is fully inside frame
+                shape_min.x >= frame_min.x
+                    && shape_min.y >= frame_min.y
+                    && shape_max.x <= frame_max.x
+                    && shape_max.y <= frame_max.y
+            })
+            .map(|f| f.id)
+    }
+
+    /// Auto-parent a shape if it's fully inside a frame.
+    ///
+    /// Called after drawing a new shape to automatically nest it
+    /// inside any containing frame.
+    fn auto_parent_if_inside_frame(&mut self, shape_id: ShapeId, cx: &mut Context<Self>) {
+        if let Some(frame_id) = self.find_containing_frame(shape_id) {
+            self.add_child(shape_id, frame_id, cx);
+        }
+    }
+
     /// Delete selected shapes.
     pub fn delete_selected(&mut self, cx: &mut Context<Self>) {
         let to_remove: Vec<_> = self.selection.iter().copied().collect();
@@ -185,7 +326,7 @@ impl Canvas {
 
     /// Duplicate selected shapes with a slight offset.
     pub fn duplicate_selected(&mut self, cx: &mut Context<Self>) {
-        let offset = Vec2::new(20.0, 20.0);
+        let offset = CanvasDelta::new(20.0, 20.0);
         let to_duplicate: Vec<_> = self
             .shapes
             .iter()
@@ -203,7 +344,7 @@ impl Canvas {
         // Create duplicates with new IDs and offset positions
         for mut shape in to_duplicate {
             shape.id = ShapeId::new();
-            shape.position += offset;
+            shape.position = shape.position + offset;
             let new_id = shape.id;
             self.shapes.push(shape);
             self.selection.insert(new_id);
@@ -216,7 +357,7 @@ impl Canvas {
     }
 
     /// Move selected shapes by a delta.
-    pub fn move_selected(&mut self, delta: Vec2, cx: &mut Context<Self>) {
+    pub fn move_selected(&mut self, delta: CanvasDelta, cx: &mut Context<Self>) {
         for shape in &mut self.shapes {
             if self.selection.contains(&shape.id) {
                 shape.translate(delta);
@@ -227,8 +368,8 @@ impl Canvas {
     }
 
     /// Start drawing a new shape.
-    pub fn start_draw(&mut self, kind: ShapeKind, start: Vec2, cx: &mut Context<Self>) {
-        let mut shape = Shape::new(kind, start, Vec2::ZERO);
+    pub fn start_draw(&mut self, kind: ShapeKind, start: CanvasPoint, cx: &mut Context<Self>) {
+        let mut shape = Shape::new(kind, start, CanvasSize::new(0.0, 0.0));
         shape.stroke = Some(self.default_stroke);
         shape.fill = self.default_fill.map(|c| node_2::Fill::new(c));
 
@@ -242,7 +383,7 @@ impl Canvas {
     }
 
     /// Update the shape being drawn.
-    pub fn update_draw(&mut self, current: Vec2, cx: &mut Context<Self>) {
+    pub fn update_draw(&mut self, current: CanvasPoint, cx: &mut Context<Self>) {
         // Copy data from drag state to avoid borrow issues
         let drag_info = match &self.drag {
             Some(DragState::DrawingShape { shape_id, start }) => Some((*shape_id, *start)),
@@ -252,10 +393,12 @@ impl Canvas {
         if let Some((shape_id, start)) = drag_info {
             if let Some(shape) = self.get_shape_mut(shape_id) {
                 // Calculate size and position (handle negative drag)
-                let min = Vec2::new(start.x.min(current.x), start.y.min(current.y));
-                let max = Vec2::new(start.x.max(current.x), start.y.max(current.y));
-                shape.position = min;
-                shape.size = max - min;
+                let min_x = start.x().min(current.x());
+                let min_y = start.y().min(current.y());
+                let max_x = start.x().max(current.x());
+                let max_y = start.y().max(current.y());
+                shape.position = CanvasPoint::new(min_x, min_y);
+                shape.size = CanvasSize::new(max_x - min_x, max_y - min_y);
                 cx.notify();
             }
         }
@@ -264,6 +407,9 @@ impl Canvas {
     /// Finish drawing a shape.
     pub fn finish_draw(&mut self, cx: &mut Context<Self>) {
         if let Some(DragState::DrawingShape { shape_id, .. }) = self.drag.take() {
+            // Auto-parent to containing frame if applicable
+            self.auto_parent_if_inside_frame(shape_id, cx);
+
             // Select the newly drawn shape
             self.selection.clear();
             self.selection.insert(shape_id);
@@ -277,7 +423,7 @@ impl Canvas {
     }
 
     /// Start moving selected shapes.
-    pub fn start_move(&mut self, start_mouse: Vec2, _cx: &mut Context<Self>) {
+    pub fn start_move(&mut self, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
         let positions: Vec<_> = self
             .shapes
             .iter()
@@ -292,9 +438,9 @@ impl Canvas {
     }
 
     /// Update shape positions during move.
-    pub fn update_move(&mut self, current_mouse: Vec2, cx: &mut Context<Self>) {
+    pub fn update_move(&mut self, current_mouse: CanvasPoint, cx: &mut Context<Self>) {
         // Copy data to avoid borrow issues
-        let (start_mouse, positions): (Vec2, Vec<_>) = match &self.drag {
+        let (start_mouse, positions): (CanvasPoint, Vec<_>) = match &self.drag {
             Some(DragState::MovingShapes { start_mouse, start_positions }) => {
                 (*start_mouse, start_positions.clone())
             }
@@ -321,7 +467,7 @@ impl Canvas {
     }
 
     /// Start resizing selected shapes.
-    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: Vec2, _cx: &mut Context<Self>) {
+    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
         let Some((min, max)) = self.selection_bounds() else {
             return;
         };
@@ -344,7 +490,7 @@ impl Canvas {
     }
 
     /// Update shape sizes during resize.
-    pub fn update_resize(&mut self, current_mouse: Vec2, cx: &mut Context<Self>) {
+    pub fn update_resize(&mut self, current_mouse: CanvasPoint, cx: &mut Context<Self>) {
         let (handle, start_mouse, start_bounds, start_shape_data) = match &self.drag {
             Some(DragState::ResizingShapes {
                 handle,
@@ -356,8 +502,11 @@ impl Canvas {
             _ => return,
         };
 
-        let (start_min, start_max) = start_bounds;
+        // Extract raw Vec2 values for math operations
+        let (start_min, start_max) = (start_bounds.0 .0, start_bounds.1 .0);
         let start_size = start_max - start_min;
+        let start_mouse = start_mouse.0;
+        let current_mouse = current_mouse.0;
 
         // Calculate new bounds based on which handle is being dragged
         let delta = current_mouse - start_mouse;
@@ -395,6 +544,10 @@ impl Canvas {
         // Update each shape proportionally
         for (id, orig_pos, orig_size) in start_shape_data {
             if let Some(shape) = self.get_shape_mut(id) {
+                // Extract raw values
+                let orig_pos = orig_pos.0;
+                let orig_size = orig_size.0;
+
                 // Calculate relative position within original bounds (0 to 1)
                 let rel_pos = orig_pos - start_min;
 
@@ -405,8 +558,8 @@ impl Canvas {
                 );
 
                 // Scale position and size
-                shape.position = new_min + rel_pos * scale;
-                shape.size = orig_size * scale;
+                shape.position = CanvasPoint(new_min + rel_pos * scale);
+                shape.size = CanvasSize(orig_size * scale);
             }
         }
         cx.notify();
@@ -422,14 +575,14 @@ impl Canvas {
     }
 
     /// Start panning.
-    pub fn start_pan(&mut self, screen_pos: Vec2) {
+    pub fn start_pan(&mut self, screen_pos: ScreenPoint) {
         self.drag = Some(DragState::Panning { last_screen_pos: screen_pos });
     }
 
     /// Update pan with new screen position.
-    pub fn update_pan(&mut self, current_screen_pos: Vec2, cx: &mut Context<Self>) {
+    pub fn update_pan(&mut self, current_screen_pos: ScreenPoint, cx: &mut Context<Self>) {
         if let Some(DragState::Panning { last_screen_pos }) = &mut self.drag {
-            let delta = current_screen_pos - *last_screen_pos;
+            let delta = current_screen_pos.0 - last_screen_pos.0;
             self.viewport.pan(delta);
             *last_screen_pos = current_screen_pos;
             cx.notify();
@@ -450,7 +603,7 @@ impl Canvas {
     }
 
     /// Get the bounding box of selected shapes in canvas coordinates.
-    pub fn selection_bounds(&self) -> Option<(Vec2, Vec2)> {
+    pub fn selection_bounds(&self) -> Option<(CanvasPoint, CanvasPoint)> {
         let selected: Vec<_> = self
             .shapes
             .iter()
@@ -466,11 +619,11 @@ impl Canvas {
 
         for shape in selected {
             let (shape_min, shape_max) = shape.bounds();
-            min = min.min(shape_min);
-            max = max.max(shape_max);
+            min = min.min(shape_min.0);
+            max = max.max(shape_max.0);
         }
 
-        Some((min, max))
+        Some((CanvasPoint(min), CanvasPoint(max)))
     }
 }
 
