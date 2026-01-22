@@ -7,7 +7,7 @@
 
 set -e
 
-CLI="./target/debug/luna"
+CLI="./target/debug/luna-cli"
 
 # Check if CLI exists
 if [ ! -f "$CLI" ]; then
