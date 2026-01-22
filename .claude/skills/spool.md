@@ -25,6 +25,9 @@ spool list -t bug
 # Filter by priority
 spool list -p p0
 
+# Filter by stream
+spool list --stream my-stream
+
 # Output as JSON
 spool list -f json
 
@@ -50,8 +53,11 @@ spool add "Task title" -t bug -t urgent
 # With assignee
 spool add "Task title" -a @username
 
+# In a specific stream
+spool add "Task title" --stream my-stream
+
 # Full example
-spool add "Fix authentication bug" -d "Users getting logged out unexpectedly" -p p0 -t bug -t auth -a @alice
+spool add "Fix authentication bug" -d "Users getting logged out unexpectedly" -p p0 -t bug -t auth -a @alice --stream backend
 ```
 
 ### Viewing Task Details
@@ -89,8 +95,32 @@ spool update <task-id> -d "New description"
 # Update priority
 spool update <task-id> -p p1
 
+# Move to a different stream
+spool update <task-id> --stream new-stream
+
 # Update multiple fields
 spool update <task-id> -t "New title" -d "New description" -p p0
+```
+
+### Streams
+
+Streams let you group tasks into collections (e.g., by feature, sprint, or area).
+
+```bash
+# Create a task in a stream
+spool add "Implement login" --stream auth
+
+# List tasks in a stream
+spool list --stream auth
+
+# Move a task to a different stream
+spool stream <task-id> new-stream
+
+# Remove a task from its stream (move to no stream)
+spool stream <task-id>
+
+# You can also move tasks via update
+spool update <task-id> --stream new-stream
 ```
 
 ### Completing & Reopening Tasks
@@ -155,6 +185,20 @@ spool list -a @yourusername
 spool list -a @yourusername -p p0 -t bug
 ```
 
+### Working with Streams
+
+```bash
+# List all tasks in a stream
+spool list --stream frontend
+
+# Create tasks in a feature stream
+spool add "Add dark mode toggle" --stream ui-redesign -p p2
+spool add "Update color palette" --stream ui-redesign -p p2
+
+# Move task to a different stream as priorities change
+spool stream <task-id> urgent-fixes
+```
+
 ## Priority Levels
 
 - `p0` - Critical: Blocking issues, production down
@@ -166,5 +210,6 @@ spool list -a @yourusername -p p0 -t bug
 
 - Task IDs are auto-generated and shown when you create a task
 - Use `spool list -f ids` to get just IDs for scripting
+- Use streams to organize tasks by feature, sprint, or area
 - The `.spool/` directory should be committed to git
 - Events are the source of truth; `.index.json` and `.state.json` are caches

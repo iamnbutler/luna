@@ -1,0 +1,4 @@
+{"v":1,"op":"create","id":"mkplzo6w-ksqs","ts":"2026-01-22T15:30:47.480050Z","by":"@iamnbutler","branch":"main","d":{"description":"Add frame creation, hierarchy operations (add_child, unparent), and clip_children support to the internal API and debug CLI","priority":"p1","stream":"frames-and-coords","tags":["api"],"title":"Update API and debug CLI for frame support"}}
+{"v":1,"op":"assign","id":"mkplzo6w-ksqs","ts":"2026-01-22T15:30:53.121580Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkplzo6w-ksqs","ts":"2026-01-22T15:34:05.585864Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkkrrb9t-r459","ts":"2026-01-22T17:16:43.763123Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}

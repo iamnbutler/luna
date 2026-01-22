@@ -5,3 +5,36 @@
 {"v":1,"op":"complete","id":"mknd0uq7-tjft","ts":"2026-01-21T01:48:19.920743Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkn2vljs-9cfi","ts":"2026-01-21T01:48:25.957063Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
 {"v":1,"op":"create","id":"mknywk6f-wgaf","ts":"2026-01-21T11:56:44.967962Z","by":"@iamnbutler","branch":"main","d":{"description":"Folder-based package format: project.luna/ contains manifest.kdl, pages/*.kdl, assets/, shaders/. Start simple: manifest + single canvas.kdl","priority":"p1","stream":"interchange","title":"Implement .luna package format"}}
+{"v":1,"op":"complete","id":"mkkrsip4-e9it","ts":"2026-01-21T17:53:44.178568Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mknd11lu-iva3","ts":"2026-01-21T17:53:44.204662Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mknd136q-k2l9","ts":"2026-01-21T17:53:44.230951Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mknywk6f-wgaf","ts":"2026-01-21T17:53:44.257152Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mkobnspx-fbtk","ts":"2026-01-21T17:53:51.141977Z","by":"@iamnbutler","branch":"main","d":{"description":"Create CanvasPoint, ScreenPoint, LocalPoint, CanvasSize, CanvasDelta newtypes in canvas_2/src/coords.rs","priority":"p1","title":"Type-safe coordinate system for Luna2"}}
+{"v":1,"op":"create","id":"mkobnzx1-ixq7","ts":"2026-01-21T17:54:00.469832Z","by":"@iamnbutler","branch":"main","d":{"description":"Replace Vec2 with typed coords in Shape, Viewport, DragState, element handlers","priority":"p1","title":"Integrate typed coordinates into canvas_2/node_2"}}
+{"v":1,"op":"create","id":"mkobnzxt-vbyt","ts":"2026-01-21T17:54:00.497539Z","by":"@iamnbutler","branch":"main","d":{"description":"Add Frame to ShapeKind, parent/children/clip_children to Shape, world_position() method","priority":"p1","title":"Add Frame shape kind with hierarchy"}}
+{"v":1,"op":"create","id":"mkobnzyh-qhrd","ts":"2026-01-21T17:54:00.521253Z","by":"@iamnbutler","branch":"main","d":{"description":"Add shape_at_point, add_child, unparent, auto_parent_if_inside_frame to Canvas","priority":"p1","title":"Canvas hierarchy operations"}}
+{"v":1,"op":"create","id":"mkobnzz8-dis1","ts":"2026-01-21T17:54:00.548726Z","by":"@iamnbutler","branch":"main","d":{"description":"Add ResizeMode enum with Scale (current), pathway for ScaleFromCenter, MaintainAspect, FrameOnly","priority":"p2","title":"ResizeMode enum for future expansion"}}
+{"v":1,"op":"create","id":"mkobnzzy-pbh3","ts":"2026-01-21T17:54:00.574896Z","by":"@iamnbutler","branch":"main","d":{"description":"Update paint_shape to render children, optionally clip with content mask","priority":"p1","title":"Frame rendering with clipping"}}
+{"v":1,"op":"create","id":"mkobo00o-gnot","ts":"2026-01-21T17:54:00.600500Z","by":"@iamnbutler","branch":"main","d":{"description":"Update interchange format to v0.2 with nested frame children","priority":"p1","title":"KDL serialization for nested frames"}}
+{"v":1,"op":"create","id":"mkobo01h-lm6a","ts":"2026-01-21T17:54:00.629974Z","by":"@iamnbutler","branch":"main","d":{"description":"Add FrameTool action, F keybinding, tool rail button","priority":"p1","title":"Frame tool in UI"}}
+{"v":1,"op":"set_stream","id":"mkobnspx-fbtk","ts":"2026-01-21T17:54:08.828438Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobnzx1-ixq7","ts":"2026-01-21T17:54:08.860360Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobnzxt-vbyt","ts":"2026-01-21T17:54:08.890491Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobnzyh-qhrd","ts":"2026-01-21T17:54:08.917679Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobnzz8-dis1","ts":"2026-01-21T17:54:08.943092Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobnzzy-pbh3","ts":"2026-01-21T17:54:08.968515Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobo00o-gnot","ts":"2026-01-21T17:54:08.993833Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"set_stream","id":"mkobo01h-lm6a","ts":"2026-01-21T17:54:09.018858Z","by":"@iamnbutler","branch":"main","d":{"stream":"frames-and-coords"}}
+{"v":1,"op":"complete","id":"mkobnspx-fbtk","ts":"2026-01-21T17:55:30.879842Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkobnzx1-ixq7","ts":"2026-01-21T18:40:23.366359Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkobnzxt-vbyt","ts":"2026-01-21T18:40:24.597503Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkobnzxt-vbyt","ts":"2026-01-21T18:43:15.865808Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkobnzyh-qhrd","ts":"2026-01-21T19:05:17.830069Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkobnzyh-qhrd","ts":"2026-01-21T19:07:14.842567Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"update","id":"mkobnzz8-dis1","ts":"2026-01-21T19:25:30.387409Z","by":"@iamnbutler","branch":"main","d":{"priority":"p3"}}
+{"v":1,"op":"assign","id":"mkobnzzy-pbh3","ts":"2026-01-21T19:25:31.581759Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkobnzzy-pbh3","ts":"2026-01-21T19:26:57.020854Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkobo00o-gnot","ts":"2026-01-21T19:26:57.060856Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkobo00o-gnot","ts":"2026-01-21T19:28:55.210253Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkobo01h-lm6a","ts":"2026-01-21T19:28:55.235592Z","by":"@iamnbutler","branch":"main","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkobo01h-lm6a","ts":"2026-01-21T19:31:29.844509Z","by":"@iamnbutler","branch":"main","d":{"resolution":"done"}}

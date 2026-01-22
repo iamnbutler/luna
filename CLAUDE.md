@@ -17,15 +17,7 @@ This project uses [spool](https://crates.io/crates/spool) for task management. S
 
 If you need more context on it's useage, see the [CLI Guide](https://github.com/iamnbutler/spool/blob/main/docs/CLI_GUIDE.md).
 
-### Key Commands
-
-```bash
-spool add "Task title" -p p1      # Add high priority task
-spool add "Task title" -p p2      # Add normal priority task
-spool list                        # List all tasks
-spool complete <task-id>          # Mark task complete
-spool show <task-id>              # Show task details
-```
+You have a [skill](.claude/skills/spool.md) for creating and managing spools and streams.
 
 ### When to Use Spool
 
