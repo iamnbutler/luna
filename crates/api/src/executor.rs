@@ -10,7 +10,7 @@ use crate::{
 use canvas_2::{Canvas, Tool};
 use glam::Vec2;
 use gpui::{Context, Entity};
-use node_2::{Fill, Shape, ShapeId, ShapeKind, Stroke};
+use node_2::{CanvasPoint, CanvasSize, Fill, Shape, ShapeId, ShapeKind, Stroke};
 
 /// Execute a command against a canvas.
 pub fn execute_command(
@@ -41,7 +41,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             stroke,
             corner_radius,
         } => {
-            let mut shape = Shape::new(kind, position, size);
+            let mut shape = Shape::new(kind, CanvasPoint(position), CanvasSize(size));
             if let Some(fill) = fill {
                 shape.fill = Some(Fill::new(fill.to_hsla()));
             }
@@ -72,7 +72,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             let mut created_ids = Vec::new();
             for mut shape in to_duplicate {
                 shape.id = ShapeId::new();
-                shape.position += offset;
+                shape.position.0 += offset;
                 created_ids.push(shape.id);
                 canvas.shapes.push(shape);
             }
@@ -130,7 +130,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             let mut modified = Vec::new();
             for shape in &mut canvas.shapes {
                 if ids.contains(&shape.id) {
-                    shape.position += delta;
+                    shape.position.0 += delta;
                     modified.push(shape.id);
                 }
             }
@@ -143,7 +143,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             let mut modified = Vec::new();
             for shape in &mut canvas.shapes {
                 if ids.contains(&shape.id) {
-                    shape.position = position;
+                    shape.position = CanvasPoint(position);
                     modified.push(shape.id);
                 }
             }
@@ -156,7 +156,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             let mut modified = Vec::new();
             for shape in &mut canvas.shapes {
                 if ids.contains(&shape.id) {
-                    shape.size = size;
+                    shape.size = CanvasSize(size);
                     modified.push(shape.id);
                 }
             }
@@ -169,7 +169,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             let mut modified = Vec::new();
             for shape in &mut canvas.shapes {
                 if ids.contains(&shape.id) {
-                    shape.size *= factor;
+                    shape.size.0 *= factor;
                     modified.push(shape.id);
                 }
             }
@@ -209,8 +209,40 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             for shape in &mut canvas.shapes {
                 if ids.contains(&shape.id) {
                     // Clamp to max valid radius
-                    let max_radius = shape.size.x.min(shape.size.y) / 2.0;
+                    let max_radius = shape.size.width().min(shape.size.height()) / 2.0;
                     shape.corner_radius = radius.min(max_radius);
+                    modified.push(shape.id);
+                }
+            }
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::AddChild { child, parent } => {
+            canvas.add_child(child, parent, cx);
+            CommandResult::modified(vec![child, parent])
+        }
+
+        Command::Unparent { target } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for id in ids {
+                // Check if shape has a parent before unparenting
+                let has_parent = canvas.get_shape(id).map(|s| s.parent.is_some()).unwrap_or(false);
+                if has_parent {
+                    canvas.unparent(id, cx);
+                    modified.push(id);
+                }
+            }
+            CommandResult::modified(modified)
+        }
+
+        Command::SetClipChildren { target, clip } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    shape.clip_children = clip;
                     modified.push(shape.id);
                 }
             }
@@ -243,6 +275,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
                 ToolKind::Pan => Tool::Pan,
                 ToolKind::Rectangle => Tool::Rectangle,
                 ToolKind::Ellipse => Tool::Ellipse,
+                ToolKind::Frame => Tool::Frame,
             };
             cx.notify();
             CommandResult::success()
@@ -344,8 +377,8 @@ fn execute_query_inner(canvas: &Canvas, query: Query) -> QueryResult {
 
             for shape in &canvas.shapes {
                 let (shape_min, shape_max) = shape.bounds();
-                min = min.min(shape_min);
-                max = max.max(shape_max);
+                min = min.min(shape_min.0);
+                max = max.max(shape_max.0);
             }
 
             QueryResult::Bounds {
@@ -392,6 +425,7 @@ fn resolve_shape_query(canvas: &Canvas, query: &ShapeQuery) -> Vec<ShapeId> {
             let kind = match kind_filter {
                 ShapeKindFilter::Rectangle => ShapeKind::Rectangle,
                 ShapeKindFilter::Ellipse => ShapeKind::Ellipse,
+                ShapeKindFilter::Frame => ShapeKind::Frame,
             };
             canvas
                 .shapes
@@ -418,17 +452,36 @@ fn resolve_shape_query(canvas: &Canvas, query: &ShapeQuery) -> Vec<ShapeId> {
                 .filter(|s| {
                     let (shape_min, shape_max) = s.bounds();
                     // Check if shape intersects bounds
-                    shape_min.x < bounds_max.x
-                        && shape_max.x > bounds_min.x
-                        && shape_min.y < bounds_max.y
-                        && shape_max.y > bounds_min.y
+                    shape_min.x() < bounds_max.x
+                        && shape_max.x() > bounds_min.x
+                        && shape_min.y() < bounds_max.y
+                        && shape_max.y() > bounds_min.y
                 })
                 .map(|s| s.id)
                 .collect()
         }
-        ShapeQuery::ChildrenOf(_) | ShapeQuery::ParentOf(_) => {
-            // Future: scene graph
-            vec![]
+        ShapeQuery::ChildrenOf(target) => {
+            let parent_ids = resolve_target_readonly(canvas, target);
+            canvas
+                .shapes
+                .iter()
+                .filter(|s| s.parent.map(|p| parent_ids.contains(&p)).unwrap_or(false))
+                .map(|s| s.id)
+                .collect()
+        }
+        ShapeQuery::ParentOf(target) => {
+            let child_ids = resolve_target_readonly(canvas, target);
+            let mut parent_ids = Vec::new();
+            for shape in &canvas.shapes {
+                if child_ids.contains(&shape.id) {
+                    if let Some(parent_id) = shape.parent {
+                        if !parent_ids.contains(&parent_id) {
+                            parent_ids.push(parent_id);
+                        }
+                    }
+                }
+            }
+            parent_ids
         }
     }
 }
@@ -440,8 +493,8 @@ fn shape_to_info(shape: &Shape) -> ShapeInfo {
     ShapeInfo {
         id: shape.id,
         kind: shape.kind,
-        position: shape.position,
-        size: shape.size,
+        position: shape.position.0,
+        size: shape.size.0,
         fill: shape.fill.map(|f| FillInfo {
             color: ColorInfo::from(f.color),
         }),
@@ -450,6 +503,9 @@ fn shape_to_info(shape: &Shape) -> ShapeInfo {
             width: s.width,
         }),
         corner_radius: shape.corner_radius,
+        parent: shape.parent,
+        children: shape.children.clone(),
+        clip_children: shape.clip_children,
     }
 }
 

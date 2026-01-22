@@ -77,5 +77,6 @@ pub enum ShapeQuery {
 pub enum ShapeKindFilter {
     Rectangle,
     Ellipse,
-    // Future: Text, Path, Group, Frame, etc.
+    Frame,
+    // Future: Text, Path, Group, etc.
 }

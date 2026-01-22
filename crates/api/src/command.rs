@@ -115,6 +115,28 @@ pub enum Command {
         radius: f32,
     },
 
+    // === Hierarchy ===
+    /// Add a shape as a child of a frame.
+    /// Converts the child's position to relative coordinates.
+    AddChild {
+        child: node_2::ShapeId,
+        parent: node_2::ShapeId,
+    },
+
+    /// Remove shapes from their parent.
+    /// Converts positions back to absolute coordinates.
+    Unparent {
+        #[serde(default)]
+        target: Target,
+    },
+
+    /// Set whether a frame clips its children.
+    SetClipChildren {
+        #[serde(default)]
+        target: Target,
+        clip: bool,
+    },
+
     // === Canvas ===
     /// Pan the viewport.
     Pan { delta: Vec2 },
@@ -245,6 +267,7 @@ pub enum ToolKind {
     Pan,
     Rectangle,
     Ellipse,
+    Frame,
     // Future: Text, Pen, etc.
 }
 

@@ -83,6 +83,13 @@ pub struct ShapeInfo {
     pub stroke: Option<StrokeInfo>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub corner_radius: f32,
+    // Hierarchy
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<ShapeId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<ShapeId>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clip_children: bool,
 }
 
 fn is_zero(f: &f32) -> bool {
