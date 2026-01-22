@@ -29,7 +29,6 @@ mod project;
 
 pub use project::Project;
 
-use glam::Vec2;
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use node_2::{Fill, Shape, ShapeId, ShapeKind, Stroke};
 
@@ -80,10 +79,10 @@ impl Document {
         let mut doc_node = KdlNode::new("document");
         doc_node.push(KdlEntry::new_prop("version", self.version.clone()));
 
-        // Add shape nodes as children
+        // Add only root shapes (no parent) - children are nested inside their parents
         let children = doc_node.children_mut().get_or_insert_with(KdlDocument::new);
-        for shape in &self.shapes {
-            children.nodes_mut().push(shape_to_kdl(shape));
+        for shape in self.shapes.iter().filter(|s| s.parent.is_none()) {
+            children.nodes_mut().push(shape_to_kdl(shape, &self.shapes));
         }
 
         doc.nodes_mut().push(doc_node);
@@ -108,11 +107,11 @@ impl Document {
             .map(|s| s.to_string())
             .unwrap_or_else(|| FORMAT_VERSION.to_string());
 
-        // Parse shapes from children
+        // Parse shapes from children (recursively flattens nested frames)
         let mut shapes = Vec::new();
         if let Some(children) = doc_node.children() {
             for node in children.nodes() {
-                shapes.push(kdl_to_shape(node)?);
+                parse_shape_recursive(node, None, &mut shapes)?;
             }
         }
 
@@ -120,11 +119,12 @@ impl Document {
     }
 }
 
-/// Convert a Shape to a KDL node.
-fn shape_to_kdl(shape: &Shape) -> KdlNode {
+/// Convert a Shape to a KDL node (recursively includes children).
+fn shape_to_kdl(shape: &Shape, all_shapes: &[Shape]) -> KdlNode {
     let type_name = match shape.kind {
         ShapeKind::Rectangle => "rect",
         ShapeKind::Ellipse => "ellipse",
+        ShapeKind::Frame => "frame",
     };
 
     let mut node = KdlNode::new(type_name);
@@ -133,12 +133,17 @@ fn shape_to_kdl(shape: &Shape) -> KdlNode {
     node.push(KdlEntry::new(shape.id.to_uuid_string()));
 
     // Position and size as properties
-    node.push(KdlEntry::new_prop("x", shape.position.x as f64));
-    node.push(KdlEntry::new_prop("y", shape.position.y as f64));
-    node.push(KdlEntry::new_prop("width", shape.size.x as f64));
-    node.push(KdlEntry::new_prop("height", shape.size.y as f64));
+    node.push(KdlEntry::new_prop("x", shape.position.x() as f64));
+    node.push(KdlEntry::new_prop("y", shape.position.y() as f64));
+    node.push(KdlEntry::new_prop("width", shape.size.width() as f64));
+    node.push(KdlEntry::new_prop("height", shape.size.height() as f64));
 
-    // Children for fill, stroke, radius
+    // Frame-specific: clip property
+    if shape.kind == ShapeKind::Frame && shape.clip_children {
+        node.push(KdlEntry::new_prop("clip", true));
+    }
+
+    // Children block for styles and nested shapes
     let mut has_children = false;
     let children = node.children_mut().get_or_insert_with(KdlDocument::new);
 
@@ -170,6 +175,14 @@ fn shape_to_kdl(shape: &Shape) -> KdlNode {
         has_children = true;
     }
 
+    // Recursively serialize child shapes (for frames)
+    for child_id in &shape.children {
+        if let Some(child) = all_shapes.iter().find(|s| s.id == *child_id) {
+            children.nodes_mut().push(shape_to_kdl(child, all_shapes));
+            has_children = true;
+        }
+    }
+
     // Remove empty children block
     if !has_children {
         *node.children_mut() = None;
@@ -178,11 +191,17 @@ fn shape_to_kdl(shape: &Shape) -> KdlNode {
     node
 }
 
-/// Convert a KDL node to a Shape.
-fn kdl_to_shape(node: &KdlNode) -> Result<Shape, InterchangeError> {
+/// Parse a shape node recursively, adding shapes to the flat list.
+/// Sets up parent/children relationships as it goes.
+fn parse_shape_recursive(
+    node: &KdlNode,
+    parent_id: Option<ShapeId>,
+    shapes: &mut Vec<Shape>,
+) -> Result<ShapeId, InterchangeError> {
     let kind = match node.name().value() {
         "rect" => ShapeKind::Rectangle,
         "ellipse" => ShapeKind::Ellipse,
+        "frame" => ShapeKind::Frame,
         other => {
             return Err(InterchangeError::InvalidValue(format!(
                 "Unknown shape type: {}",
@@ -206,10 +225,25 @@ fn kdl_to_shape(node: &KdlNode) -> Result<Shape, InterchangeError> {
     let width = get_f32_prop(node, "width").unwrap_or(100.0);
     let height = get_f32_prop(node, "height").unwrap_or(100.0);
 
-    let mut shape = Shape::new(kind, Vec2::new(x, y), Vec2::new(width, height));
-    shape.id = id;
+    // Parse clip property for frames
+    let clip_children = node
+        .get("clip")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    // Parse children (fill, stroke, radius)
+    let mut shape = Shape::new(
+        kind,
+        node_2::CanvasPoint::new(x, y),
+        node_2::CanvasSize::new(width, height),
+    );
+    shape.id = id;
+    shape.parent = parent_id;
+    shape.clip_children = clip_children;
+
+    // Collect child shape IDs (we'll parse them after adding this shape)
+    let mut child_ids = Vec::new();
+
+    // Parse children (fill, stroke, radius, and nested shapes)
     if let Some(children) = node.children() {
         for child in children.nodes() {
             match child.name().value() {
@@ -235,12 +269,40 @@ fn kdl_to_shape(node: &KdlNode) -> Result<Shape, InterchangeError> {
                         }
                     }
                 }
+                // Nested shapes (rect, ellipse, frame)
+                "rect" | "ellipse" | "frame" => {
+                    // We'll parse these after adding the parent shape
+                    // Just note we have child nodes to process
+                }
                 _ => {}
             }
         }
     }
 
-    Ok(shape)
+    // Add this shape to the list
+    shapes.push(shape);
+
+    // Now recursively parse child shapes (must be done after parent is added)
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            match child.name().value() {
+                "rect" | "ellipse" | "frame" => {
+                    let child_id = parse_shape_recursive(child, Some(id), shapes)?;
+                    child_ids.push(child_id);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Update parent's children list (find parent in shapes and update)
+    if !child_ids.is_empty() {
+        if let Some(parent_shape) = shapes.iter_mut().find(|s| s.id == id) {
+            parent_shape.children = child_ids;
+        }
+    }
+
+    Ok(id)
 }
 
 fn get_f32_prop(node: &KdlNode, name: &str) -> Option<f32> {
@@ -252,6 +314,7 @@ fn get_f32_prop(node: &KdlNode, name: &str) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Vec2;
 
     #[test]
     fn test_roundtrip() {
