@@ -39,6 +39,7 @@ impl Render for LayerList {
                 let kind_icon = match shape.kind {
                     ShapeKind::Rectangle => "▢",
                     ShapeKind::Ellipse => "○",
+                    ShapeKind::Frame => "▣",
                 };
                 let name: SharedString = format!("Shape {}", shapes.len() - idx).into();
                 let item_id: SharedString = format!("layer-{}", id).into();

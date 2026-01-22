@@ -27,6 +27,7 @@ actions!(
         Delete,
         Duplicate,
         EllipseTool,
+        FrameTool,
         HandTool,
         NewFile,
         OpenProject,
@@ -183,6 +184,18 @@ impl Luna {
         cx.notify();
     }
 
+    fn activate_frame_tool(
+        &mut self,
+        _: &FrameTool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.canvas.update(cx, |canvas, _| {
+            canvas.tool = Tool::Frame;
+        });
+        cx.notify();
+    }
+
     fn delete_selected(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, cx| {
             canvas.delete_selected(cx);
@@ -333,6 +346,7 @@ impl Render for Luna {
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
             .on_action(cx.listener(Self::activate_ellipse_tool))
+            .on_action(cx.listener(Self::activate_frame_tool))
             .on_action(cx.listener(Self::delete_selected))
             .on_action(cx.listener(Self::duplicate_selected))
             .on_action(cx.listener(Self::handle_cancel))
@@ -382,6 +396,7 @@ fn init_keymap(cx: &mut App) {
         KeyBinding::new("v", SelectionTool, None),
         KeyBinding::new("r", RectangleTool, None),
         KeyBinding::new("o", EllipseTool, None),
+        KeyBinding::new("f", FrameTool, None),
         KeyBinding::new("escape", Cancel, None),
         KeyBinding::new("cmd-n", NewFile, None),
         KeyBinding::new("cmd-s", SaveProject, None),
@@ -431,6 +446,7 @@ fn main() {
                     MenuItem::action("Hand (H)", HandTool),
                     MenuItem::action("Rectangle (R)", RectangleTool),
                     MenuItem::action("Ellipse (O)", EllipseTool),
+                    MenuItem::action("Frame (F)", FrameTool),
                 ],
             },
         ]);

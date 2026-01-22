@@ -3,12 +3,11 @@
 use crate::components::{h_stack, panel, v_stack};
 use crate::input::{input, InputColors, InputState, InputStateEvent};
 use canvas_2::{Canvas, CanvasEvent};
-use glam::Vec2;
 use gpui::{
     div, px, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
     Styled, Subscription, Window,
 };
-use node_2::{Fill, ShapeId, ShapeKind, Stroke};
+use node_2::{CanvasPoint, CanvasSize, Fill, ShapeId, ShapeKind, Stroke};
 use theme_2::Theme;
 
 /// Properties panel showing details of selected shapes.
@@ -30,8 +29,8 @@ pub struct PropertiesPanel {
     corner_radius_input: Entity<InputState>,
     // Track current selection and values to know when to update inputs
     last_selection_id: Option<ShapeId>,
-    last_position: Vec2,
-    last_size: Vec2,
+    last_position: CanvasPoint,
+    last_size: CanvasSize,
     last_fill: Option<Fill>,
     last_stroke: Option<Stroke>,
     last_corner_radius: f32,
@@ -75,8 +74,8 @@ impl PropertiesPanel {
             stroke_color_input,
             corner_radius_input,
             last_selection_id: None,
-            last_position: Vec2::ZERO,
-            last_size: Vec2::ZERO,
+            last_position: CanvasPoint::default(),
+            last_size: CanvasSize::default(),
             last_fill: None,
             last_stroke: None,
             last_corner_radius: 0.0,
@@ -144,12 +143,12 @@ impl PropertiesPanel {
             if selection_changed || position_changed {
                 if !self.x_input.focus_handle(cx).is_focused(window) {
                     self.x_input.update(cx, |input, cx| {
-                        input.set_content(format!("{:.0}", position.x), cx);
+                        input.set_content(format!("{:.0}", position.x()), cx);
                     });
                 }
                 if !self.y_input.focus_handle(cx).is_focused(window) {
                     self.y_input.update(cx, |input, cx| {
-                        input.set_content(format!("{:.0}", position.y), cx);
+                        input.set_content(format!("{:.0}", position.y()), cx);
                     });
                 }
             }
@@ -157,12 +156,12 @@ impl PropertiesPanel {
             if selection_changed || size_changed {
                 if !self.w_input.focus_handle(cx).is_focused(window) {
                     self.w_input.update(cx, |input, cx| {
-                        input.set_content(format!("{:.0}", size.x), cx);
+                        input.set_content(format!("{:.0}", size.width()), cx);
                     });
                 }
                 if !self.h_input.focus_handle(cx).is_focused(window) {
                     self.h_input.update(cx, |input, cx| {
-                        input.set_content(format!("{:.0}", size.y), cx);
+                        input.set_content(format!("{:.0}", size.height()), cx);
                     });
                 }
             }
@@ -203,8 +202,8 @@ impl PropertiesPanel {
             }
         } else {
             self.last_selection_id = None;
-            self.last_position = Vec2::ZERO;
-            self.last_size = Vec2::ZERO;
+            self.last_position = CanvasPoint::default();
+            self.last_size = CanvasSize::default();
             self.last_fill = None;
             self.last_stroke = None;
             self.last_corner_radius = 0.0;
@@ -275,7 +274,7 @@ impl PropertiesPanel {
                     .iter_mut()
                     .find(|s| canvas.selection.contains(&s.id))
                 {
-                    shape.position.x = x;
+                    shape.position.0.x = x;
                     cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                 }
@@ -292,7 +291,7 @@ impl PropertiesPanel {
                     .iter_mut()
                     .find(|s| canvas.selection.contains(&s.id))
                 {
-                    shape.position.y = y;
+                    shape.position.0.y = y;
                     cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                 }
@@ -310,7 +309,7 @@ impl PropertiesPanel {
                         .iter_mut()
                         .find(|s| canvas.selection.contains(&s.id))
                     {
-                        shape.size.x = w;
+                        shape.size.0.x = w;
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }
@@ -329,7 +328,7 @@ impl PropertiesPanel {
                         .iter_mut()
                         .find(|s| canvas.selection.contains(&s.id))
                     {
-                        shape.size.y = h;
+                        shape.size.0.y = h;
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                     }
@@ -459,7 +458,7 @@ impl PropertiesPanel {
                         .find(|s| canvas.selection.contains(&s.id))
                     {
                         // Clamp corner radius to half the smaller dimension to prevent overlap
-                        let max_radius = shape.size.x.min(shape.size.y) / 2.0;
+                        let max_radius = shape.size.width().min(shape.size.height()) / 2.0;
                         shape.corner_radius = radius.min(max_radius);
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
@@ -505,6 +504,7 @@ impl Render for PropertiesPanel {
             let kind_name = match shape.kind {
                 ShapeKind::Rectangle => "Rectangle",
                 ShapeKind::Ellipse => "Ellipse",
+                ShapeKind::Frame => "Frame",
             };
 
             v_stack()
