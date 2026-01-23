@@ -3692,6 +3692,7 @@ dependencies = [
  "glam",
  "gpui",
  "serde",
+ "serde_json",
  "uuid",
 ]
 

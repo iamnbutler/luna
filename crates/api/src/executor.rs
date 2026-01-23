@@ -10,7 +10,9 @@ use crate::{
 use canvas_2::{Canvas, Tool};
 use glam::Vec2;
 use gpui::{Context, Entity};
-use node_2::{CanvasPoint, CanvasSize, Fill, Shape, ShapeId, ShapeKind, Stroke};
+use node_2::{
+    compute_layout, CanvasPoint, CanvasSize, Fill, LayoutInput, Shape, ShapeId, ShapeKind, Stroke,
+};
 
 /// Execute a command against a canvas.
 pub fn execute_command(
@@ -250,6 +252,111 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             CommandResult::modified(modified)
         }
 
+        Command::SetLayout { target, layout } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    shape.layout = layout.clone().map(|l| l.into());
+                    modified.push(shape.id);
+                }
+            }
+            // Apply layout to reposition children
+            if layout.is_some() {
+                apply_layouts(canvas);
+            }
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetLayoutDirection { target, direction } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    if let Some(ref mut layout) = shape.layout {
+                        layout.direction = direction;
+                        modified.push(shape.id);
+                    }
+                }
+            }
+            apply_layouts(canvas);
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetLayoutGap { target, gap } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    if let Some(ref mut layout) = shape.layout {
+                        layout.gap = gap;
+                        modified.push(shape.id);
+                    }
+                }
+            }
+            apply_layouts(canvas);
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetLayoutPadding { target, padding } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    if let Some(ref mut layout) = shape.layout {
+                        layout.padding = padding;
+                        modified.push(shape.id);
+                    }
+                }
+            }
+            apply_layouts(canvas);
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetLayoutAlignment { target, main_axis, cross_axis } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Frame {
+                    if let Some(ref mut layout) = shape.layout {
+                        if let Some(main) = main_axis {
+                            layout.main_axis_alignment = main;
+                        }
+                        if let Some(cross) = cross_axis {
+                            layout.cross_axis_alignment = cross;
+                        }
+                        modified.push(shape.id);
+                    }
+                }
+            }
+            apply_layouts(canvas);
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetChildSizing { target, width, height } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) {
+                    if let Some(w) = width {
+                        shape.child_layout.width_mode = w;
+                    }
+                    if let Some(h) = height {
+                        shape.child_layout.height_mode = h;
+                    }
+                    modified.push(shape.id);
+                }
+            }
+            apply_layouts(canvas);
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
         Command::Pan { delta } => {
             canvas.viewport.pan(delta);
             cx.notify();
@@ -482,6 +589,67 @@ fn resolve_shape_query(canvas: &Canvas, query: &ShapeQuery) -> Vec<ShapeId> {
                 }
             }
             parent_ids
+        }
+    }
+}
+
+/// Apply layouts to all frames with autolayout enabled.
+/// This computes child positions and sizes based on layout settings.
+fn apply_layouts(canvas: &mut Canvas) {
+    // Collect frame IDs with layout (we need to process bottom-up for nested layouts)
+    let layout_frame_ids: Vec<ShapeId> = canvas
+        .shapes
+        .iter()
+        .filter(|s| s.kind == ShapeKind::Frame && s.layout.is_some())
+        .map(|s| s.id)
+        .collect();
+
+    // Process each layout frame
+    for frame_id in layout_frame_ids {
+        apply_single_layout(canvas, frame_id);
+    }
+}
+
+/// Apply layout to a single frame.
+fn apply_single_layout(canvas: &mut Canvas, frame_id: ShapeId) {
+
+    // Get frame info
+    let (frame_size, layout) = {
+        let frame = canvas.shapes.iter().find(|s| s.id == frame_id);
+        match frame {
+            Some(f) => match &f.layout {
+                Some(layout) => (f.size, layout.clone()),
+                None => return,
+            },
+            None => return,
+        }
+    };
+
+    // Gather child inputs (shapes whose parent is this frame)
+    let children: Vec<LayoutInput> = canvas
+        .shapes
+        .iter()
+        .filter(|s| s.parent == Some(frame_id))
+        .map(|s| LayoutInput {
+            id: s.id,
+            size: s.size,
+            width_mode: s.child_layout.width_mode,
+            height_mode: s.child_layout.height_mode,
+        })
+        .collect();
+
+    if children.is_empty() {
+        return;
+    }
+
+    // Compute layout
+    let outputs = compute_layout(frame_size, &layout, &children);
+
+    // Apply results
+    for output in outputs {
+        if let Some(shape) = canvas.shapes.iter_mut().find(|s| s.id == output.id) {
+            shape.position = output.position;
+            shape.size = output.size;
         }
     }
 }

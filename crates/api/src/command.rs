@@ -9,7 +9,7 @@
 use crate::Target;
 use glam::Vec2;
 use gpui::Hsla;
-use node_2::ShapeKind;
+use node_2::{CrossAxisAlignment, LayoutDirection, MainAxisAlignment, Padding, ShapeKind, SizingMode};
 use serde::{Deserialize, Serialize};
 
 /// A command that modifies Luna canvas state.
@@ -137,6 +137,57 @@ pub enum Command {
         clip: bool,
     },
 
+    // === Layout ===
+    /// Enable or disable autolayout on a frame.
+    /// When layout is Some, children are automatically positioned.
+    /// When layout is None, autolayout is disabled.
+    SetLayout {
+        #[serde(default)]
+        target: Target,
+        layout: Option<LayoutValue>,
+    },
+
+    /// Set layout direction (row or column).
+    SetLayoutDirection {
+        #[serde(default)]
+        target: Target,
+        direction: LayoutDirection,
+    },
+
+    /// Set gap between children in a layout.
+    SetLayoutGap {
+        #[serde(default)]
+        target: Target,
+        gap: f32,
+    },
+
+    /// Set padding inside a layout frame.
+    SetLayoutPadding {
+        #[serde(default)]
+        target: Target,
+        padding: Padding,
+    },
+
+    /// Set alignment for a layout frame.
+    SetLayoutAlignment {
+        #[serde(default)]
+        target: Target,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        main_axis: Option<MainAxisAlignment>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cross_axis: Option<CrossAxisAlignment>,
+    },
+
+    /// Set sizing mode for a child shape in a layout.
+    SetChildSizing {
+        #[serde(default)]
+        target: Target,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width: Option<SizingMode>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        height: Option<SizingMode>,
+    },
+
     // === Canvas ===
     /// Pan the viewport.
     Pan { delta: Vec2 },
@@ -257,6 +308,50 @@ impl ColorValue {
 pub struct StrokeValue {
     pub color: ColorValue,
     pub width: f32,
+}
+
+/// Layout configuration value for API commands.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LayoutValue {
+    /// Direction children are arranged.
+    #[serde(default)]
+    pub direction: LayoutDirection,
+    /// Alignment along the main axis.
+    #[serde(default)]
+    pub main_axis_alignment: MainAxisAlignment,
+    /// Alignment along the cross axis.
+    #[serde(default)]
+    pub cross_axis_alignment: CrossAxisAlignment,
+    /// Gap between children.
+    #[serde(default)]
+    pub gap: f32,
+    /// Padding inside the frame.
+    #[serde(default)]
+    pub padding: Padding,
+}
+
+impl Default for LayoutValue {
+    fn default() -> Self {
+        Self {
+            direction: LayoutDirection::Row,
+            main_axis_alignment: MainAxisAlignment::Start,
+            cross_axis_alignment: CrossAxisAlignment::Start,
+            gap: 0.0,
+            padding: Padding::default(),
+        }
+    }
+}
+
+impl From<LayoutValue> for node_2::FrameLayout {
+    fn from(value: LayoutValue) -> Self {
+        Self {
+            direction: value.direction,
+            main_axis_alignment: value.main_axis_alignment,
+            cross_axis_alignment: value.cross_axis_alignment,
+            gap: value.gap,
+            padding: value.padding,
+        }
+    }
 }
 
 /// Tool kinds.
