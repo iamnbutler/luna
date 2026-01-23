@@ -1,4 +1,5 @@
 use crate::coords::{CanvasDelta, CanvasPoint, CanvasSize};
+use crate::layout::{ChildLayout, FrameLayout};
 use crate::ShapeId;
 use glam::Vec2;
 use gpui::Hsla;
@@ -79,6 +80,15 @@ pub struct Shape {
     /// Whether to clip children to this shape's bounds (only for Frames)
     pub clip_children: bool,
 
+    // Layout
+    /// Autolayout configuration (only meaningful for Frame shapes).
+    /// When Some, children are positioned automatically by the layout engine.
+    /// When None, children use manual absolute positioning.
+    pub layout: Option<FrameLayout>,
+    /// Child-specific layout settings.
+    /// Controls how this shape behaves when it's a child of a layout frame.
+    pub child_layout: ChildLayout,
+
     // Style
     pub fill: Option<Fill>,
     pub stroke: Option<Stroke>,
@@ -95,6 +105,8 @@ impl Shape {
             parent: None,
             children: Vec::new(),
             clip_children: false,
+            layout: None,
+            child_layout: ChildLayout::default(),
             fill: None,
             stroke: Some(Stroke::default()),
             corner_radius: 0.0,
@@ -133,6 +145,35 @@ impl Shape {
     pub fn with_clip_children(mut self, clip: bool) -> Self {
         self.clip_children = clip;
         self
+    }
+
+    /// Enable autolayout on this frame.
+    pub fn with_layout(mut self, layout: FrameLayout) -> Self {
+        self.layout = Some(layout);
+        self
+    }
+
+    /// Set child layout settings (how this shape behaves in a parent layout).
+    pub fn with_child_layout(mut self, child_layout: ChildLayout) -> Self {
+        self.child_layout = child_layout;
+        self
+    }
+
+    /// Check if this shape has autolayout enabled.
+    pub fn has_layout(&self) -> bool {
+        self.layout.is_some()
+    }
+
+    /// Check if this shape is in a layout (has a parent with layout).
+    pub fn is_in_layout(&self, shapes: &[Shape]) -> bool {
+        match self.parent {
+            None => false,
+            Some(parent_id) => shapes
+                .iter()
+                .find(|s| s.id == parent_id)
+                .map(|p| p.has_layout())
+                .unwrap_or(false),
+        }
     }
 
     /// Get world position (canvas space) accounting for parent chain.
