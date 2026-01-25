@@ -616,29 +616,28 @@ fn apply_layouts(canvas: &mut Canvas) {
 
 /// Apply layout to a single frame.
 fn apply_single_layout(canvas: &mut Canvas, frame_id: ShapeId) {
-
-    // Get frame info
-    let (frame_size, layout) = {
+    // Get frame info and children order
+    let (frame_size, layout, children_ids) = {
         let frame = canvas.shapes.iter().find(|s| s.id == frame_id);
         match frame {
             Some(f) => match &f.layout {
-                Some(layout) => (f.size, layout.clone()),
+                Some(layout) => (f.size, layout.clone(), f.children.clone()),
                 None => return,
             },
             None => return,
         }
     };
 
-    // Gather child inputs (shapes whose parent is this frame)
-    let children: Vec<LayoutInput> = canvas
-        .shapes
+    // Gather child inputs in the order specified by frame.children
+    let children: Vec<LayoutInput> = children_ids
         .iter()
-        .filter(|s| s.parent == Some(frame_id))
-        .map(|s| LayoutInput {
-            id: s.id,
-            size: s.size,
-            width_mode: s.child_layout.width_mode,
-            height_mode: s.child_layout.height_mode,
+        .filter_map(|child_id| {
+            canvas.shapes.iter().find(|s| s.id == *child_id).map(|s| LayoutInput {
+                id: s.id,
+                size: s.size,
+                width_mode: s.child_layout.width_mode,
+                height_mode: s.child_layout.height_mode,
+            })
         })
         .collect();
 

@@ -638,26 +638,27 @@ fn compute_depth(shape_id: ShapeId, shapes: &[Shape]) -> usize {
 
 /// Apply layout for a single frame to its children.
 fn apply_layout_for_frame(frame_id: ShapeId, shapes: &mut [Shape]) {
-    // Gather frame info
-    let (frame_size, layout) = {
+    // Gather frame info and children IDs in order
+    let (frame_size, layout, children_ids) = {
         let Some(frame) = shapes.iter().find(|s| s.id == frame_id) else {
             return;
         };
         let Some(layout) = frame.layout.clone() else {
             return;
         };
-        (frame.size, layout)
+        (frame.size, layout, frame.children.clone())
     };
 
-    // Gather children info
-    let child_inputs: Vec<LayoutInput> = shapes
+    // Gather children info in the order specified by frame.children
+    let child_inputs: Vec<LayoutInput> = children_ids
         .iter()
-        .filter(|s| s.parent == Some(frame_id))
-        .map(|child| LayoutInput {
-            id: child.id,
-            size: child.size,
-            width_mode: child.child_layout.width_mode,
-            height_mode: child.child_layout.height_mode,
+        .filter_map(|child_id| {
+            shapes.iter().find(|s| s.id == *child_id).map(|child| LayoutInput {
+                id: child.id,
+                size: child.size,
+                width_mode: child.child_layout.width_mode,
+                height_mode: child.child_layout.height_mode,
+            })
         })
         .collect();
 
