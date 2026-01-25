@@ -22,6 +22,11 @@ if ! $CLI list 2>/dev/null | grep -q "PID"; then
     exit 1
 fi
 
+# Helper to extract UUID from JSON response
+extract_id() {
+    grep -o '"[0-9a-f-]\{36\}"' | head -1 | tr -d '"'
+}
+
 echo "=== Luna CLI Demo 2: New Features ==="
 echo
 
@@ -52,34 +57,34 @@ echo "Creating frames with children..."
 
 # Create a frame (container)
 FRAME_RESULT=$($CLI command '{"type": "create_shape", "kind": "Frame", "position": [100, 360], "size": [200, 150], "fill": "#2C3E50"}')
-FRAME_ID=$(echo "$FRAME_RESULT" | grep -o '"created":\["\?[0-9]*"\?' | grep -o '[0-9]*' | head -1)
+FRAME_ID=$(echo "$FRAME_RESULT" | extract_id)
 
 if [ -n "$FRAME_ID" ]; then
     echo "  Frame created (ID: $FRAME_ID)"
 
     # Create child shapes and add them to the frame
     CHILD1=$($CLI command '{"type": "create_shape", "kind": "Ellipse", "position": [120, 380], "size": [40, 40], "fill": "#E74C3C"}')
-    CHILD1_ID=$(echo "$CHILD1" | grep -o '"created":\["\?[0-9]*"\?' | grep -o '[0-9]*' | head -1)
+    CHILD1_ID=$(echo "$CHILD1" | extract_id)
 
     CHILD2=$($CLI command '{"type": "create_shape", "kind": "Rectangle", "position": [180, 380], "size": [40, 40], "fill": "#F39C12", "corner_radius": 6}')
-    CHILD2_ID=$(echo "$CHILD2" | grep -o '"created":\["\?[0-9]*"\?' | grep -o '[0-9]*' | head -1)
+    CHILD2_ID=$(echo "$CHILD2" | extract_id)
 
     CHILD3=$($CLI command '{"type": "create_shape", "kind": "Ellipse", "position": [240, 380], "size": [40, 40], "fill": "#27AE60"}')
-    CHILD3_ID=$(echo "$CHILD3" | grep -o '"created":\["\?[0-9]*"\?' | grep -o '[0-9]*' | head -1)
+    CHILD3_ID=$(echo "$CHILD3" | extract_id)
 
     # Add children to frame
     if [ -n "$CHILD1_ID" ]; then
-        $CLI command "{\"type\": \"add_child\", \"child\": $CHILD1_ID, \"parent\": $FRAME_ID}" > /dev/null
+        $CLI command "{\"type\": \"add_child\", \"child\": \"$CHILD1_ID\", \"parent\": \"$FRAME_ID\"}" > /dev/null
     fi
     if [ -n "$CHILD2_ID" ]; then
-        $CLI command "{\"type\": \"add_child\", \"child\": $CHILD2_ID, \"parent\": $FRAME_ID}" > /dev/null
+        $CLI command "{\"type\": \"add_child\", \"child\": \"$CHILD2_ID\", \"parent\": \"$FRAME_ID\"}" > /dev/null
     fi
     if [ -n "$CHILD3_ID" ]; then
-        $CLI command "{\"type\": \"add_child\", \"child\": $CHILD3_ID, \"parent\": $FRAME_ID}" > /dev/null
+        $CLI command "{\"type\": \"add_child\", \"child\": \"$CHILD3_ID\", \"parent\": \"$FRAME_ID\"}" > /dev/null
     fi
 
     # Enable clipping on the frame
-    $CLI command "{\"type\": \"set_clip_children\", \"target\": {\"shape\": $FRAME_ID}, \"clip\": true}" > /dev/null
+    $CLI command "{\"type\": \"set_clip_children\", \"target\": {\"shape\": \"$FRAME_ID\"}, \"clip\": true}" > /dev/null
     echo "  Children added and clipping enabled"
 fi
 sleep 0.3

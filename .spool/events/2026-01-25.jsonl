@@ -52,3 +52,28 @@
 {"v":1,"op":"set_stream","id":"mkobnzyh-qhrd","ts":"2026-01-25T02:25:59.329834Z","by":"@iamnbutler","branch":"main","d":{"stream":"mkt49yna-btuv"}}
 {"v":1,"op":"set_stream","id":"mkn2vljs-9cfi","ts":"2026-01-25T02:25:59.331072Z","by":"@iamnbutler","branch":"main","d":{"stream":"mkt49yoa-naye"}}
 {"v":1,"op":"set_stream","id":"mkkrsiof-rgub","ts":"2026-01-25T02:25:59.332378Z","by":"@iamnbutler","branch":"main","d":{"stream":"mkt49yo7-eqxb"}}
+{"v":1,"op":"create_stream","id":"mkt4nxaf-wtdv","ts":"2026-01-25T02:36:50.631098Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"description":"Organize CLI testing and demo scripts by feature (scripts/cli/basic, scripts/cli/autolayout, etc)","name":"cli-scripts"}}
+{"v":1,"op":"create","id":"mkt4o7g1-ak7h","ts":"2026-01-25T02:37:03.793594Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p2","stream":"mkt4nxaf-wtdv","title":"Create scripts/cli directory structure"}}
+{"v":1,"op":"create","id":"mkt4o7gy-e0q8","ts":"2026-01-25T02:37:03.826965Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p2","stream":"mkt4nxaf-wtdv","title":"Move cli-demo.sh to scripts/cli/basic.sh"}}
+{"v":1,"op":"create","id":"mkt4o7hw-bsz7","ts":"2026-01-25T02:37:03.860590Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p2","stream":"mkt4nxaf-wtdv","title":"Move frame_demo.sh to scripts/cli/autolayout.sh"}}
+{"v":1,"op":"assign","id":"mkqyqm6b-q9tv","ts":"2026-01-25T02:37:21.446659Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"create","id":"mkt52f86-szhs","ts":"2026-01-25T02:48:07.062728Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p1","stream":"mkt49ynq-vxcz","title":"Add layout helper methods to Canvas (is_in_autolayout, selection_in_autolayout)"}}
+{"v":1,"op":"create","id":"mkt52fwi-5jfk","ts":"2026-01-25T02:48:07.938402Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p1","stream":"mkt49ynq-vxcz","title":"Block manual repositioning in start_move/start_resize for layout children"}}
+{"v":1,"op":"create","id":"mkt52guy-qo5z","ts":"2026-01-25T02:48:09.178152Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p1","stream":"mkt49ynq-vxcz","title":"Compute layout in prepaint phase and cache results"}}
+{"v":1,"op":"create","id":"mkt52hjn-rypj","ts":"2026-01-25T02:48:10.067345Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p1","stream":"mkt49ynq-vxcz","title":"Apply cached layout positions in paint_shape_recursive"}}
+{"v":1,"op":"create","id":"mkt52ike-7086","ts":"2026-01-25T02:48:11.390669Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"priority":"p2","stream":"mkt49ynq-vxcz","title":"Handle nested layouts (parent frames first)"}}
+{"v":1,"op":"assign","id":"mkt52f86-szhs","ts":"2026-01-25T02:48:37.339413Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkt52f86-szhs","ts":"2026-01-25T02:53:41.032571Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkt52fwi-5jfk","ts":"2026-01-25T02:53:41.058448Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkt52guy-qo5z","ts":"2026-01-25T02:53:41.087862Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"assign","id":"mkt52hjn-rypj","ts":"2026-01-25T02:53:41.113499Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkt52guy-qo5z","ts":"2026-01-25T02:54:57.963861Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkt52hjn-rypj","ts":"2026-01-25T02:54:58.004034Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkt52ike-7086","ts":"2026-01-25T02:54:58.028664Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkqyqm6b-q9tv","ts":"2026-01-25T02:54:58.062871Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"assign","id":"mkt4o7g1-ak7h","ts":"2026-01-25T02:55:37.311972Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"assign","id":"mkt4o7gy-e0q8","ts":"2026-01-25T02:55:37.855608Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"assign","id":"mkt4o7hw-bsz7","ts":"2026-01-25T02:55:38.402700Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"to":"@iamnbutler"}}
+{"v":1,"op":"complete","id":"mkt4o7g1-ak7h","ts":"2026-01-25T02:56:17.772933Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkt4o7gy-e0q8","ts":"2026-01-25T02:56:17.806101Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"complete","id":"mkt4o7hw-bsz7","ts":"2026-01-25T02:56:17.843213Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}

@@ -1,7 +1,10 @@
 use crate::Viewport;
 use glam::Vec2;
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, Hsla, Point};
-use node_2::{CanvasDelta, CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind, Stroke};
+use node_2::{
+    compute_layout, CanvasDelta, CanvasPoint, CanvasSize, LayoutInput, ScreenPoint, Shape, ShapeId,
+    ShapeKind, Stroke,
+};
 use std::collections::HashSet;
 use theme_2::Theme;
 
@@ -244,6 +247,9 @@ impl Canvas {
             }
         }
 
+        // If parent has layout enabled, apply it to reposition children
+        self.apply_layout_for_frame(parent_id);
+
         cx.emit(CanvasEvent::ContentChanged);
         cx.notify();
     }
@@ -357,9 +363,18 @@ impl Canvas {
     }
 
     /// Move selected shapes by a delta.
+    /// Shapes in autolayout frames are skipped.
     pub fn move_selected(&mut self, delta: CanvasDelta, cx: &mut Context<Self>) {
+        // Collect IDs of shapes that are in autolayout (can't move)
+        let in_layout: std::collections::HashSet<_> = self
+            .selection
+            .iter()
+            .filter(|id| self.is_in_autolayout(**id))
+            .copied()
+            .collect();
+
         for shape in &mut self.shapes {
-            if self.selection.contains(&shape.id) {
+            if self.selection.contains(&shape.id) && !in_layout.contains(&shape.id) {
                 shape.translate(delta);
             }
         }
@@ -372,6 +387,10 @@ impl Canvas {
         let mut shape = Shape::new(kind, start, CanvasSize::new(0.0, 0.0));
         shape.stroke = Some(self.default_stroke);
         shape.fill = self.default_fill.map(|c| node_2::Fill::new(c));
+        // Frames clip children by default
+        if kind == ShapeKind::Frame {
+            shape.clip_children = true;
+        }
 
         let id = shape.id;
         self.shapes.push(shape);
@@ -423,7 +442,13 @@ impl Canvas {
     }
 
     /// Start moving selected shapes.
-    pub fn start_move(&mut self, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
+    /// Returns false if move was blocked (e.g., shapes in autolayout).
+    pub fn start_move(&mut self, start_mouse: CanvasPoint, _cx: &mut Context<Self>) -> bool {
+        // Block moving shapes that are children of autolayout frames
+        if self.selection_in_autolayout() {
+            return false;
+        }
+
         let positions: Vec<_> = self
             .shapes
             .iter()
@@ -435,6 +460,7 @@ impl Canvas {
             start_mouse,
             start_positions: positions,
         });
+        true
     }
 
     /// Update shape positions during move.
@@ -467,9 +493,15 @@ impl Canvas {
     }
 
     /// Start resizing selected shapes.
-    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
+    /// Returns false if resize was blocked (e.g., shapes in autolayout).
+    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: CanvasPoint, _cx: &mut Context<Self>) -> bool {
+        // Block resizing shapes that are children of autolayout frames
+        if self.selection_in_autolayout() {
+            return false;
+        }
+
         let Some((min, max)) = self.selection_bounds() else {
-            return;
+            return false;
         };
 
         let shape_ids: Vec<_> = self.selection.iter().copied().collect();
@@ -487,6 +519,7 @@ impl Canvas {
             shape_ids,
             start_shape_data,
         });
+        true
     }
 
     /// Update shape sizes during resize.
@@ -567,8 +600,13 @@ impl Canvas {
 
     /// Finish resizing shapes.
     pub fn finish_resize(&mut self, cx: &mut Context<Self>) {
-        if matches!(self.drag, Some(DragState::ResizingShapes { .. })) {
-            self.drag = None;
+        if let Some(DragState::ResizingShapes { shape_ids, .. }) = self.drag.take() {
+            // If any resized shapes are frames with layout, reapply their layout
+            for shape_id in &shape_ids {
+                if self.shapes.iter().any(|s| s.id == *shape_id && s.has_layout()) {
+                    self.apply_layout_for_frame(*shape_id);
+                }
+            }
             cx.emit(CanvasEvent::ContentChanged);
             cx.notify();
         }
@@ -602,6 +640,20 @@ impl Canvas {
         cx.notify();
     }
 
+    /// Check if a shape is a child of a layout-enabled frame.
+    pub fn is_in_autolayout(&self, shape_id: ShapeId) -> bool {
+        self.shapes
+            .iter()
+            .find(|s| s.id == shape_id)
+            .map(|s| s.is_in_layout(&self.shapes))
+            .unwrap_or(false)
+    }
+
+    /// Check if any selected shapes are in autolayout.
+    pub fn selection_in_autolayout(&self) -> bool {
+        self.selection.iter().any(|id| self.is_in_autolayout(*id))
+    }
+
     /// Get the bounding box of selected shapes in canvas coordinates.
     pub fn selection_bounds(&self) -> Option<(CanvasPoint, CanvasPoint)> {
         let selected: Vec<_> = self
@@ -624,6 +676,65 @@ impl Canvas {
         }
 
         Some((CanvasPoint(min), CanvasPoint(max)))
+    }
+
+    /// Apply layout for a single frame to its children.
+    /// Does nothing if the frame doesn't have layout enabled.
+    pub fn apply_layout_for_frame(&mut self, frame_id: ShapeId) {
+        // Gather frame info and children order
+        let (frame_size, layout, children_ids) = {
+            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+                return;
+            };
+            let Some(layout) = frame.layout.clone() else {
+                return; // No layout enabled
+            };
+            (frame.size, layout, frame.children.clone())
+        };
+
+        // Gather children info in the order specified by frame.children
+        let child_inputs: Vec<LayoutInput> = children_ids
+            .iter()
+            .filter_map(|child_id| {
+                self.shapes.iter().find(|s| s.id == *child_id).map(|child| LayoutInput {
+                    id: child.id,
+                    size: child.size,
+                    width_mode: child.child_layout.width_mode,
+                    height_mode: child.child_layout.height_mode,
+                })
+            })
+            .collect();
+
+        if child_inputs.is_empty() {
+            return;
+        }
+
+        // Compute layout
+        let outputs = compute_layout(frame_size, &layout, &child_inputs);
+
+        // Apply results to children
+        for output in outputs {
+            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == output.id) {
+                child.position = output.position;
+                child.size = output.size;
+            }
+        }
+    }
+
+    /// Apply layout for all frames that have layout enabled.
+    pub fn apply_all_layouts(&mut self) {
+        // Collect frame IDs (we need to avoid borrowing issues)
+        let frame_ids: Vec<ShapeId> = self
+            .shapes
+            .iter()
+            .filter(|s| s.has_layout())
+            .map(|s| s.id)
+            .collect();
+
+        // Process each frame
+        for frame_id in frame_ids {
+            self.apply_layout_for_frame(frame_id);
+        }
     }
 }
 

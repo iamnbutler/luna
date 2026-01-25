@@ -86,6 +86,8 @@ impl Element for CanvasElement {
         let canvas_entity = self.canvas.clone();
 
         // Read canvas state for rendering
+        // Layout is already applied to canvas state when children are added,
+        // so we don't need to recompute it here.
         let (shapes, selection, hovered, viewport, theme, drag) =
             self.canvas.read(cx).clone_render_state();
 
