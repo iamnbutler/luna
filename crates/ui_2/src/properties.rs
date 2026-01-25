@@ -41,6 +41,12 @@ pub struct PropertiesPanel {
     last_stroke: Option<Stroke>,
     last_corner_radius: f32,
     last_layout: Option<FrameLayout>,
+    // Track computed vs user values for display styling
+    position_is_computed: bool,
+    size_is_computed: (bool, bool), // (width_computed, height_computed)
+    // Store user-set values for tooltip display
+    user_position: CanvasPoint,
+    user_size: CanvasSize,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -93,6 +99,10 @@ impl PropertiesPanel {
             last_stroke: None,
             last_corner_radius: 0.0,
             last_layout: None,
+            position_is_computed: false,
+            size_is_computed: (false, false),
+            user_position: CanvasPoint::default(),
+            user_size: CanvasSize::default(),
             _subscriptions: vec![
                 x_sub,
                 y_sub,
@@ -130,17 +140,28 @@ impl PropertiesPanel {
                 .map(|shape| {
                     (
                         shape.id,
-                        shape.position,
-                        shape.size,
+                        shape.effective_position(), // Use computed position if available
+                        shape.effective_size(),     // Use computed size if available
                         shape.fill.clone(),
                         shape.stroke.clone(),
                         shape.corner_radius,
                         shape.layout.clone(),
+                        // Track computed state
+                        shape.has_computed_position(),
+                        shape.computed_size.is_some(),
+                        // Store user-set values
+                        shape.position,
+                        shape.size,
                     )
                 })
         };
 
-        if let Some((shape_id, position, size, fill, stroke, corner_radius, layout)) = shape_data {
+        if let Some((shape_id, position, size, fill, stroke, corner_radius, layout, pos_computed, size_computed, user_pos, user_sz)) = shape_data {
+            // Update computed state tracking
+            self.position_is_computed = pos_computed;
+            self.size_is_computed = (size_computed, size_computed);
+            self.user_position = user_pos;
+            self.user_size = user_sz;
             let selection_changed = self.last_selection_id != Some(shape_id);
             let position_changed = self.last_position != position;
             let size_changed = self.last_size != size;
@@ -263,6 +284,10 @@ impl PropertiesPanel {
             self.last_stroke = None;
             self.last_corner_radius = 0.0;
             self.last_layout = None;
+            self.position_is_computed = false;
+            self.size_is_computed = (false, false);
+            self.user_position = CanvasPoint::default();
+            self.user_size = CanvasSize::default();
         }
     }
 
@@ -691,28 +716,43 @@ impl PropertiesPanel {
 
     /// Toggle autolayout on/off for selected frame
     pub fn toggle_autolayout(&mut self, cx: &mut Context<Self>) {
-        let frame_id = self.canvas.update(cx, |canvas, cx| {
+        // Returns (should_apply_layout, frame_id_to_clear)
+        let (apply_frame_id, clear_frame_id) = self.canvas.update(cx, |canvas, cx| {
             let shape_id = canvas.selection.iter().next().copied();
             if let Some(shape) = shape_id.and_then(|id| {
                 canvas.shapes.iter_mut().find(|s| s.id == id)
             }) {
                 if shape.kind == ShapeKind::Frame {
+                    let frame_id = shape.id;
                     if shape.layout.is_some() {
+                        // Turning off layout - need to clear computed values
                         shape.layout = None;
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
-                        return None;
+                        return (None, Some(frame_id));
                     } else {
+                        // Turning on layout
                         shape.layout = Some(FrameLayout::default());
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
-                        return Some(shape.id);
+                        return (Some(frame_id), None);
                     }
                 }
             }
-            None
+            (None, None)
         });
-        if let Some(frame_id) = frame_id {
+
+        // Clear computed values if layout was disabled
+        if let Some(frame_id) = clear_frame_id {
+            self.canvas.update(cx, |canvas, cx| {
+                canvas.clear_layout_for_frame(frame_id);
+                cx.emit(CanvasEvent::ContentChanged);
+                cx.notify();
+            });
+        }
+
+        // Apply layout if it was enabled
+        if let Some(frame_id) = apply_frame_id {
             self.canvas.update(cx, |canvas, cx| {
                 canvas.apply_layout_for_frame(frame_id);
                 cx.emit(CanvasEvent::ContentChanged);
@@ -844,7 +884,7 @@ impl Render for PropertiesPanel {
                         .text_color(theme.ui_text)
                         .child(kind_name),
                 )
-                // Position
+                // Position (shows computed values in muted color if in autolayout)
                 .child(
                     v_stack()
                         .gap(px(4.0))
@@ -852,16 +892,32 @@ impl Render for PropertiesPanel {
                             div()
                                 .text_xs()
                                 .text_color(theme.ui_text_muted)
-                                .child("Position"),
+                                .child(if self.position_is_computed { "Position (auto)" } else { "Position" }),
                         )
                         .child(
                             h_stack()
                                 .gap(px(8.0))
-                                .child(input_field("X", &self.x_input, theme, &colors, cx))
-                                .child(input_field("Y", &self.y_input, theme, &colors, cx)),
+                                .child(input_field_with_computed(
+                                    "X",
+                                    &self.x_input,
+                                    theme,
+                                    &colors,
+                                    self.position_is_computed,
+                                    if self.position_is_computed { Some(format!("{:.0}", self.user_position.x())) } else { None },
+                                    cx,
+                                ))
+                                .child(input_field_with_computed(
+                                    "Y",
+                                    &self.y_input,
+                                    theme,
+                                    &colors,
+                                    self.position_is_computed,
+                                    if self.position_is_computed { Some(format!("{:.0}", self.user_position.y())) } else { None },
+                                    cx,
+                                )),
                         ),
                 )
-                // Size
+                // Size (shows computed values in muted color if stretched)
                 .child(
                     v_stack()
                         .gap(px(4.0))
@@ -869,13 +925,29 @@ impl Render for PropertiesPanel {
                             div()
                                 .text_xs()
                                 .text_color(theme.ui_text_muted)
-                                .child("Size"),
+                                .child(if self.size_is_computed.0 || self.size_is_computed.1 { "Size (auto)" } else { "Size" }),
                         )
                         .child(
                             h_stack()
                                 .gap(px(8.0))
-                                .child(input_field("W", &self.w_input, theme, &colors, cx))
-                                .child(input_field("H", &self.h_input, theme, &colors, cx)),
+                                .child(input_field_with_computed(
+                                    "W",
+                                    &self.w_input,
+                                    theme,
+                                    &colors,
+                                    self.size_is_computed.0,
+                                    if self.size_is_computed.0 { Some(format!("{:.0}", self.user_size.width())) } else { None },
+                                    cx,
+                                ))
+                                .child(input_field_with_computed(
+                                    "H",
+                                    &self.h_input,
+                                    theme,
+                                    &colors,
+                                    self.size_is_computed.1,
+                                    if self.size_is_computed.1 { Some(format!("{:.0}", self.user_size.height())) } else { None },
+                                    cx,
+                                )),
                         ),
                 )
                 // Corner Radius (only for rectangles)
@@ -1262,7 +1334,29 @@ fn input_field(
     colors: &InputColors,
     cx: &gpui::App,
 ) -> impl IntoElement {
-    h_stack()
+    input_field_with_computed(label, input_state, theme, colors, false, None, cx)
+}
+
+/// Input field that can show computed values with special styling.
+/// When `is_computed` is true, the text is shown in muted color.
+/// If `user_value` is provided, it's shown as a tooltip on hover.
+fn input_field_with_computed(
+    label: &str,
+    input_state: &Entity<InputState>,
+    theme: &Theme,
+    colors: &InputColors,
+    is_computed: bool,
+    user_value: Option<String>,
+    cx: &gpui::App,
+) -> impl IntoElement {
+    // Text color: muted (60% opacity) if computed, normal otherwise
+    let text_color = if is_computed {
+        theme.ui_text.opacity(0.6)
+    } else {
+        theme.ui_text
+    };
+
+    let mut field = h_stack()
         .flex_1()
         .gap(px(4.0))
         .child(
@@ -1280,11 +1374,32 @@ fn input_field(
                 .px(px(6.0))
                 .bg(theme_2::hsla(0.0, 0.0, 0.95, 1.0))
                 .border_1()
-                .border_color(theme.ui_border)
+                .border_color(if is_computed {
+                    theme.ui_border.opacity(0.5)
+                } else {
+                    theme.ui_border
+                })
                 .rounded(px(2.0))
                 .text_xs()
-                .text_color(theme.ui_text),
-        )
+                .text_color(text_color),
+        );
+
+    // Add tooltip showing user-set value if this is a computed value
+    if let Some(user_val) = user_value {
+        field = field.child(
+            div()
+                .absolute()
+                .right_0()
+                .top_0()
+                .text_xs()
+                .text_color(theme.ui_text_muted)
+                .opacity(0.0)
+                .hover(|s| s.opacity(1.0))
+                .child(format!("({})", user_val)),
+        );
+    }
+
+    field
 }
 
 fn color_swatch(color: Option<Hsla>, theme: &Theme) -> impl IntoElement {

@@ -68,9 +68,17 @@ pub struct Shape {
     pub kind: ShapeKind,
 
     // Geometry (using typed coordinates)
-    /// Position in canvas space (for root shapes) or relative to parent (for children)
+    /// Position in canvas space (for root shapes) or relative to parent (for children).
+    /// This is the user-specified position, which may be overridden by layout.
     pub position: CanvasPoint,
+    /// User-specified size. May be overridden by layout (see computed_size).
     pub size: CanvasSize,
+
+    // Layout-computed geometry (set by layout engine, cleared when layout is disabled)
+    /// Position computed by the layout engine. When Some, this overrides `position` for rendering.
+    pub computed_position: Option<CanvasPoint>,
+    /// Size computed by the layout engine. When Some, this overrides `size` for rendering.
+    pub computed_size: Option<CanvasSize>,
 
     // Hierarchy
     /// Parent shape ID (None for root-level shapes)
@@ -102,6 +110,8 @@ impl Shape {
             kind,
             position,
             size,
+            computed_position: None,
+            computed_size: None,
             parent: None,
             children: Vec::new(),
             clip_children: false,
@@ -111,6 +121,32 @@ impl Shape {
             stroke: Some(Stroke::default()),
             corner_radius: 0.0,
         }
+    }
+
+    /// Get the effective position (computed if in layout, otherwise user-specified).
+    pub fn effective_position(&self) -> CanvasPoint {
+        self.computed_position.unwrap_or(self.position)
+    }
+
+    /// Get the effective size (computed if in layout, otherwise user-specified).
+    pub fn effective_size(&self) -> CanvasSize {
+        self.computed_size.unwrap_or(self.size)
+    }
+
+    /// Check if position is computed (differs from user-specified).
+    pub fn has_computed_position(&self) -> bool {
+        self.computed_position.is_some()
+    }
+
+    /// Check if size is computed (differs from user-specified).
+    pub fn has_computed_size(&self) -> bool {
+        self.computed_size.is_some()
+    }
+
+    /// Clear computed values (call when layout is disabled or shape leaves layout).
+    pub fn clear_computed(&mut self) {
+        self.computed_position = None;
+        self.computed_size = None;
     }
 
     pub fn rectangle(position: Vec2, size: Vec2) -> Self {
@@ -178,28 +214,32 @@ impl Shape {
 
     /// Get world position (canvas space) accounting for parent chain.
     ///
-    /// For root shapes, returns `self.position`.
+    /// For root shapes, returns effective position.
     /// For child shapes, walks up the parent chain to compute absolute position.
+    /// Uses computed position if available (from layout).
     pub fn world_position(&self, shapes: &[Shape]) -> CanvasPoint {
+        let pos = self.effective_position();
         match self.parent {
-            None => self.position,
+            None => pos,
             Some(parent_id) => {
                 let parent = shapes.iter().find(|s| s.id == parent_id);
                 match parent {
                     Some(p) => {
                         let parent_world = p.world_position(shapes);
-                        CanvasPoint(self.position.0 + parent_world.0)
+                        CanvasPoint(pos.0 + parent_world.0)
                     }
-                    None => self.position, // Orphaned child, treat as root
+                    None => pos, // Orphaned child, treat as root
                 }
             }
         }
     }
 
-    /// Returns the bounding box as (min, max) corners in canvas space.
+    /// Returns the bounding box as (min, max) corners using effective position/size.
     pub fn bounds(&self) -> (CanvasPoint, CanvasPoint) {
-        let max = CanvasPoint(self.position.0 + self.size.0);
-        (self.position, max)
+        let pos = self.effective_position();
+        let size = self.effective_size();
+        let max = CanvasPoint(pos.0 + size.0);
+        (pos, max)
     }
 
     /// Check if a point is inside this shape's bounding box.
