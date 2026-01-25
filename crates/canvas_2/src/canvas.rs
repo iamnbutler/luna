@@ -1,7 +1,10 @@
 use crate::Viewport;
 use glam::Vec2;
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, Hsla, Point};
-use node_2::{CanvasDelta, CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind, Stroke};
+use node_2::{
+    compute_layout, CanvasDelta, CanvasPoint, CanvasSize, LayoutInput, ScreenPoint, Shape, ShapeId,
+    ShapeKind, Stroke,
+};
 use std::collections::HashSet;
 use theme_2::Theme;
 
@@ -243,6 +246,9 @@ impl Canvas {
                 parent.children.push(child_id);
             }
         }
+
+        // If parent has layout enabled, apply it to reposition children
+        self.apply_layout_for_frame(parent_id);
 
         cx.emit(CanvasEvent::ContentChanged);
         cx.notify();
@@ -594,8 +600,13 @@ impl Canvas {
 
     /// Finish resizing shapes.
     pub fn finish_resize(&mut self, cx: &mut Context<Self>) {
-        if matches!(self.drag, Some(DragState::ResizingShapes { .. })) {
-            self.drag = None;
+        if let Some(DragState::ResizingShapes { shape_ids, .. }) = self.drag.take() {
+            // If any resized shapes are frames with layout, reapply their layout
+            for shape_id in &shape_ids {
+                if self.shapes.iter().any(|s| s.id == *shape_id && s.has_layout()) {
+                    self.apply_layout_for_frame(*shape_id);
+                }
+            }
             cx.emit(CanvasEvent::ContentChanged);
             cx.notify();
         }
@@ -665,6 +676,65 @@ impl Canvas {
         }
 
         Some((CanvasPoint(min), CanvasPoint(max)))
+    }
+
+    /// Apply layout for a single frame to its children.
+    /// Does nothing if the frame doesn't have layout enabled.
+    pub fn apply_layout_for_frame(&mut self, frame_id: ShapeId) {
+        // Gather frame info and children order
+        let (frame_size, layout, children_ids) = {
+            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+                return;
+            };
+            let Some(layout) = frame.layout.clone() else {
+                return; // No layout enabled
+            };
+            (frame.size, layout, frame.children.clone())
+        };
+
+        // Gather children info in the order specified by frame.children
+        let child_inputs: Vec<LayoutInput> = children_ids
+            .iter()
+            .filter_map(|child_id| {
+                self.shapes.iter().find(|s| s.id == *child_id).map(|child| LayoutInput {
+                    id: child.id,
+                    size: child.size,
+                    width_mode: child.child_layout.width_mode,
+                    height_mode: child.child_layout.height_mode,
+                })
+            })
+            .collect();
+
+        if child_inputs.is_empty() {
+            return;
+        }
+
+        // Compute layout
+        let outputs = compute_layout(frame_size, &layout, &child_inputs);
+
+        // Apply results to children
+        for output in outputs {
+            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == output.id) {
+                child.position = output.position;
+                child.size = output.size;
+            }
+        }
+    }
+
+    /// Apply layout for all frames that have layout enabled.
+    pub fn apply_all_layouts(&mut self) {
+        // Collect frame IDs (we need to avoid borrowing issues)
+        let frame_ids: Vec<ShapeId> = self
+            .shapes
+            .iter()
+            .filter(|s| s.has_layout())
+            .map(|s| s.id)
+            .collect();
+
+        // Process each frame
+        for frame_id in frame_ids {
+            self.apply_layout_for_frame(frame_id);
+        }
     }
 }
 
