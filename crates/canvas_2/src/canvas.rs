@@ -381,6 +381,10 @@ impl Canvas {
         let mut shape = Shape::new(kind, start, CanvasSize::new(0.0, 0.0));
         shape.stroke = Some(self.default_stroke);
         shape.fill = self.default_fill.map(|c| node_2::Fill::new(c));
+        // Frames clip children by default
+        if kind == ShapeKind::Frame {
+            shape.clip_children = true;
+        }
 
         let id = shape.id;
         self.shapes.push(shape);

@@ -44,6 +44,10 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             corner_radius,
         } => {
             let mut shape = Shape::new(kind, CanvasPoint(position), CanvasSize(size));
+            // Frames clip children by default
+            if kind == ShapeKind::Frame {
+                shape.clip_children = true;
+            }
             if let Some(fill) = fill {
                 shape.fill = Some(Fill::new(fill.to_hsla()));
             }

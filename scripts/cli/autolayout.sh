@@ -46,8 +46,8 @@ if [ -n "$FRAME1_ID" ]; then
     echo "  Frame created (ID: $FRAME1_ID)"
 
     # Enable autolayout with row direction
-    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME1_ID\"}, \"layout\": {\"direction\": \"Row\", \"gap\": 16, \"padding\": {\"top\": 16, \"right\": 16, \"bottom\": 16, \"left\": 16}, \"main_axis_alignment\": \"Start\", \"cross_axis_alignment\": \"Center\"}}" > /dev/null
-    echo "  Autolayout enabled (Row, gap: 16, padding: 16)"
+    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME1_ID\"}, \"layout\": {\"direction\": \"row\", \"gap\": 16, \"padding\": {\"top\": 16, \"right\": 16, \"bottom\": 16, \"left\": 16}, \"main_axis_alignment\": \"start\", \"cross_axis_alignment\": \"center\"}}" > /dev/null
+    echo "  Autolayout enabled (row, gap: 16, padding: 16)"
 
     # Create children - they'll be auto-positioned by layout
     for i in 1 2 3 4; do
@@ -72,8 +72,8 @@ if [ -n "$FRAME2_ID" ]; then
     echo "  Frame created (ID: $FRAME2_ID)"
 
     # Enable autolayout with column direction
-    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME2_ID\"}, \"layout\": {\"direction\": \"Column\", \"gap\": 12, \"padding\": {\"top\": 12, \"right\": 12, \"bottom\": 12, \"left\": 12}, \"main_axis_alignment\": \"Start\", \"cross_axis_alignment\": \"Stretch\"}}" > /dev/null
-    echo "  Autolayout enabled (Column, gap: 12, cross: Stretch)"
+    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME2_ID\"}, \"layout\": {\"direction\": \"column\", \"gap\": 12, \"padding\": {\"top\": 12, \"right\": 12, \"bottom\": 12, \"left\": 12}, \"main_axis_alignment\": \"start\", \"cross_axis_alignment\": \"stretch\"}}" > /dev/null
+    echo "  Autolayout enabled (column, gap: 12, cross: stretch)"
 
     # Create children with different sizes - stretch will make them equal width
     COLORS=("#1ABC9C" "#3498DB" "#9B59B6" "#E67E22")
@@ -102,8 +102,8 @@ if [ -n "$FRAME3_ID" ]; then
     echo "  Frame created (ID: $FRAME3_ID)"
 
     # Enable autolayout with space-between
-    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME3_ID\"}, \"layout\": {\"direction\": \"Row\", \"gap\": 0, \"padding\": {\"top\": 16, \"right\": 16, \"bottom\": 16, \"left\": 16}, \"main_axis_alignment\": \"SpaceBetween\", \"cross_axis_alignment\": \"Center\"}}" > /dev/null
-    echo "  Autolayout enabled (Row, SpaceBetween)"
+    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME3_ID\"}, \"layout\": {\"direction\": \"row\", \"gap\": 0, \"padding\": {\"top\": 16, \"right\": 16, \"bottom\": 16, \"left\": 16}, \"main_axis_alignment\": \"space_between\", \"cross_axis_alignment\": \"center\"}}" > /dev/null
+    echo "  Autolayout enabled (row, space_between)"
 
     # Create children
     for i in 1 2 3; do
@@ -128,8 +128,8 @@ if [ -n "$FRAME4_ID" ]; then
     echo "  Frame created (ID: $FRAME4_ID)"
 
     # Enable autolayout centered
-    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME4_ID\"}, \"layout\": {\"direction\": \"Row\", \"gap\": 24, \"padding\": {\"top\": 0, \"right\": 0, \"bottom\": 0, \"left\": 0}, \"main_axis_alignment\": \"Center\", \"cross_axis_alignment\": \"Center\"}}" > /dev/null
-    echo "  Autolayout enabled (Row, Center/Center)"
+    $CLI command "{\"type\": \"set_layout\", \"target\": {\"shape\": \"$FRAME4_ID\"}, \"layout\": {\"direction\": \"row\", \"gap\": 24, \"padding\": {\"top\": 0, \"right\": 0, \"bottom\": 0, \"left\": 0}, \"main_axis_alignment\": \"center\", \"cross_axis_alignment\": \"center\"}}" > /dev/null
+    echo "  Autolayout enabled (row, center/center)"
 
     # Create children
     SIZES=(30 50 40)
