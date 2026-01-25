@@ -77,3 +77,5 @@
 {"v":1,"op":"complete","id":"mkt4o7g1-ak7h","ts":"2026-01-25T02:56:17.772933Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkt4o7gy-e0q8","ts":"2026-01-25T02:56:17.806101Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
 {"v":1,"op":"complete","id":"mkt4o7hw-bsz7","ts":"2026-01-25T02:56:17.843213Z","by":"@iamnbutler","branch":"autolayout-integration","d":{"resolution":"done"}}
+{"v":1,"op":"create","id":"mku3oo3s-admb","ts":"2026-01-25T18:57:11.944905Z","by":"@iamnbutler","branch":"autolayout-inspector","d":{"priority":"p1","title":"Add autolayout controls to inspector panel"}}
+{"v":1,"op":"complete","id":"mku3oo3s-admb","ts":"2026-01-25T18:57:17.731387Z","by":"@iamnbutler","branch":"autolayout-inspector","d":{"resolution":"done"}}
