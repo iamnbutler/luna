@@ -1,6 +1,23 @@
 # Spool - Task Management
 
-Spool is a git-native, event-sourced task management system used in this project. Tasks are stored in `.spool/events/` as JSONL files.
+Spool is a git-native, event-sourced task management system. Tasks are stored in `.spool/events/` as JSONL files.
+
+## Installation
+
+```bash
+cargo install spool-cli    # CLI
+cargo install spool-ui     # TUI (optional)
+```
+
+## TUI
+
+Run `spool-ui` for a terminal interface with:
+
+- Task list with priority coloring
+- Detail panel with event history
+- Filtering, sorting, search
+- Stream navigation
+- Inline task creation (`n`) and completion (`c`)
 
 ## Commands Reference
 
@@ -25,8 +42,11 @@ spool list -t bug
 # Filter by priority
 spool list -p p0
 
-# Filter by stream
-spool list --stream my-stream
+# Filter by stream (use stream ID)
+spool list --stream <stream-id>
+
+# List tasks without a stream (orphaned tasks)
+spool list --no-stream
 
 # Output as JSON
 spool list -f json
@@ -53,11 +73,11 @@ spool add "Task title" -t bug -t urgent
 # With assignee
 spool add "Task title" -a @username
 
-# In a specific stream
-spool add "Task title" --stream my-stream
+# In a specific stream (use stream ID)
+spool add "Task title" --stream <stream-id>
 
 # Full example
-spool add "Fix authentication bug" -d "Users getting logged out unexpectedly" -p p0 -t bug -t auth -a @alice --stream backend
+spool add "Fix authentication bug" -d "Users getting logged out unexpectedly" -p p0 -t bug -t auth -a @alice --stream <stream-id>
 ```
 
 ### Viewing Task Details
@@ -95,8 +115,11 @@ spool update <task-id> -d "New description"
 # Update priority
 spool update <task-id> -p p1
 
-# Move to a different stream
-spool update <task-id> --stream new-stream
+# Move to a different stream (use stream ID)
+spool update <task-id> --stream <stream-id>
+
+# Remove from stream (use empty string)
+spool update <task-id> --stream ""
 
 # Update multiple fields
 spool update <task-id> -t "New title" -d "New description" -p p0
@@ -104,23 +127,52 @@ spool update <task-id> -t "New title" -d "New description" -p p0
 
 ### Streams
 
-Streams let you group tasks into collections (e.g., by feature, sprint, or area).
+Streams are first-class entities for grouping tasks into collections (e.g., by feature, sprint, or area). Streams have IDs, names, and optional descriptions.
 
 ```bash
-# Create a task in a stream
-spool add "Implement login" --stream auth
+# Create a new stream
+spool stream add "auth" -d "Authentication features"
 
-# List tasks in a stream
-spool list --stream auth
+# List all streams with task counts
+spool stream list
+
+# List streams as JSON
+spool stream list -f json
+
+# Show stream details and its tasks (by ID)
+spool stream show <stream-id>
+
+# Show stream by name
+spool stream show --name "auth"
+
+# Update stream metadata
+spool stream update <stream-id> -n "new-name" -d "New description"
+
+# Delete a stream (must have no tasks assigned)
+spool stream delete <stream-id>
+```
+
+#### Working with Tasks and Streams
+
+```bash
+# Create a stream first
+spool stream add "frontend" -d "Frontend development"
+# Note the stream ID returned, e.g., "k8b2x-a1c3"
+
+# Create a task in that stream
+spool add "Implement login form" --stream k8b2x-a1c3
+
+# List tasks in that stream
+spool list --stream k8b2x-a1c3
 
 # Move a task to a different stream
-spool stream <task-id> new-stream
+spool update <task-id> --stream <other-stream-id>
 
-# Remove a task from its stream (move to no stream)
-spool stream <task-id>
+# Remove a task from its stream
+spool update <task-id> --stream ""
 
-# You can also move tasks via update
-spool update <task-id> --stream new-stream
+# Find tasks without a stream
+spool list --no-stream
 ```
 
 ### Completing & Reopening Tasks
@@ -145,14 +197,14 @@ spool reopen <task-id>
 # Rebuild index and state from events
 spool rebuild
 
-# Archive completed tasks older than N days
-spool archive <days>
+# Archive completed tasks older than N days (default: 30)
+spool archive --days 30
+
+# Preview what would be archived
+spool archive --dry-run
 
 # Validate event files
 spool validate
-
-# Start interactive shell mode
-spool shell
 ```
 
 ## Workflow Examples
@@ -185,18 +237,18 @@ spool list -a @yourusername
 spool list -a @yourusername -p p0 -t bug
 ```
 
-### Working with Streams
+### Setting Up a New Feature Stream
 
 ```bash
-# List all tasks in a stream
-spool list --stream frontend
+# Create the stream
+spool stream add "ui-redesign" -d "Q1 UI redesign project"
 
-# Create tasks in a feature stream
-spool add "Add dark mode toggle" --stream ui-redesign -p p2
-spool add "Update color palette" --stream ui-redesign -p p2
+# Get the stream ID from output, then create tasks
+spool add "Add dark mode toggle" --stream <stream-id> -p p2
+spool add "Update color palette" --stream <stream-id> -p p2
 
-# Move task to a different stream as priorities change
-spool stream <task-id> urgent-fixes
+# View all tasks in the stream
+spool stream show --name "ui-redesign"
 ```
 
 ## Priority Levels
@@ -209,7 +261,9 @@ spool stream <task-id> urgent-fixes
 ## Tips
 
 - Task IDs are auto-generated and shown when you create a task
+- Stream IDs are also auto-generated - use `spool stream list` to see them
+- Use `spool stream show --name "name"` if you know the name but not the ID
 - Use `spool list -f ids` to get just IDs for scripting
-- Use streams to organize tasks by feature, sprint, or area
+- Use `spool list --no-stream` to find tasks that need organizing
 - The `.spool/` directory should be committed to git
 - Events are the source of truth; `.index.json` and `.state.json` are caches
