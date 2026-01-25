@@ -570,8 +570,10 @@ impl PropertiesPanel {
                     None
                 });
                 if let Some(frame_id) = frame_id {
-                    self.canvas.update(cx, |canvas, _| {
+                    self.canvas.update(cx, |canvas, cx| {
                         canvas.apply_layout_for_frame(frame_id);
+                        cx.emit(CanvasEvent::ContentChanged);
+                        cx.notify();
                     });
                 }
             }
@@ -605,8 +607,10 @@ impl PropertiesPanel {
                     None
                 });
                 if let Some(frame_id) = frame_id {
-                    self.canvas.update(cx, |canvas, _| {
+                    self.canvas.update(cx, |canvas, cx| {
                         canvas.apply_layout_for_frame(frame_id);
+                        cx.emit(CanvasEvent::ContentChanged);
+                        cx.notify();
                     });
                 }
             }
@@ -637,8 +641,10 @@ impl PropertiesPanel {
             None
         });
         if let Some(frame_id) = frame_id {
-            self.canvas.update(cx, |canvas, _| {
+            self.canvas.update(cx, |canvas, cx| {
                 canvas.apply_layout_for_frame(frame_id);
+                cx.emit(CanvasEvent::ContentChanged);
+                cx.notify();
             });
         }
     }
@@ -660,8 +666,10 @@ impl PropertiesPanel {
             None
         });
         if let Some(frame_id) = frame_id {
-            self.canvas.update(cx, |canvas, _| {
+            self.canvas.update(cx, |canvas, cx| {
                 canvas.apply_layout_for_frame(frame_id);
+                cx.emit(CanvasEvent::ContentChanged);
+                cx.notify();
             });
         }
     }
@@ -683,8 +691,10 @@ impl PropertiesPanel {
             None
         });
         if let Some(frame_id) = frame_id {
-            self.canvas.update(cx, |canvas, _| {
+            self.canvas.update(cx, |canvas, cx| {
                 canvas.apply_layout_for_frame(frame_id);
+                cx.emit(CanvasEvent::ContentChanged);
+                cx.notify();
             });
         }
     }
@@ -706,8 +716,10 @@ impl PropertiesPanel {
             None
         });
         if let Some(frame_id) = frame_id {
-            self.canvas.update(cx, |canvas, _| {
+            self.canvas.update(cx, |canvas, cx| {
                 canvas.apply_layout_for_frame(frame_id);
+                cx.emit(CanvasEvent::ContentChanged);
+                cx.notify();
             });
         }
     }
