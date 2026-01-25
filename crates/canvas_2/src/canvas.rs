@@ -357,9 +357,18 @@ impl Canvas {
     }
 
     /// Move selected shapes by a delta.
+    /// Shapes in autolayout frames are skipped.
     pub fn move_selected(&mut self, delta: CanvasDelta, cx: &mut Context<Self>) {
+        // Collect IDs of shapes that are in autolayout (can't move)
+        let in_layout: std::collections::HashSet<_> = self
+            .selection
+            .iter()
+            .filter(|id| self.is_in_autolayout(**id))
+            .copied()
+            .collect();
+
         for shape in &mut self.shapes {
-            if self.selection.contains(&shape.id) {
+            if self.selection.contains(&shape.id) && !in_layout.contains(&shape.id) {
                 shape.translate(delta);
             }
         }
@@ -423,7 +432,13 @@ impl Canvas {
     }
 
     /// Start moving selected shapes.
-    pub fn start_move(&mut self, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
+    /// Returns false if move was blocked (e.g., shapes in autolayout).
+    pub fn start_move(&mut self, start_mouse: CanvasPoint, _cx: &mut Context<Self>) -> bool {
+        // Block moving shapes that are children of autolayout frames
+        if self.selection_in_autolayout() {
+            return false;
+        }
+
         let positions: Vec<_> = self
             .shapes
             .iter()
@@ -435,6 +450,7 @@ impl Canvas {
             start_mouse,
             start_positions: positions,
         });
+        true
     }
 
     /// Update shape positions during move.
@@ -467,9 +483,15 @@ impl Canvas {
     }
 
     /// Start resizing selected shapes.
-    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: CanvasPoint, _cx: &mut Context<Self>) {
+    /// Returns false if resize was blocked (e.g., shapes in autolayout).
+    pub fn start_resize(&mut self, handle: ResizeHandle, start_mouse: CanvasPoint, _cx: &mut Context<Self>) -> bool {
+        // Block resizing shapes that are children of autolayout frames
+        if self.selection_in_autolayout() {
+            return false;
+        }
+
         let Some((min, max)) = self.selection_bounds() else {
-            return;
+            return false;
         };
 
         let shape_ids: Vec<_> = self.selection.iter().copied().collect();
@@ -487,6 +509,7 @@ impl Canvas {
             shape_ids,
             start_shape_data,
         });
+        true
     }
 
     /// Update shape sizes during resize.
@@ -600,6 +623,20 @@ impl Canvas {
     pub fn zoom_at(&mut self, screen_point: Point<f32>, factor: f32, cx: &mut Context<Self>) {
         self.viewport.zoom_at(screen_point, factor);
         cx.notify();
+    }
+
+    /// Check if a shape is a child of a layout-enabled frame.
+    pub fn is_in_autolayout(&self, shape_id: ShapeId) -> bool {
+        self.shapes
+            .iter()
+            .find(|s| s.id == shape_id)
+            .map(|s| s.is_in_layout(&self.shapes))
+            .unwrap_or(false)
+    }
+
+    /// Check if any selected shapes are in autolayout.
+    pub fn selection_in_autolayout(&self) -> bool {
+        self.selection.iter().any(|id| self.is_in_autolayout(*id))
     }
 
     /// Get the bounding box of selected shapes in canvas coordinates.

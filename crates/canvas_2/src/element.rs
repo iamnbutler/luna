@@ -5,7 +5,9 @@ use gpui::{
     Element, ElementId, Entity, Hitbox, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, PaintQuad, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
 };
-use node_2::{CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind};
+use node_2::{
+    compute_layout, CanvasPoint, CanvasSize, LayoutInput, ScreenPoint, Shape, ShapeId, ShapeKind,
+};
 use std::collections::HashSet;
 
 /// Size of resize handles in pixels.
@@ -86,8 +88,11 @@ impl Element for CanvasElement {
         let canvas_entity = self.canvas.clone();
 
         // Read canvas state for rendering
-        let (shapes, selection, hovered, viewport, theme, drag) =
+        let (mut shapes, selection, hovered, viewport, theme, drag) =
             self.canvas.read(cx).clone_render_state();
+
+        // Compute and apply autolayout for all frames with layout enabled
+        apply_all_layouts(&mut shapes);
 
         // Paint background
         window.paint_quad(gpui::fill(bounds, theme.canvas_background));
@@ -590,6 +595,85 @@ fn paint_shape_recursive(
                 }
             }
         });
+    }
+}
+
+/// Compute and apply autolayout for all frames with layout enabled.
+///
+/// This modifies child positions and sizes according to their parent frame's layout settings.
+/// Handles nested layouts by processing from outermost to innermost frames.
+fn apply_all_layouts(shapes: &mut [Shape]) {
+    // Find all frames with layout enabled, sorted by depth (root frames first)
+    let mut frame_ids: Vec<(ShapeId, usize)> = shapes
+        .iter()
+        .filter(|s| s.has_layout())
+        .map(|s| (s.id, compute_depth(s.id, shapes)))
+        .collect();
+
+    // Sort by depth (outermost first)
+    frame_ids.sort_by_key(|(_, depth)| *depth);
+
+    // Process each frame
+    for (frame_id, _) in frame_ids {
+        apply_layout_for_frame(frame_id, shapes);
+    }
+}
+
+/// Compute the nesting depth of a shape (0 = root, 1 = child of root, etc.)
+fn compute_depth(shape_id: ShapeId, shapes: &[Shape]) -> usize {
+    let mut depth = 0;
+    let mut current_id = shape_id;
+
+    while let Some(shape) = shapes.iter().find(|s| s.id == current_id) {
+        if let Some(parent_id) = shape.parent {
+            depth += 1;
+            current_id = parent_id;
+        } else {
+            break;
+        }
+    }
+
+    depth
+}
+
+/// Apply layout for a single frame to its children.
+fn apply_layout_for_frame(frame_id: ShapeId, shapes: &mut [Shape]) {
+    // Gather frame info
+    let (frame_size, layout) = {
+        let Some(frame) = shapes.iter().find(|s| s.id == frame_id) else {
+            return;
+        };
+        let Some(layout) = frame.layout.clone() else {
+            return;
+        };
+        (frame.size, layout)
+    };
+
+    // Gather children info
+    let child_inputs: Vec<LayoutInput> = shapes
+        .iter()
+        .filter(|s| s.parent == Some(frame_id))
+        .map(|child| LayoutInput {
+            id: child.id,
+            size: child.size,
+            width_mode: child.child_layout.width_mode,
+            height_mode: child.child_layout.height_mode,
+        })
+        .collect();
+
+    if child_inputs.is_empty() {
+        return;
+    }
+
+    // Compute layout
+    let outputs = compute_layout(frame_size, &layout, &child_inputs);
+
+    // Apply results to children
+    for output in outputs {
+        if let Some(child) = shapes.iter_mut().find(|s| s.id == output.id) {
+            child.position = output.position;
+            child.size = output.size;
+        }
     }
 }
 
