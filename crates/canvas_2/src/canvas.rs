@@ -5,7 +5,7 @@ use node_2::{
     compute_layout, CanvasDelta, CanvasPoint, CanvasSize, LayoutInput, ScreenPoint, Shape, ShapeId,
     ShapeKind, Stroke,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use theme_2::Theme;
 
 /// Current tool mode.
@@ -76,6 +76,12 @@ pub struct Canvas {
     /// All shapes on the canvas, in z-order (back to front).
     pub shapes: Vec<Shape>,
 
+    /// Index from ShapeId to position in shapes vec for O(1) lookup.
+    shape_index: HashMap<ShapeId, usize>,
+
+    /// Cached world positions for all shapes. Computed once per frame.
+    world_position_cache: HashMap<ShapeId, CanvasPoint>,
+
     /// Currently selected shape IDs.
     pub selection: HashSet<ShapeId>,
 
@@ -108,6 +114,8 @@ impl Canvas {
     pub fn new(theme: Theme, cx: &mut Context<Self>) -> Self {
         Self {
             shapes: Vec::new(),
+            shape_index: HashMap::new(),
+            world_position_cache: HashMap::new(),
             selection: HashSet::new(),
             hovered: None,
             viewport: Viewport::new(),
@@ -120,10 +128,64 @@ impl Canvas {
         }
     }
 
+    /// Compute and cache world positions for all shapes.
+    /// Call this once per frame before rendering.
+    pub fn compute_world_positions(&mut self) {
+        self.world_position_cache.clear();
+        self.world_position_cache.reserve(self.shapes.len());
+
+        // Process shapes in order - parents before children ensures cache hits
+        // when computing child positions
+        for shape in &self.shapes {
+            let world_pos = self.compute_world_position_cached(shape.id, shape.parent, shape.effective_position());
+            self.world_position_cache.insert(shape.id, world_pos);
+        }
+    }
+
+    /// Compute world position using the cache for parent lookups.
+    fn compute_world_position_cached(
+        &self,
+        _id: ShapeId,
+        parent: Option<ShapeId>,
+        effective_pos: CanvasPoint,
+    ) -> CanvasPoint {
+        match parent {
+            None => effective_pos,
+            Some(parent_id) => {
+                // Look up parent's world position from cache (O(1))
+                // If not cached yet, fall back to computing (shouldn't happen with proper ordering)
+                let parent_world = self
+                    .world_position_cache
+                    .get(&parent_id)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        // Fallback: compute parent's world position
+                        self.get_shape(parent_id)
+                            .map(|p| p.world_position(&self.shapes))
+                            .unwrap_or(CanvasPoint::new(0.0, 0.0))
+                    });
+                CanvasPoint(effective_pos.0 + parent_world.0)
+            }
+        }
+    }
+
+    /// Get cached world position for a shape.
+    /// Returns None if not cached (call compute_world_positions first).
+    pub fn get_cached_world_position(&self, id: ShapeId) -> Option<CanvasPoint> {
+        self.world_position_cache.get(&id).copied()
+    }
+
+    /// Get the world position cache for rendering.
+    pub fn world_position_cache(&self) -> &HashMap<ShapeId, CanvasPoint> {
+        &self.world_position_cache
+    }
+
     /// Add a shape to the canvas.
     pub fn add_shape(&mut self, shape: Shape, cx: &mut Context<Self>) {
         let id = shape.id;
+        let index = self.shapes.len();
         self.shapes.push(shape);
+        self.shape_index.insert(id, index);
         cx.emit(CanvasEvent::ShapeAdded(id));
         cx.emit(CanvasEvent::ContentChanged);
         cx.notify();
@@ -131,8 +193,15 @@ impl Canvas {
 
     /// Remove a shape from the canvas.
     pub fn remove_shape(&mut self, id: ShapeId, cx: &mut Context<Self>) {
-        if let Some(pos) = self.shapes.iter().position(|s| s.id == id) {
+        if let Some(&pos) = self.shape_index.get(&id) {
             self.shapes.remove(pos);
+            self.shape_index.remove(&id);
+            // Update indices for shapes that shifted down
+            for shape in &self.shapes[pos..] {
+                if let Some(idx) = self.shape_index.get_mut(&shape.id) {
+                    *idx -= 1;
+                }
+            }
             self.selection.remove(&id);
             cx.emit(CanvasEvent::ShapeRemoved(id));
             cx.emit(CanvasEvent::ContentChanged);
@@ -140,14 +209,17 @@ impl Canvas {
         }
     }
 
-    /// Get a shape by ID.
+    /// Get a shape by ID (O(1) lookup).
     pub fn get_shape(&self, id: ShapeId) -> Option<&Shape> {
-        self.shapes.iter().find(|s| s.id == id)
+        self.shape_index.get(&id).map(|&idx| &self.shapes[idx])
     }
 
-    /// Get a mutable shape by ID.
+    /// Get a mutable shape by ID (O(1) lookup).
     pub fn get_shape_mut(&mut self, id: ShapeId) -> Option<&mut Shape> {
-        self.shapes.iter_mut().find(|s| s.id == id)
+        self.shape_index
+            .get(&id)
+            .copied()
+            .map(|idx| &mut self.shapes[idx])
     }
 
     /// Find the deepest shape at a canvas point.
@@ -165,19 +237,26 @@ impl Canvas {
         point: CanvasPoint,
         parent_id: Option<ShapeId>,
     ) -> Option<ShapeId> {
-        // Get shapes at this level (matching parent)
-        let shapes_at_level: Vec<_> = self
-            .shapes
-            .iter()
-            .filter(|s| s.parent == parent_id)
-            .collect();
+        // Get shape IDs at this level
+        let shape_ids: Vec<ShapeId> = match parent_id {
+            // Root level: filter shapes with no parent
+            None => self.shapes.iter().filter(|s| s.parent.is_none()).map(|s| s.id).collect(),
+            // Child level: use parent's children list (already in z-order)
+            Some(pid) => self.get_shape(pid).map(|p| p.children.clone()).unwrap_or_default(),
+        };
 
         // Iterate in reverse for z-order (top to bottom)
-        for shape in shapes_at_level.iter().rev() {
-            // Calculate world position for hit testing
-            let world_pos = shape.world_position(&self.shapes);
+        for shape_id in shape_ids.iter().rev() {
+            let Some(shape) = self.get_shape(*shape_id) else { continue };
+
+            // Get world position from cache (O(1)) or compute if not cached
+            let world_pos = self
+                .world_position_cache
+                .get(&shape.id)
+                .copied()
+                .unwrap_or_else(|| shape.world_position(&self.shapes));
             let world_bounds_min = world_pos;
-            let world_bounds_max = CanvasPoint(world_pos.0 + shape.size.0);
+            let world_bounds_max = CanvasPoint(world_pos.0 + shape.effective_size().0);
 
             let hit = point.0.x >= world_bounds_min.0.x
                 && point.0.x <= world_bounds_max.0.x
@@ -352,7 +431,9 @@ impl Canvas {
             shape.id = ShapeId::new();
             shape.position = shape.position + offset;
             let new_id = shape.id;
+            let index = self.shapes.len();
             self.shapes.push(shape);
+            self.shape_index.insert(new_id, index);
             self.selection.insert(new_id);
             cx.emit(CanvasEvent::ShapeAdded(new_id));
         }
@@ -393,7 +474,9 @@ impl Canvas {
         }
 
         let id = shape.id;
+        let index = self.shapes.len();
         self.shapes.push(shape);
+        self.shape_index.insert(id, index);
         self.drag = Some(DragState::DrawingShape {
             shape_id: id,
             start,
@@ -603,7 +686,7 @@ impl Canvas {
         if let Some(DragState::ResizingShapes { shape_ids, .. }) = self.drag.take() {
             // If any resized shapes are frames with layout, reapply their layout
             for shape_id in &shape_ids {
-                if self.shapes.iter().any(|s| s.id == *shape_id && s.has_layout()) {
+                if self.get_shape(*shape_id).map(|s| s.has_layout()).unwrap_or(false) {
                     self.apply_layout_for_frame(*shape_id);
                 }
             }
@@ -642,9 +725,7 @@ impl Canvas {
 
     /// Check if a shape is a child of a layout-enabled frame.
     pub fn is_in_autolayout(&self, shape_id: ShapeId) -> bool {
-        self.shapes
-            .iter()
-            .find(|s| s.id == shape_id)
+        self.get_shape(shape_id)
             .map(|s| s.is_in_layout(&self.shapes))
             .unwrap_or(false)
     }
@@ -683,7 +764,7 @@ impl Canvas {
     pub fn apply_layout_for_frame(&mut self, frame_id: ShapeId) {
         // Gather frame info and children order
         let (frame_size, layout, children_ids) = {
-            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+            let Some(frame) = self.get_shape(frame_id) else {
                 return;
             };
             let Some(layout) = frame.layout.clone() else {
@@ -696,7 +777,7 @@ impl Canvas {
         let child_inputs: Vec<LayoutInput> = children_ids
             .iter()
             .filter_map(|child_id| {
-                self.shapes.iter().find(|s| s.id == *child_id).map(|child| LayoutInput {
+                self.get_shape(*child_id).map(|child| LayoutInput {
                     id: child.id,
                     size: child.size,
                     width_mode: child.child_layout.width_mode,
@@ -714,7 +795,7 @@ impl Canvas {
 
         // Apply results to children as computed values (preserving user-set values)
         for output in outputs {
-            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == output.id) {
+            if let Some(child) = self.get_shape_mut(output.id) {
                 // Set computed values - these override position/size for rendering
                 // but preserve the user-specified values for the inspector
                 child.computed_position = Some(output.position);
@@ -731,14 +812,14 @@ impl Canvas {
     /// Clear computed layout values for children when layout is disabled.
     pub fn clear_layout_for_frame(&mut self, frame_id: ShapeId) {
         let children_ids: Vec<ShapeId> = {
-            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+            let Some(frame) = self.get_shape(frame_id) else {
                 return;
             };
             frame.children.clone()
         };
 
         for child_id in children_ids {
-            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == child_id) {
+            if let Some(child) = self.get_shape_mut(child_id) {
                 child.clear_computed();
             }
         }
@@ -758,6 +839,25 @@ impl Canvas {
         for frame_id in frame_ids {
             self.apply_layout_for_frame(frame_id);
         }
+    }
+
+    /// Rebuild the shape index from the current shapes vec.
+    /// Call this after directly modifying shapes (e.g., after loading from file).
+    pub fn rebuild_index(&mut self) {
+        self.shape_index.clear();
+        for (idx, shape) in self.shapes.iter().enumerate() {
+            self.shape_index.insert(shape.id, idx);
+        }
+    }
+
+    /// Load shapes from an external source, replacing all existing shapes.
+    /// Rebuilds the index automatically.
+    pub fn load_shapes(&mut self, shapes: Vec<Shape>, cx: &mut Context<Self>) {
+        self.shapes = shapes;
+        self.rebuild_index();
+        self.selection.clear();
+        cx.emit(CanvasEvent::ContentChanged);
+        cx.notify();
     }
 }
 

@@ -221,9 +221,7 @@ impl Luna {
 
     fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, cx| {
-            canvas.shapes.clear();
-            canvas.selection.clear();
-            cx.notify();
+            canvas.load_shapes(Vec::new(), cx);
         });
         self.project_path = None;
     }
@@ -302,9 +300,7 @@ impl Luna {
             Ok(project) => {
                 if let Some(doc) = project.default_page() {
                     self.canvas.update(cx, |canvas, cx| {
-                        canvas.shapes = doc.shapes.clone();
-                        canvas.selection.clear();
-                        cx.notify();
+                        canvas.load_shapes(doc.shapes.clone(), cx);
                     });
                     self.project_path = Some(path.clone());
                     eprintln!("Loaded project from {}", path.display());
