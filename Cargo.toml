@@ -41,7 +41,7 @@ schemars_derive = "=0.8.22"
 serde = { version = "=1.0.221", features = ["derive"] }
 serde_json = "=1.0.145"
 simplecss = "=0.2.2"
-spool = "=0.3.1"
+spool = "^1.0.0"
 slotmap = "=1.0.7"
 smallvec = "=1.14.0"
 smol = "=2.0"
