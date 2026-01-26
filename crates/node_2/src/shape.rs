@@ -258,8 +258,10 @@ impl Shape {
 mod tests {
     use super::*;
 
+    // === Bounds ===
+
     #[test]
-    fn test_shape_bounds() {
+    fn bounds_returns_position_and_position_plus_size() {
         let shape = Shape::rectangle(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         let (min, max) = shape.bounds();
         assert_eq!(min, CanvasPoint::new(10.0, 20.0));
@@ -267,12 +269,132 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_point() {
+    fn contains_point_inside_returns_true() {
         let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
         assert!(shape.contains_point(CanvasPoint::new(50.0, 50.0)));
+    }
+
+    #[test]
+    fn contains_point_on_min_edge_returns_true() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
         assert!(shape.contains_point(CanvasPoint::new(0.0, 0.0)));
+    }
+
+    #[test]
+    fn contains_point_on_max_edge_returns_true() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
         assert!(shape.contains_point(CanvasPoint::new(100.0, 100.0)));
+    }
+
+    #[test]
+    fn contains_point_outside_returns_false() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
         assert!(!shape.contains_point(CanvasPoint::new(-1.0, 50.0)));
         assert!(!shape.contains_point(CanvasPoint::new(101.0, 50.0)));
+    }
+
+    // === Computed values (effective_position, effective_size) ===
+
+    #[test]
+    fn effective_position_returns_position_when_no_computed() {
+        let shape = Shape::rectangle(Vec2::new(10.0, 20.0), Vec2::new(50.0, 50.0));
+        assert_eq!(shape.effective_position(), CanvasPoint::new(10.0, 20.0));
+    }
+
+    #[test]
+    fn effective_position_returns_computed_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(10.0, 20.0), Vec2::new(50.0, 50.0));
+        shape.computed_position = Some(CanvasPoint::new(100.0, 200.0));
+        assert_eq!(shape.effective_position(), CanvasPoint::new(100.0, 200.0));
+    }
+
+    #[test]
+    fn effective_size_returns_size_when_no_computed() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 75.0));
+        assert_eq!(shape.effective_size(), CanvasSize::new(50.0, 75.0));
+    }
+
+    #[test]
+    fn effective_size_returns_computed_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 75.0));
+        shape.computed_size = Some(CanvasSize::new(200.0, 300.0));
+        assert_eq!(shape.effective_size(), CanvasSize::new(200.0, 300.0));
+    }
+
+    #[test]
+    fn has_computed_position_false_when_none() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        assert!(!shape.has_computed_position());
+    }
+
+    #[test]
+    fn has_computed_position_true_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        shape.computed_position = Some(CanvasPoint::new(10.0, 10.0));
+        assert!(shape.has_computed_position());
+    }
+
+    #[test]
+    fn has_computed_size_false_when_none() {
+        let shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        assert!(!shape.has_computed_size());
+    }
+
+    #[test]
+    fn has_computed_size_true_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        shape.computed_size = Some(CanvasSize::new(100.0, 100.0));
+        assert!(shape.has_computed_size());
+    }
+
+    #[test]
+    fn clear_computed_removes_computed_position() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        shape.computed_position = Some(CanvasPoint::new(10.0, 10.0));
+        shape.clear_computed();
+        assert!(!shape.has_computed_position());
+    }
+
+    #[test]
+    fn clear_computed_removes_computed_size() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        shape.computed_size = Some(CanvasSize::new(100.0, 100.0));
+        shape.clear_computed();
+        assert!(!shape.has_computed_size());
+    }
+
+    #[test]
+    fn bounds_uses_computed_position_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(10.0, 20.0), Vec2::new(50.0, 50.0));
+        shape.computed_position = Some(CanvasPoint::new(100.0, 200.0));
+        let (min, _) = shape.bounds();
+        assert_eq!(min, CanvasPoint::new(100.0, 200.0));
+    }
+
+    #[test]
+    fn bounds_uses_computed_size_when_set() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 50.0));
+        shape.computed_size = Some(CanvasSize::new(200.0, 300.0));
+        let (min, max) = shape.bounds();
+        assert_eq!(min, CanvasPoint::new(0.0, 0.0));
+        assert_eq!(max, CanvasPoint::new(200.0, 300.0));
+    }
+
+    // === User-set values preserved ===
+
+    #[test]
+    fn position_field_unchanged_when_computed_set() {
+        let mut shape = Shape::rectangle(Vec2::new(10.0, 20.0), Vec2::new(50.0, 50.0));
+        shape.computed_position = Some(CanvasPoint::new(100.0, 200.0));
+        // The user-set position should be preserved
+        assert_eq!(shape.position, CanvasPoint::new(10.0, 20.0));
+    }
+
+    #[test]
+    fn size_field_unchanged_when_computed_set() {
+        let mut shape = Shape::rectangle(Vec2::new(0.0, 0.0), Vec2::new(50.0, 75.0));
+        shape.computed_size = Some(CanvasSize::new(200.0, 300.0));
+        // The user-set size should be preserved
+        assert_eq!(shape.size, CanvasSize::new(50.0, 75.0));
     }
 }
