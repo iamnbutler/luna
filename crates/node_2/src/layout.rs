@@ -233,49 +233,114 @@ impl ChildLayout {
 mod tests {
     use super::*;
 
+    // === FrameLayout defaults ===
+
     #[test]
-    fn test_frame_layout_defaults() {
-        let layout = FrameLayout::default();
-        assert_eq!(layout.direction, LayoutDirection::Row);
-        assert_eq!(layout.main_axis_alignment, MainAxisAlignment::Start);
-        assert_eq!(layout.cross_axis_alignment, CrossAxisAlignment::Start);
-        assert_eq!(layout.gap, 0.0);
-        assert_eq!(layout.padding, Padding::default());
+    fn default_direction_is_row() {
+        assert_eq!(FrameLayout::default().direction, LayoutDirection::Row);
     }
 
     #[test]
-    fn test_frame_layout_builders() {
-        let layout = FrameLayout::column()
-            .with_gap(10.0)
-            .with_padding(20.0)
-            .with_main_axis(MainAxisAlignment::Center)
-            .with_cross_axis(CrossAxisAlignment::Stretch);
+    fn default_main_axis_alignment_is_start() {
+        assert_eq!(FrameLayout::default().main_axis_alignment, MainAxisAlignment::Start);
+    }
 
-        assert_eq!(layout.direction, LayoutDirection::Column);
+    #[test]
+    fn default_cross_axis_alignment_is_start() {
+        assert_eq!(FrameLayout::default().cross_axis_alignment, CrossAxisAlignment::Start);
+    }
+
+    #[test]
+    fn default_gap_is_zero() {
+        assert_eq!(FrameLayout::default().gap, 0.0);
+    }
+
+    #[test]
+    fn default_padding_is_zero() {
+        assert_eq!(FrameLayout::default().padding, Padding::default());
+    }
+
+    // === FrameLayout builders (each builder tested independently) ===
+
+    #[test]
+    fn row_constructor_sets_row_direction() {
+        assert_eq!(FrameLayout::row().direction, LayoutDirection::Row);
+    }
+
+    #[test]
+    fn column_constructor_sets_column_direction() {
+        assert_eq!(FrameLayout::column().direction, LayoutDirection::Column);
+    }
+
+    #[test]
+    fn with_gap_sets_gap() {
+        let layout = FrameLayout::default().with_gap(10.0);
         assert_eq!(layout.gap, 10.0);
+    }
+
+    #[test]
+    fn with_padding_sets_uniform_padding() {
+        let layout = FrameLayout::default().with_padding(20.0);
         assert_eq!(layout.padding.top, 20.0);
+        assert_eq!(layout.padding.right, 20.0);
+        assert_eq!(layout.padding.bottom, 20.0);
+        assert_eq!(layout.padding.left, 20.0);
+    }
+
+    #[test]
+    fn with_main_axis_sets_alignment() {
+        let layout = FrameLayout::default().with_main_axis(MainAxisAlignment::Center);
         assert_eq!(layout.main_axis_alignment, MainAxisAlignment::Center);
+    }
+
+    #[test]
+    fn with_cross_axis_sets_alignment() {
+        let layout = FrameLayout::default().with_cross_axis(CrossAxisAlignment::Stretch);
         assert_eq!(layout.cross_axis_alignment, CrossAxisAlignment::Stretch);
     }
 
-    #[test]
-    fn test_padding_helpers() {
-        let uniform = Padding::all(10.0);
-        assert_eq!(uniform.horizontal(), 20.0);
-        assert_eq!(uniform.vertical(), 20.0);
+    // === Padding helpers ===
 
-        let symmetric = Padding::symmetric(5.0, 15.0);
-        assert_eq!(symmetric.left, 5.0);
-        assert_eq!(symmetric.right, 5.0);
-        assert_eq!(symmetric.top, 15.0);
-        assert_eq!(symmetric.bottom, 15.0);
+    #[test]
+    fn padding_all_sets_uniform_value() {
+        let p = Padding::all(10.0);
+        assert_eq!(p.top, 10.0);
+        assert_eq!(p.right, 10.0);
+        assert_eq!(p.bottom, 10.0);
+        assert_eq!(p.left, 10.0);
     }
 
     #[test]
-    fn test_child_layout_defaults() {
-        let child = ChildLayout::default();
-        assert_eq!(child.width_mode, SizingMode::Fixed);
-        assert_eq!(child.height_mode, SizingMode::Fixed);
+    fn padding_horizontal_sums_left_and_right() {
+        let p = Padding { left: 5.0, right: 15.0, top: 0.0, bottom: 0.0 };
+        assert_eq!(p.horizontal(), 20.0);
+    }
+
+    #[test]
+    fn padding_vertical_sums_top_and_bottom() {
+        let p = Padding { left: 0.0, right: 0.0, top: 8.0, bottom: 12.0 };
+        assert_eq!(p.vertical(), 20.0);
+    }
+
+    #[test]
+    fn padding_symmetric_sets_horizontal_and_vertical() {
+        let p = Padding::symmetric(5.0, 15.0);
+        assert_eq!(p.left, 5.0);
+        assert_eq!(p.right, 5.0);
+        assert_eq!(p.top, 15.0);
+        assert_eq!(p.bottom, 15.0);
+    }
+
+    // === ChildLayout defaults ===
+
+    #[test]
+    fn child_layout_default_width_is_fixed() {
+        assert_eq!(ChildLayout::default().width_mode, SizingMode::Fixed);
+    }
+
+    #[test]
+    fn child_layout_default_height_is_fixed() {
+        assert_eq!(ChildLayout::default().height_mode, SizingMode::Fixed);
     }
 
     #[test]

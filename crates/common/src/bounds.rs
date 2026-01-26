@@ -273,11 +273,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bounds_creation() {
+    fn from_origin_size_sets_min_to_origin() {
         let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         assert_eq!(bounds.min, Vec2::new(10.0, 20.0));
+    }
+
+    #[test]
+    fn from_origin_size_sets_max_to_origin_plus_size() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         assert_eq!(bounds.max, Vec2::new(110.0, 70.0));
+    }
+
+    #[test]
+    fn size_returns_difference_of_max_and_min() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         assert_eq!(bounds.size(), Vec2::new(100.0, 50.0));
+    }
+
+    #[test]
+    fn center_returns_midpoint_of_bounds() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         assert_eq!(bounds.center(), Vec2::new(60.0, 45.0));
     }
 
@@ -315,29 +330,47 @@ mod tests {
     }
 
     #[test]
-    fn test_bounds_expand_contract() {
+    fn expand_grows_bounds_in_all_directions() {
         let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
-
         let expanded = bounds.expand(10.0);
         assert_eq!(expanded.min, Vec2::new(0.0, 10.0));
         assert_eq!(expanded.max, Vec2::new(120.0, 80.0));
+    }
 
+    #[test]
+    fn contract_shrinks_bounds_in_all_directions() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
         let contracted = bounds.contract(5.0);
         assert_eq!(contracted.min, Vec2::new(15.0, 25.0));
         assert_eq!(contracted.max, Vec2::new(105.0, 65.0));
     }
 
     #[test]
-    fn test_bounds_scale() {
+    fn scale_from_center_preserves_center_point() {
         let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
-
         let scaled = bounds.scale_from_center(2.0);
-        assert_eq!(scaled.center(), bounds.center()); // center should remain the same
-        assert_eq!(scaled.size(), Vec2::new(200.0, 100.0));
+        assert_eq!(scaled.center(), bounds.center());
+    }
 
-        let scaled_origin = bounds.scale_from_origin(2.0);
-        assert_eq!(scaled_origin.min, bounds.min); // origin should remain the same
-        assert_eq!(scaled_origin.size(), Vec2::new(200.0, 100.0));
+    #[test]
+    fn scale_from_center_multiplies_size() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
+        let scaled = bounds.scale_from_center(2.0);
+        assert_eq!(scaled.size(), Vec2::new(200.0, 100.0));
+    }
+
+    #[test]
+    fn scale_from_origin_preserves_min_point() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
+        let scaled = bounds.scale_from_origin(2.0);
+        assert_eq!(scaled.min, bounds.min);
+    }
+
+    #[test]
+    fn scale_from_origin_multiplies_size() {
+        let bounds = Bounds::from_origin_size(Vec2::new(10.0, 20.0), Vec2::new(100.0, 50.0));
+        let scaled = bounds.scale_from_origin(2.0);
+        assert_eq!(scaled.size(), Vec2::new(200.0, 100.0));
     }
 
     #[test]

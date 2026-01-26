@@ -437,59 +437,120 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_command_json_serialization() {
-        // CreateShape command
+    fn create_shape_serializes_with_type_field() {
         let cmd = Command::CreateShape {
             kind: ShapeKind::Rectangle,
             position: Vec2::new(100.0, 100.0),
             size: Vec2::new(50.0, 50.0),
-            fill: Some(ColorValue::Hex(HexColor { r: 255, g: 0, b: 0 })),
+            fill: None,
             stroke: None,
-            corner_radius: Some(8.0),
+            corner_radius: None,
         };
-        let json = serde_json::to_string_pretty(&cmd).unwrap();
-        println!("CreateShape:\n{}", json);
-        let _: Command = serde_json::from_str(&json).unwrap();
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
 
-        // Move command with selection target
+        // Verify the discriminant tag is "create_shape" (snake_case per serde config)
+        assert_eq!(json["type"], "create_shape");
+    }
+
+    #[test]
+    fn create_shape_serializes_kind_as_pascal_case() {
+        let cmd = Command::CreateShape {
+            kind: ShapeKind::Rectangle,
+            position: Vec2::new(0.0, 0.0),
+            size: Vec2::new(50.0, 50.0),
+            fill: None,
+            stroke: None,
+            corner_radius: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+
+        // External consumers depend on "Rectangle" not "rectangle"
+        assert_eq!(json["kind"], "Rectangle");
+    }
+
+    #[test]
+    fn create_shape_serializes_position_as_array() {
+        let cmd = Command::CreateShape {
+            kind: ShapeKind::Rectangle,
+            position: Vec2::new(100.0, 200.0),
+            size: Vec2::new(50.0, 50.0),
+            fill: None,
+            stroke: None,
+            corner_radius: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+
+        // Vec2 serializes as [x, y] array
+        assert_eq!(json["position"], serde_json::json!([100.0, 200.0]));
+    }
+
+    #[test]
+    fn create_shape_omits_none_optional_fields() {
+        let cmd = Command::CreateShape {
+            kind: ShapeKind::Rectangle,
+            position: Vec2::new(0.0, 0.0),
+            size: Vec2::new(50.0, 50.0),
+            fill: None,
+            stroke: None,
+            corner_radius: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+
+        // None fields should be omitted entirely (skip_serializing_if)
+        assert!(json.get("fill").is_none());
+        assert!(json.get("stroke").is_none());
+        assert!(json.get("corner_radius").is_none());
+    }
+
+    #[test]
+    fn move_command_serializes_selection_target() {
         let cmd = Command::Move {
             target: Target::Selection,
             delta: Vec2::new(10.0, 20.0),
         };
-        let json = serde_json::to_string_pretty(&cmd).unwrap();
-        println!("Move:\n{}", json);
-        let _: Command = serde_json::from_str(&json).unwrap();
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
 
-        // Batch command
-        let cmd = Command::Batch {
-            commands: vec![
-                Command::CreateShape {
-                    kind: ShapeKind::Rectangle,
-                    position: Vec2::new(0.0, 0.0),
-                    size: Vec2::new(100.0, 100.0),
-                    fill: None,
-                    stroke: None,
-                    corner_radius: None,
-                },
-                Command::SetFill {
-                    target: Target::Selection,
-                    fill: Some(ColorValue::Hsla {
-                        h: 0.5,
-                        s: 1.0,
-                        l: 0.5,
-                        a: 1.0,
-                    }),
-                },
-            ],
-        };
-        let json = serde_json::to_string_pretty(&cmd).unwrap();
-        println!("Batch:\n{}", json);
-        let _: Command = serde_json::from_str(&json).unwrap();
+        assert_eq!(json["type"], "move");
+        assert_eq!(json["target"], "selection");
+        assert_eq!(json["delta"], serde_json::json!([10.0, 20.0]));
     }
 
     #[test]
-    fn test_command_from_json_string() {
-        // This is what an LLM might generate
+    fn batch_command_contains_nested_commands() {
+        let cmd = Command::Batch {
+            commands: vec![
+                Command::ClearSelection,
+                Command::SelectAll,
+            ],
+        };
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+
+        assert_eq!(json["type"], "batch");
+        let commands = json["commands"].as_array().unwrap();
+        assert_eq!(commands.len(), 2);
+        assert_eq!(commands[0]["type"], "clear_selection");
+        assert_eq!(commands[1]["type"], "select_all");
+    }
+
+    #[test]
+    fn hex_color_serializes_as_hex_string() {
+        let cmd = Command::CreateShape {
+            kind: ShapeKind::Rectangle,
+            position: Vec2::new(0.0, 0.0),
+            size: Vec2::new(50.0, 50.0),
+            fill: Some(ColorValue::Hex(HexColor { r: 255, g: 128, b: 0 })),
+            stroke: None,
+            corner_radius: None,
+        };
+        let json: serde_json::Value = serde_json::to_value(&cmd).unwrap();
+
+        // HexColor serializes to "#RRGGBB" string format
+        assert_eq!(json["fill"], "#FF8000");
+    }
+
+    #[test]
+    fn create_shape_deserializes_from_llm_style_json() {
+        // This format is what LLMs/external tools generate
         let json = r#"{
             "type": "create_shape",
             "kind": "Rectangle",
@@ -497,6 +558,31 @@ mod tests {
             "size": [50, 50]
         }"#;
         let cmd: Command = serde_json::from_str(json).unwrap();
-        assert!(matches!(cmd, Command::CreateShape { .. }));
+
+        match cmd {
+            Command::CreateShape { kind, position, size, .. } => {
+                assert_eq!(kind, ShapeKind::Rectangle);
+                assert_eq!(position.x, 100.0);
+                assert_eq!(position.y, 200.0);
+                assert_eq!(size.x, 50.0);
+                assert_eq!(size.y, 50.0);
+            }
+            _ => panic!("Expected CreateShape command"),
+        }
+    }
+
+    #[test]
+    fn command_roundtrips_through_json() {
+        let original = Command::SetFill {
+            target: Target::Selection,
+            fill: Some(ColorValue::Hsla { h: 0.5, s: 1.0, l: 0.5, a: 1.0 }),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Command = serde_json::from_str(&json).unwrap();
+
+        // Use JSON comparison since Command may not impl PartialEq
+        let original_json = serde_json::to_value(&original).unwrap();
+        let restored_json = serde_json::to_value(&restored).unwrap();
+        assert_eq!(original_json, restored_json);
     }
 }
