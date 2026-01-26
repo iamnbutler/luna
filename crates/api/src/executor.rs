@@ -80,7 +80,7 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
                 shape.id = ShapeId::new();
                 shape.position.0 += offset;
                 created_ids.push(shape.id);
-                canvas.shapes.push(shape);
+                canvas.add_shape(shape, cx);
             }
 
             // Select the new shapes
@@ -472,7 +472,7 @@ fn execute_query_inner(canvas: &Canvas, query: Query) -> QueryResult {
         }
 
         Query::GetShape { id } => QueryResult::Shape {
-            shape: canvas.shapes.iter().find(|s| s.id == id).map(shape_to_info),
+            shape: canvas.get_shape(id).map(shape_to_info),
         },
 
         Query::GetCanvasBounds => {
@@ -618,21 +618,20 @@ fn apply_layouts(canvas: &mut Canvas) {
 fn apply_single_layout(canvas: &mut Canvas, frame_id: ShapeId) {
     // Get frame info and children order
     let (frame_size, layout, children_ids) = {
-        let frame = canvas.shapes.iter().find(|s| s.id == frame_id);
-        match frame {
-            Some(f) => match &f.layout {
-                Some(layout) => (f.size, layout.clone(), f.children.clone()),
-                None => return,
-            },
-            None => return,
-        }
+        let Some(frame) = canvas.get_shape(frame_id) else {
+            return;
+        };
+        let Some(layout) = &frame.layout else {
+            return;
+        };
+        (frame.size, layout.clone(), frame.children.clone())
     };
 
     // Gather child inputs in the order specified by frame.children
     let children: Vec<LayoutInput> = children_ids
         .iter()
         .filter_map(|child_id| {
-            canvas.shapes.iter().find(|s| s.id == *child_id).map(|s| LayoutInput {
+            canvas.get_shape(*child_id).map(|s| LayoutInput {
                 id: s.id,
                 size: s.size,
                 width_mode: s.child_layout.width_mode,
@@ -650,7 +649,7 @@ fn apply_single_layout(canvas: &mut Canvas, frame_id: ShapeId) {
 
     // Apply results
     for output in outputs {
-        if let Some(shape) = canvas.shapes.iter_mut().find(|s| s.id == output.id) {
+        if let Some(shape) = canvas.get_shape_mut(output.id) {
             shape.position = output.position;
             shape.size = output.size;
         }

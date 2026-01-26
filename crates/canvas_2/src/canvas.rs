@@ -5,7 +5,7 @@ use node_2::{
     compute_layout, CanvasDelta, CanvasPoint, CanvasSize, LayoutInput, ScreenPoint, Shape, ShapeId,
     ShapeKind, Stroke,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use theme_2::Theme;
 
 /// Current tool mode.
@@ -76,6 +76,9 @@ pub struct Canvas {
     /// All shapes on the canvas, in z-order (back to front).
     pub shapes: Vec<Shape>,
 
+    /// Index from ShapeId to position in shapes vec for O(1) lookup.
+    shape_index: HashMap<ShapeId, usize>,
+
     /// Currently selected shape IDs.
     pub selection: HashSet<ShapeId>,
 
@@ -108,6 +111,7 @@ impl Canvas {
     pub fn new(theme: Theme, cx: &mut Context<Self>) -> Self {
         Self {
             shapes: Vec::new(),
+            shape_index: HashMap::new(),
             selection: HashSet::new(),
             hovered: None,
             viewport: Viewport::new(),
@@ -123,7 +127,9 @@ impl Canvas {
     /// Add a shape to the canvas.
     pub fn add_shape(&mut self, shape: Shape, cx: &mut Context<Self>) {
         let id = shape.id;
+        let index = self.shapes.len();
         self.shapes.push(shape);
+        self.shape_index.insert(id, index);
         cx.emit(CanvasEvent::ShapeAdded(id));
         cx.emit(CanvasEvent::ContentChanged);
         cx.notify();
@@ -131,8 +137,15 @@ impl Canvas {
 
     /// Remove a shape from the canvas.
     pub fn remove_shape(&mut self, id: ShapeId, cx: &mut Context<Self>) {
-        if let Some(pos) = self.shapes.iter().position(|s| s.id == id) {
+        if let Some(&pos) = self.shape_index.get(&id) {
             self.shapes.remove(pos);
+            self.shape_index.remove(&id);
+            // Update indices for shapes that shifted down
+            for shape in &self.shapes[pos..] {
+                if let Some(idx) = self.shape_index.get_mut(&shape.id) {
+                    *idx -= 1;
+                }
+            }
             self.selection.remove(&id);
             cx.emit(CanvasEvent::ShapeRemoved(id));
             cx.emit(CanvasEvent::ContentChanged);
@@ -140,14 +153,17 @@ impl Canvas {
         }
     }
 
-    /// Get a shape by ID.
+    /// Get a shape by ID (O(1) lookup).
     pub fn get_shape(&self, id: ShapeId) -> Option<&Shape> {
-        self.shapes.iter().find(|s| s.id == id)
+        self.shape_index.get(&id).map(|&idx| &self.shapes[idx])
     }
 
-    /// Get a mutable shape by ID.
+    /// Get a mutable shape by ID (O(1) lookup).
     pub fn get_shape_mut(&mut self, id: ShapeId) -> Option<&mut Shape> {
-        self.shapes.iter_mut().find(|s| s.id == id)
+        self.shape_index
+            .get(&id)
+            .copied()
+            .map(|idx| &mut self.shapes[idx])
     }
 
     /// Find the deepest shape at a canvas point.
@@ -352,7 +368,9 @@ impl Canvas {
             shape.id = ShapeId::new();
             shape.position = shape.position + offset;
             let new_id = shape.id;
+            let index = self.shapes.len();
             self.shapes.push(shape);
+            self.shape_index.insert(new_id, index);
             self.selection.insert(new_id);
             cx.emit(CanvasEvent::ShapeAdded(new_id));
         }
@@ -393,7 +411,9 @@ impl Canvas {
         }
 
         let id = shape.id;
+        let index = self.shapes.len();
         self.shapes.push(shape);
+        self.shape_index.insert(id, index);
         self.drag = Some(DragState::DrawingShape {
             shape_id: id,
             start,
@@ -683,7 +703,7 @@ impl Canvas {
     pub fn apply_layout_for_frame(&mut self, frame_id: ShapeId) {
         // Gather frame info and children order
         let (frame_size, layout, children_ids) = {
-            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+            let Some(frame) = self.get_shape(frame_id) else {
                 return;
             };
             let Some(layout) = frame.layout.clone() else {
@@ -696,7 +716,7 @@ impl Canvas {
         let child_inputs: Vec<LayoutInput> = children_ids
             .iter()
             .filter_map(|child_id| {
-                self.shapes.iter().find(|s| s.id == *child_id).map(|child| LayoutInput {
+                self.get_shape(*child_id).map(|child| LayoutInput {
                     id: child.id,
                     size: child.size,
                     width_mode: child.child_layout.width_mode,
@@ -714,7 +734,7 @@ impl Canvas {
 
         // Apply results to children as computed values (preserving user-set values)
         for output in outputs {
-            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == output.id) {
+            if let Some(child) = self.get_shape_mut(output.id) {
                 // Set computed values - these override position/size for rendering
                 // but preserve the user-specified values for the inspector
                 child.computed_position = Some(output.position);
@@ -731,14 +751,14 @@ impl Canvas {
     /// Clear computed layout values for children when layout is disabled.
     pub fn clear_layout_for_frame(&mut self, frame_id: ShapeId) {
         let children_ids: Vec<ShapeId> = {
-            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+            let Some(frame) = self.get_shape(frame_id) else {
                 return;
             };
             frame.children.clone()
         };
 
         for child_id in children_ids {
-            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == child_id) {
+            if let Some(child) = self.get_shape_mut(child_id) {
                 child.clear_computed();
             }
         }
@@ -758,6 +778,25 @@ impl Canvas {
         for frame_id in frame_ids {
             self.apply_layout_for_frame(frame_id);
         }
+    }
+
+    /// Rebuild the shape index from the current shapes vec.
+    /// Call this after directly modifying shapes (e.g., after loading from file).
+    pub fn rebuild_index(&mut self) {
+        self.shape_index.clear();
+        for (idx, shape) in self.shapes.iter().enumerate() {
+            self.shape_index.insert(shape.id, idx);
+        }
+    }
+
+    /// Load shapes from an external source, replacing all existing shapes.
+    /// Rebuilds the index automatically.
+    pub fn load_shapes(&mut self, shapes: Vec<Shape>, cx: &mut Context<Self>) {
+        self.shapes = shapes;
+        self.rebuild_index();
+        self.selection.clear();
+        cx.emit(CanvasEvent::ContentChanged);
+        cx.notify();
     }
 }
 

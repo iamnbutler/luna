@@ -375,7 +375,7 @@ fn handle_mouse_move(
                 let min = Vec2::new(start.x().min(canvas_pos.x()), start.y().min(canvas_pos.y()));
                 let max = Vec2::new(start.x().max(canvas_pos.x()), start.y().max(canvas_pos.y()));
 
-                if let Some(shape) = canvas.shapes.iter_mut().find(|s| s.id == shape_id) {
+                if let Some(shape) = canvas.get_shape_mut(shape_id) {
                     shape.position = CanvasPoint(min);
                     shape.size = CanvasSize(max - min);
                 }

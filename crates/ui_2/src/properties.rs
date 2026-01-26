@@ -351,16 +351,13 @@ impl PropertiesPanel {
         if let Ok(x) = value.parse::<f32>() {
             let parent_frame_id = self.canvas.update(cx, |canvas, cx| {
                 let shape_id = canvas.selection.iter().next().copied();
-                if let Some(shape) = shape_id.and_then(|id| {
-                    canvas.shapes.iter_mut().find(|s| s.id == id)
-                }) {
+                if let Some(shape) = shape_id.and_then(|id| canvas.get_shape_mut(id)) {
                     shape.position.0.x = x;
                     cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                     // Check if shape is in a layout frame
                     if let Some(parent_id) = shape.parent {
-                        let parent_has_layout = canvas.shapes.iter()
-                            .find(|s| s.id == parent_id)
+                        let parent_has_layout = canvas.get_shape(parent_id)
                             .map(|p| p.layout.is_some())
                             .unwrap_or(false);
                         if parent_has_layout {
@@ -386,16 +383,13 @@ impl PropertiesPanel {
         if let Ok(y) = value.parse::<f32>() {
             let parent_frame_id = self.canvas.update(cx, |canvas, cx| {
                 let shape_id = canvas.selection.iter().next().copied();
-                if let Some(shape) = shape_id.and_then(|id| {
-                    canvas.shapes.iter_mut().find(|s| s.id == id)
-                }) {
+                if let Some(shape) = shape_id.and_then(|id| canvas.get_shape_mut(id)) {
                     shape.position.0.y = y;
                     cx.emit(CanvasEvent::ContentChanged);
                     cx.notify();
                     // Check if shape is in a layout frame
                     if let Some(parent_id) = shape.parent {
-                        let parent_has_layout = canvas.shapes.iter()
-                            .find(|s| s.id == parent_id)
+                        let parent_has_layout = canvas.get_shape(parent_id)
                             .map(|p| p.layout.is_some())
                             .unwrap_or(false);
                         if parent_has_layout {
@@ -422,16 +416,13 @@ impl PropertiesPanel {
             if w > 0.0 {
                 let parent_frame_id = self.canvas.update(cx, |canvas, cx| {
                     let shape_id = canvas.selection.iter().next().copied();
-                    if let Some(shape) = shape_id.and_then(|id| {
-                        canvas.shapes.iter_mut().find(|s| s.id == id)
-                    }) {
+                    if let Some(shape) = shape_id.and_then(|id| canvas.get_shape_mut(id)) {
                         shape.size.0.x = w;
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                         // Check if shape is in a layout frame
                         if let Some(parent_id) = shape.parent {
-                            let parent_has_layout = canvas.shapes.iter()
-                                .find(|s| s.id == parent_id)
+                            let parent_has_layout = canvas.get_shape(parent_id)
                                 .map(|p| p.layout.is_some())
                                 .unwrap_or(false);
                             if parent_has_layout {
@@ -459,16 +450,13 @@ impl PropertiesPanel {
             if h > 0.0 {
                 let parent_frame_id = self.canvas.update(cx, |canvas, cx| {
                     let shape_id = canvas.selection.iter().next().copied();
-                    if let Some(shape) = shape_id.and_then(|id| {
-                        canvas.shapes.iter_mut().find(|s| s.id == id)
-                    }) {
+                    if let Some(shape) = shape_id.and_then(|id| canvas.get_shape_mut(id)) {
                         shape.size.0.y = h;
                         cx.emit(CanvasEvent::ContentChanged);
                         cx.notify();
                         // Check if shape is in a layout frame
                         if let Some(parent_id) = shape.parent {
-                            let parent_has_layout = canvas.shapes.iter()
-                                .find(|s| s.id == parent_id)
+                            let parent_has_layout = canvas.get_shape(parent_id)
                                 .map(|p| p.layout.is_some())
                                 .unwrap_or(false);
                             if parent_has_layout {
@@ -650,7 +638,7 @@ impl PropertiesPanel {
                 let frame_id = self.canvas.update(cx, |canvas, cx| {
                     let shape_id = canvas.selection.iter().next().copied();
                     if let Some(shape) = shape_id.and_then(|id| {
-                        canvas.shapes.iter_mut().find(|s| s.id == id)
+                        canvas.get_shape_mut(id)
                     }) {
                         if let Some(ref mut layout) = shape.layout {
                             layout.gap = gap;
@@ -687,7 +675,7 @@ impl PropertiesPanel {
                 let frame_id = self.canvas.update(cx, |canvas, cx| {
                     let shape_id = canvas.selection.iter().next().copied();
                     if let Some(shape) = shape_id.and_then(|id| {
-                        canvas.shapes.iter_mut().find(|s| s.id == id)
+                        canvas.get_shape_mut(id)
                     }) {
                         if let Some(ref mut layout) = shape.layout {
                             layout.padding = Padding::all(padding);
@@ -720,7 +708,7 @@ impl PropertiesPanel {
         let (apply_frame_id, clear_frame_id) = self.canvas.update(cx, |canvas, cx| {
             let shape_id = canvas.selection.iter().next().copied();
             if let Some(shape) = shape_id.and_then(|id| {
-                canvas.shapes.iter_mut().find(|s| s.id == id)
+                canvas.get_shape_mut(id)
             }) {
                 if shape.kind == ShapeKind::Frame {
                     let frame_id = shape.id;
@@ -766,7 +754,7 @@ impl PropertiesPanel {
         let frame_id = self.canvas.update(cx, |canvas, cx| {
             let shape_id = canvas.selection.iter().next().copied();
             if let Some(shape) = shape_id.and_then(|id| {
-                canvas.shapes.iter_mut().find(|s| s.id == id)
+                canvas.get_shape_mut(id)
             }) {
                 if let Some(ref mut layout) = shape.layout {
                     layout.direction = direction;
@@ -791,7 +779,7 @@ impl PropertiesPanel {
         let frame_id = self.canvas.update(cx, |canvas, cx| {
             let shape_id = canvas.selection.iter().next().copied();
             if let Some(shape) = shape_id.and_then(|id| {
-                canvas.shapes.iter_mut().find(|s| s.id == id)
+                canvas.get_shape_mut(id)
             }) {
                 if let Some(ref mut layout) = shape.layout {
                     layout.main_axis_alignment = alignment;
@@ -816,7 +804,7 @@ impl PropertiesPanel {
         let frame_id = self.canvas.update(cx, |canvas, cx| {
             let shape_id = canvas.selection.iter().next().copied();
             if let Some(shape) = shape_id.and_then(|id| {
-                canvas.shapes.iter_mut().find(|s| s.id == id)
+                canvas.get_shape_mut(id)
             }) {
                 if let Some(ref mut layout) = shape.layout {
                     layout.cross_axis_alignment = alignment;
