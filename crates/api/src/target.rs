@@ -4,7 +4,7 @@
 //! This module defines flexible targeting that works with
 //! current selection, specific IDs, or queries.
 
-use node_2::ShapeId;
+use node::ShapeId;
 use serde::{Deserialize, Serialize};
 
 /// Specifies which shapes a command targets.

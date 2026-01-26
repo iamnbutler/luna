@@ -2,20 +2,13 @@
 members = [
     "crates/api",
     "crates/assets",
-    "crates/cli",
-    "crates/common",
-    "crates/interchange",
-    "crates/node",
-    "crates/node_2",
-    "crates/luna",
-    "crates/theme",
-    "crates/theme_2",
-    "crates/ui",
-    "crates/ui_2",
     "crates/canvas",
-    "crates/canvas_2",
-    "crates/scene_graph",
-    "crates/project",
+    "crates/cli",
+    "crates/interchange",
+    "crates/luna",
+    "crates/node",
+    "crates/theme",
+    "crates/ui",
 ]
 resolver = "2"
 

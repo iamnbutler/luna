@@ -218,7 +218,7 @@ impl Project {
 mod tests {
     use super::*;
     use glam::Vec2;
-    use node_2::Shape;
+    use node::Shape;
 
     #[test]
     fn test_project_roundtrip() {

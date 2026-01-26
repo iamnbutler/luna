@@ -5,7 +5,7 @@ use gpui::{
     Element, ElementId, Entity, Hitbox, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, PaintQuad, Pixels, ScrollDelta, ScrollWheelEvent, Style, Window,
 };
-use node_2::{CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind};
+use node::{CanvasPoint, CanvasSize, ScreenPoint, Shape, ShapeId, ShapeKind};
 use std::collections::HashSet;
 
 /// Size of resize handles in pixels.
@@ -250,8 +250,8 @@ fn hit_test_resize_handle(
 }
 
 fn selection_bounds_from_shapes(
-    shapes: &[node_2::Shape],
-    selection: &std::collections::HashSet<node_2::ShapeId>,
+    shapes: &[node::Shape],
+    selection: &std::collections::HashSet<node::ShapeId>,
     viewport: &crate::Viewport,
 ) -> Option<(Vec2, Vec2)> {
     let selected: Vec<_> = shapes.iter().filter(|s| selection.contains(&s.id)).collect();
@@ -477,7 +477,7 @@ fn paint_shape_recursive(
     selection: &HashSet<ShapeId>,
     hovered: Option<ShapeId>,
     viewport: &crate::Viewport,
-    theme: &theme_2::Theme,
+    theme: &theme::Theme,
     canvas_bounds: Bounds<Pixels>,
     window: &mut Window,
 ) {
@@ -606,13 +606,13 @@ trait CloneRenderState {
     fn clone_render_state(
         &mut self,
     ) -> (
-        Vec<node_2::Shape>,
-        std::collections::HashSet<node_2::ShapeId>,
-        Option<node_2::ShapeId>,
+        Vec<node::Shape>,
+        std::collections::HashSet<node::ShapeId>,
+        Option<node::ShapeId>,
         crate::Viewport,
-        theme_2::Theme,
+        theme::Theme,
         Option<DragState>,
-        std::collections::HashMap<node_2::ShapeId, node_2::CanvasPoint>,
+        std::collections::HashMap<node::ShapeId, node::CanvasPoint>,
     );
 }
 
@@ -620,13 +620,13 @@ impl CloneRenderState for Canvas {
     fn clone_render_state(
         &mut self,
     ) -> (
-        Vec<node_2::Shape>,
-        std::collections::HashSet<node_2::ShapeId>,
-        Option<node_2::ShapeId>,
+        Vec<node::Shape>,
+        std::collections::HashSet<node::ShapeId>,
+        Option<node::ShapeId>,
         crate::Viewport,
-        theme_2::Theme,
+        theme::Theme,
         Option<DragState>,
-        std::collections::HashMap<node_2::ShapeId, node_2::CanvasPoint>,
+        std::collections::HashMap<node::ShapeId, node::CanvasPoint>,
     ) {
         // Compute world positions before cloning
         self.compute_world_positions();

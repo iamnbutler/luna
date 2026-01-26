@@ -7,10 +7,10 @@ use crate::{
     Command, CommandResult, Query, QueryResult, ShapeInfo, ShapeKindFilter, ShapeQuery, Target,
     ToolKind,
 };
-use canvas_2::{Canvas, Tool};
+use canvas::{Canvas, Tool};
 use glam::Vec2;
 use gpui::{Context, Entity};
-use node_2::{
+use node::{
     compute_layout, CanvasPoint, CanvasSize, Fill, LayoutInput, Shape, ShapeId, ShapeKind, Stroke,
 };
 

@@ -30,7 +30,7 @@ mod project;
 pub use project::Project;
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
-use node_2::{Fill, Shape, ShapeId, ShapeKind, Stroke};
+use node::{Fill, Shape, ShapeId, ShapeKind, Stroke};
 
 pub const FORMAT_VERSION: &str = "0.1";
 
@@ -233,8 +233,8 @@ fn parse_shape_recursive(
 
     let mut shape = Shape::new(
         kind,
-        node_2::CanvasPoint::new(x, y),
-        node_2::CanvasSize::new(width, height),
+        node::CanvasPoint::new(x, y),
+        node::CanvasSize::new(width, height),
     );
     shape.id = id;
     shape.parent = parent_id;

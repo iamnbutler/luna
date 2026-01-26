@@ -9,7 +9,7 @@
 use crate::Target;
 use glam::Vec2;
 use gpui::Hsla;
-use node_2::{CrossAxisAlignment, LayoutDirection, MainAxisAlignment, Padding, ShapeKind, SizingMode};
+use node::{CrossAxisAlignment, LayoutDirection, MainAxisAlignment, Padding, ShapeKind, SizingMode};
 use serde::{Deserialize, Serialize};
 
 /// A command that modifies Luna canvas state.
@@ -119,8 +119,8 @@ pub enum Command {
     /// Add a shape as a child of a frame.
     /// Converts the child's position to relative coordinates.
     AddChild {
-        child: node_2::ShapeId,
-        parent: node_2::ShapeId,
+        child: node::ShapeId,
+        parent: node::ShapeId,
     },
 
     /// Remove shapes from their parent.
@@ -342,7 +342,7 @@ impl Default for LayoutValue {
     }
 }
 
-impl From<LayoutValue> for node_2::FrameLayout {
+impl From<LayoutValue> for node::FrameLayout {
     fn from(value: LayoutValue) -> Self {
         Self {
             direction: value.direction,
@@ -378,13 +378,13 @@ pub enum CommandResult {
     Success {
         /// IDs of shapes created, if any.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        created: Vec<node_2::ShapeId>,
+        created: Vec<node::ShapeId>,
         /// IDs of shapes modified, if any.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        modified: Vec<node_2::ShapeId>,
+        modified: Vec<node::ShapeId>,
         /// IDs of shapes deleted, if any.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        deleted: Vec<node_2::ShapeId>,
+        deleted: Vec<node::ShapeId>,
     },
     /// Command failed.
     Error {
@@ -401,7 +401,7 @@ impl CommandResult {
         }
     }
 
-    pub fn created(ids: Vec<node_2::ShapeId>) -> Self {
+    pub fn created(ids: Vec<node::ShapeId>) -> Self {
         Self::Success {
             created: ids,
             modified: vec![],
@@ -409,7 +409,7 @@ impl CommandResult {
         }
     }
 
-    pub fn modified(ids: Vec<node_2::ShapeId>) -> Self {
+    pub fn modified(ids: Vec<node::ShapeId>) -> Self {
         Self::Success {
             created: vec![],
             modified: ids,
@@ -417,7 +417,7 @@ impl CommandResult {
         }
     }
 
-    pub fn deleted(ids: Vec<node_2::ShapeId>) -> Self {
+    pub fn deleted(ids: Vec<node::ShapeId>) -> Self {
         Self::Success {
             created: vec![],
             modified: vec![],

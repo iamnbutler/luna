@@ -6,7 +6,7 @@
 //!
 //! ```ignore
 //! use gpui::Context;
-//! use ui_2::input::{InputState, input, bind_input_keys};
+//! use ui::input::{InputState, input, bind_input_keys};
 //!
 //! // Initialize keybindings (typically in app initialization)
 //! bind_input_keys(cx, None);

@@ -1,6 +1,6 @@
 use glam::Vec2;
 use gpui::{Bounds, Point, Size};
-use node_2::{CanvasPoint, CanvasSize, ScreenPoint};
+use node::{CanvasPoint, CanvasSize, ScreenPoint};
 
 /// Camera/viewport state for the canvas.
 #[derive(Clone, Debug)]

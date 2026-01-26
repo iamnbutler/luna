@@ -31,14 +31,20 @@ You have a [skill](.claude/skills/spool.md) for creating and managing spools and
 
 ## Project Structure
 
-Luna uses `_2` suffix crates for the simplified canvas implementation:
+```
+crates/
+├── luna/        # Main application binary
+├── canvas/      # Canvas rendering & interactions
+├── node/        # Shape data model (Rectangle, Ellipse, Frame)
+├── theme/       # Theming
+├── ui/          # UI components (properties panel, layer list, tools)
+├── api/         # Command/query API for scripting
+├── interchange/ # File format (.luna)
+├── assets/      # Embedded assets (fonts, icons)
+└── cli/         # CLI tool
+```
 
-- `node_2` - Simplified shape model (Rectangle, Ellipse)
-- `canvas_2` - Flat rendering, basic interactions
-- `theme_2` - Minimal theming
-- `ui_2` - UI components including input system
-
-These crates are temporary and will be mainlined when their implementations move past the original crates.
+Legacy crates are preserved in `archive/crates/` for reference.
 
 ## GPUI Notes
 

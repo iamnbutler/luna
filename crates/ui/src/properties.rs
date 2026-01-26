@@ -2,16 +2,16 @@
 
 use crate::components::{h_stack, panel, v_stack};
 use crate::input::{input, InputColors, InputState, InputStateEvent};
-use canvas_2::{Canvas, CanvasEvent};
+use canvas::{Canvas, CanvasEvent};
 use gpui::{
     div, px, AppContext, Context, Entity, Focusable, Hsla, InteractiveElement, IntoElement,
     ParentElement, Render, StatefulInteractiveElement, Styled, Subscription, Window,
 };
-use node_2::{
+use node::{
     CanvasPoint, CanvasSize, CrossAxisAlignment, Fill, FrameLayout, LayoutDirection,
     MainAxisAlignment, Padding, ShapeId, ShapeKind, Stroke,
 };
-use theme_2::Theme;
+use theme::Theme;
 
 /// Properties panel showing details of selected shapes.
 pub struct PropertiesPanel {
@@ -122,7 +122,7 @@ impl PropertiesPanel {
     fn on_canvas_changed(
         &mut self,
         _canvas: Entity<Canvas>,
-        _event: &canvas_2::CanvasEvent,
+        _event: &canvas::CanvasEvent,
         cx: &mut Context<Self>,
     ) {
         // Trigger re-render to sync inputs
@@ -1360,7 +1360,7 @@ fn input_field_with_computed(
                 .flex_1()
                 .h(px(22.0))
                 .px(px(6.0))
-                .bg(theme_2::hsla(0.0, 0.0, 0.95, 1.0))
+                .bg(theme::hsla(0.0, 0.0, 0.95, 1.0))
                 .border_1()
                 .border_color(if is_computed {
                     theme.ui_border.opacity(0.5)
