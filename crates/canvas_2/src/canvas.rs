@@ -712,11 +712,34 @@ impl Canvas {
         // Compute layout
         let outputs = compute_layout(frame_size, &layout, &child_inputs);
 
-        // Apply results to children
+        // Apply results to children as computed values (preserving user-set values)
         for output in outputs {
             if let Some(child) = self.shapes.iter_mut().find(|s| s.id == output.id) {
-                child.position = output.position;
-                child.size = output.size;
+                // Set computed values - these override position/size for rendering
+                // but preserve the user-specified values for the inspector
+                child.computed_position = Some(output.position);
+                // Only set computed_size if it differs from user-set size
+                if output.size != child.size {
+                    child.computed_size = Some(output.size);
+                } else {
+                    child.computed_size = None;
+                }
+            }
+        }
+    }
+
+    /// Clear computed layout values for children when layout is disabled.
+    pub fn clear_layout_for_frame(&mut self, frame_id: ShapeId) {
+        let children_ids: Vec<ShapeId> = {
+            let Some(frame) = self.shapes.iter().find(|s| s.id == frame_id) else {
+                return;
+            };
+            frame.children.clone()
+        };
+
+        for child_id in children_ids {
+            if let Some(child) = self.shapes.iter_mut().find(|s| s.id == child_id) {
+                child.clear_computed();
             }
         }
     }

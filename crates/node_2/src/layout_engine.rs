@@ -177,16 +177,28 @@ fn compute_positions(
     let total = total_children + total_gap;
 
     // Calculate starting position and gap based on main axis alignment
+    // When children overflow (total > main_size), clamp positions to prevent negative values
     let (start_main, effective_gap) = match layout.main_axis_alignment {
         MainAxisAlignment::Start => (0.0, layout.gap),
-        MainAxisAlignment::Center => ((main_size - total) / 2.0, layout.gap),
-        MainAxisAlignment::End => (main_size - total, layout.gap),
+        MainAxisAlignment::Center => {
+            // When overflowing, start at 0 instead of negative
+            (((main_size - total) / 2.0).max(0.0), layout.gap)
+        }
+        MainAxisAlignment::End => {
+            // When overflowing, start at 0 instead of negative
+            ((main_size - total).max(0.0), layout.gap)
+        }
         MainAxisAlignment::SpaceBetween => {
             if children.len() <= 1 {
                 (0.0, 0.0)
             } else {
                 let space = main_size - total_children;
-                (0.0, space / (children.len() - 1) as f32)
+                // When children overflow, fall back to Start alignment with 0 gap
+                if space < 0.0 {
+                    (0.0, 0.0)
+                } else {
+                    (0.0, space / (children.len() - 1) as f32)
+                }
             }
         }
     };
@@ -432,6 +444,48 @@ mod tests {
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
         // Single child should be at start
+        assert_eq!(result[0].position, CanvasPoint::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_overflow_space_between() {
+        // When children are larger than frame, should not have negative positions
+        let layout = FrameLayout::column().with_main_axis(MainAxisAlignment::SpaceBetween);
+        let children = vec![
+            make_child(1, 50.0, 300.0),  // 300 tall
+            make_child(2, 50.0, 300.0),  // 300 tall - total 600, frame only 100
+        ];
+
+        let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
+
+        // Children overflow, should fall back to start alignment with 0 gap
+        assert!(result[0].position.y() >= 0.0, "First child should not have negative Y");
+        assert!(result[1].position.y() >= 0.0, "Second child should not have negative Y");
+        assert_eq!(result[0].position, CanvasPoint::new(0.0, 0.0));
+        assert_eq!(result[1].position, CanvasPoint::new(0.0, 300.0)); // Stacked, no gap
+    }
+
+    #[test]
+    fn test_overflow_center() {
+        // When children are larger than frame, should clamp to 0
+        let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::Center);
+        let children = vec![make_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
+
+        let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
+
+        // Should clamp to 0, not negative
+        assert_eq!(result[0].position, CanvasPoint::new(0.0, 0.0));
+    }
+
+    #[test]
+    fn test_overflow_end() {
+        // When children are larger than frame, should clamp to 0
+        let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::End);
+        let children = vec![make_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
+
+        let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
+
+        // Should clamp to 0, not negative
         assert_eq!(result[0].position, CanvasPoint::new(0.0, 0.0));
     }
 }
