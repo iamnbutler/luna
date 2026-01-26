@@ -4,7 +4,7 @@
 //! Commands are queued and processed on the main GPUI thread.
 
 use crate::{execute_command_in_context, execute_query_in_context, Command, Query};
-use canvas_2::Canvas;
+use canvas::Canvas;
 use gpui::{Context, Entity};
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};

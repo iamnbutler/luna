@@ -1,7 +1,7 @@
 //! Basic UI components.
 
 use gpui::{div, px, Div, ElementId, InteractiveElement, IntoElement, ParentElement, SharedString, Styled};
-use theme_2::Theme;
+use theme::Theme;
 
 /// Horizontal stack layout.
 pub fn h_stack() -> Div {
@@ -33,7 +33,7 @@ pub fn button(
     let bg = theme.ui_background;
     let border = theme.ui_border;
     let text = theme.ui_text;
-    let hover_bg = theme_2::hsla(0.0, 0.0, 0.95, 1.0);
+    let hover_bg = theme::hsla(0.0, 0.0, 0.95, 1.0);
 
     div()
         .id(id)
@@ -60,7 +60,7 @@ pub fn icon_button(
     let bg = theme.ui_background;
     let border = theme.ui_border;
     let text = theme.ui_text;
-    let hover_bg = theme_2::hsla(0.0, 0.0, 0.95, 1.0);
+    let hover_bg = theme::hsla(0.0, 0.0, 0.95, 1.0);
 
     div()
         .id(id)

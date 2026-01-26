@@ -4,13 +4,17 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lib]
+name = "ui"
+path = "src/ui.rs"
+
 [dependencies]
-assets = { path = "../assets" }
 canvas = { path = "../canvas" }
-glam = { workspace = true }
+common = { path = "../common" }
 gpui = { workspace = true }
 node = { path = "../node" }
-smol = { workspace = true }
+project = { path = "../project" }
+regex = { workspace = true }
+smallvec = { workspace = true }
+strum = { workspace = true }
 theme = { path = "../theme" }
-unicode-bidi = { workspace = true }
-unicode-segmentation = { workspace = true }

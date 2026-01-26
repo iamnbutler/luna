@@ -6,7 +6,7 @@ publish.workspace = true
 
 [dependencies]
 kdl = { workspace = true }
-node_2 = { path = "../node_2" }
+node = { path = "../node" }
 glam = { workspace = true }
 gpui = { workspace = true }
 uuid = { workspace = true }

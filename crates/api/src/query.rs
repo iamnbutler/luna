@@ -6,7 +6,7 @@
 use crate::Target;
 use glam::Vec2;
 use gpui::Hsla;
-use node_2::{ShapeId, ShapeKind};
+use node::{ShapeId, ShapeKind};
 use serde::{Deserialize, Serialize};
 
 /// A query for canvas state (read-only).

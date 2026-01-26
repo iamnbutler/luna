@@ -13,6 +13,6 @@ api = { path = "../api" }
 anyhow.workspace = true
 clap.workspace = true
 glam.workspace = true
-node_2 = { path = "../node_2" }
+node = { path = "../node" }
 serde.workspace = true
 serde_json.workspace = true

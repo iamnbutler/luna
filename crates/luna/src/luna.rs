@@ -1,153 +1,150 @@
-//! # Luna: A GPU-accelerated design canvas
+//! Luna 2: Simplified design canvas
 //!
-//! Luna is a modern design application built on the GPUI framework, providing a high-performance
-//! canvas for creating and manipulating design elements.
-//!
-//! ## Architecture
-//!
-//! Luna is built around several common abstractions:
-//!
-//! - **Canvas**: The central drawing surface where elements are rendered and manipulated
-//! - **SceneGraph**: Manages spatial relationships between nodes for efficient transformations
-//! - **Elements**: Visual objects (rectangles, etc.) that can be created, selected, and modified
-//! - **Tools**: Different interaction modes (selection, rectangle creation, hand tool, etc.)
-//!
-//! The application uses a combination of immediate and retained UI patterns, with a scene graph
-//! for efficient spatial operations and a component-based architecture for the UI.
+//! A streamlined version of Luna focused on basic shape drawing and manipulation.
 
+use api::DebugServer;
 use assets::Assets;
-use canvas::{
-    canvas_element::CanvasElement,
-    tools::{ActiveTool, GlobalTool, Tool},
-    AppState, CanvasEvent, LunaCanvas,
-};
+use canvas::{Canvas, CanvasElement, CanvasEvent, Tool};
+use glam::Vec2;
 use gpui::{
     actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable,
-    IntoElement, KeyBinding, Menu, MenuItem, Subscription, TitlebarOptions, Window,
-    WindowBackgroundAppearance, WindowOptions,
+    IntoElement, KeyBinding, Menu, MenuItem, ParentElement, PathPromptOptions, Styled, Subscription,
+    TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
 };
-use project::{LunaProject, ProjectState};
-use scene_graph::SceneGraph;
+use interchange::{Document, Project};
+use node::Shape;
 use std::path::PathBuf;
 use std::sync::Arc;
-use theme::{ActiveTheme, GlobalTheme, Theme};
-use ui::{inspector::Inspector, sidebar::Sidebar};
+use theme::Theme;
+use ui::{bind_input_keys, LayerList, PropertiesPanel, ToolRail};
 
 mod assets;
-mod serialization;
-
-// Re-export commonly used items from external crates
-pub use canvas::{canvas_element, tools};
-pub use common::{color, coordinates, interactivity, keymap, util};
-pub use node;
-pub use scene_graph;
-pub use theme;
-pub use ui;
-
-use crate::serialization::{deserialize_canvas, serialize_canvas};
 
 actions!(
     luna,
     [
         Cancel,
-        Copy,
-        Cut,
         Delete,
+        Duplicate,
+        EllipseTool,
         FrameTool,
         HandTool,
         NewFile,
-        OpenFile,
-        Paste,
+        OpenProject,
         Quit,
         RectangleTool,
-        ResetCurrentColors,
-        SaveFile,
-        SaveFileAs,
+        SaveProject,
+        SaveProjectAs,
         SelectAll,
         SelectionTool,
-        SwapCurrentColors,
-        ToggleUI,
     ]
 );
 
-/// Main application component that orchestrates the Luna design application
-///
-/// Luna is the root component of the application, responsible for:
-/// - Managing core application entities (canvas, scene graph, app state)
-/// - Handling tool activation and application-level event routing
-/// - Coordinating between UI components (inspector, canvas, etc.)
-/// - Rendering the main application layout
-///
-/// It serves as the connection point between the GPUI framework and Luna-specific
-/// functionality, managing the overall application lifecycle.
+/// Main application component
 struct Luna {
-    /// Shared application state accessible by multiple components
-    app_state: Entity<AppState>,
-    /// The main canvas where elements are rendered and manipulated
-    canvas: Entity<LunaCanvas>,
-    /// Focus handle for keyboard event routing
+    canvas: Entity<Canvas>,
+    tool_rail: Entity<ToolRail>,
+    layer_list: Entity<LayerList>,
+    properties: Entity<PropertiesPanel>,
     focus_handle: FocusHandle,
-    /// Scene graph for managing spatial relationships between nodes
-    scene_graph: Entity<SceneGraph>,
-    /// Inspector panel for element properties and tools
-    inspector: Entity<Inspector>,
-    /// Sidebar for additional tools and controls
-    sidebar: Entity<Sidebar>,
-    /// Project state for file management
-    project_state: Entity<ProjectState>,
-    /// Subscriptions to various events
+    theme: Theme,
+    debug_server: Option<Arc<DebugServer>>,
+    /// Current project path (for save-in-place)
+    project_path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl Luna {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let app_state = cx.new(|cx| AppState {
-            current_border_color: cx.theme().tokens.overlay0,
-            current_background_color: cx.theme().tokens.surface0,
-        });
+    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let theme = Theme::light();
         let focus_handle = cx.focus_handle();
-        let scene_graph = cx.new(|_| SceneGraph::new());
-        let theme = Theme::default();
-        let canvas = cx.new(|cx| LunaCanvas::new(&app_state, &scene_graph, &theme, window, cx));
-        let inspector = cx.new(|cx| Inspector::new(app_state.clone(), canvas.clone(), cx));
-        let project_state = cx.new(|_| ProjectState::new());
-        let sidebar = cx.new(|cx| Sidebar::new(canvas.clone(), project_state.clone(), cx));
+        let canvas = cx.new(|cx| Canvas::new(theme.clone(), cx));
+        let tool_rail = cx.new(|_| ToolRail::new(canvas.clone(), theme.clone()));
+        let layer_list = cx.new(|_| LayerList::new(canvas.clone(), theme.clone()));
+        let properties = cx.new(|cx| PropertiesPanel::new(canvas.clone(), theme.clone(), cx));
 
-        // Subscribe to canvas events to mark project as dirty
+        // Add some example shapes
+        canvas.update(cx, |canvas, cx| {
+            let rect = Shape::rectangle(Vec2::new(100.0, 100.0), Vec2::new(150.0, 100.0))
+                .with_stroke(theme.default_stroke, 2.0);
+            canvas.add_shape(rect, cx);
+
+            let ellipse = Shape::ellipse(Vec2::new(300.0, 150.0), Vec2::new(120.0, 120.0))
+                .with_stroke(theme.default_stroke, 2.0);
+            canvas.add_shape(ellipse, cx);
+        });
+
         let canvas_subscription = cx.subscribe(&canvas, Self::handle_canvas_event);
 
+        // Start debug server if enabled
+        let debug_server = if DebugServer::should_start() {
+            let server = Arc::new(DebugServer::new());
+            server.start();
+
+            // Spawn a background task to poll for pending requests
+            let server_clone = server.clone();
+            cx.spawn(async move |this, cx| {
+                loop {
+                    // Check every 50ms for pending requests
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(50))
+                        .await;
+
+                    // If there are pending requests, trigger a re-render
+                    if server_clone.has_pending() {
+                        this.update(cx, |_, cx| {
+                            cx.notify();
+                        })
+                        .ok();
+                    }
+                }
+            })
+            .detach();
+
+            Some(server)
+        } else {
+            None
+        };
+
         Luna {
-            app_state,
             canvas,
-            scene_graph,
+            tool_rail,
+            layer_list,
+            properties,
             focus_handle,
-            inspector,
-            sidebar,
-            project_state,
+            theme,
+            debug_server,
+            project_path: None,
             _subscriptions: vec![canvas_subscription],
         }
     }
 
     fn handle_canvas_event(
         &mut self,
-        _canvas: Entity<LunaCanvas>,
+        _canvas: Entity<Canvas>,
         event: &CanvasEvent,
-        cx: &mut Context<Self>,
+        _cx: &mut Context<Self>,
     ) {
         match event {
-            CanvasEvent::NodeAdded(_)
-            | CanvasEvent::NodeRemoved(_)
-            | CanvasEvent::ContentChanged => {
-                // Mark the project as dirty when canvas content changes
-                self.project_state.update(cx, |state, _| {
-                    state.mark_dirty();
-                });
+            CanvasEvent::ShapeAdded(id) => {
+                eprintln!("Shape added: {:?}", id);
+            }
+            CanvasEvent::ShapeRemoved(id) => {
+                eprintln!("Shape removed: {:?}", id);
+            }
+            CanvasEvent::SelectionChanged => {
+                eprintln!("Selection changed");
+            }
+            CanvasEvent::ContentChanged => {
+                // Content changed
             }
         }
     }
 
     fn activate_hand_tool(&mut self, _: &HandTool, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Hand)));
+        self.canvas.update(cx, |canvas, _| {
+            canvas.tool = Tool::Pan;
+        });
         cx.notify();
     }
 
@@ -157,7 +154,9 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Selection)));
+        self.canvas.update(cx, |canvas, _| {
+            canvas.tool = Tool::Select;
+        });
         cx.notify();
     }
 
@@ -167,211 +166,159 @@ impl Luna {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
-        cx.notify();
-    }
-
-    fn activate_frame_tool(&mut self, _: &FrameTool, _window: &mut Window, cx: &mut Context<Self>) {
-        cx.set_global(GlobalTool(Arc::new(Tool::Frame)));
-        cx.notify();
-    }
-
-    fn select_all_nodes(&mut self, _: &SelectAll, _window: &mut Window, cx: &mut Context<Self>) {
         self.canvas.update(cx, |canvas, _| {
-            canvas.select_all_nodes();
+            canvas.tool = Tool::Rectangle;
         });
         cx.notify();
     }
 
-    fn delete_selected_nodes(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
-        self.canvas.update(cx, |canvas, cx| {
-            let selected_nodes = canvas
-                .get_root_nodes()
-                .into_iter()
-                .filter(|&node_id| canvas.is_node_selected(node_id))
-                .collect::<Vec<_>>();
-
-            for node_id in selected_nodes {
-                canvas.remove_node(node_id, cx);
-            }
-            canvas.mark_dirty(cx);
+    fn activate_ellipse_tool(
+        &mut self,
+        _: &EllipseTool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.canvas.update(cx, |canvas, _| {
+            canvas.tool = Tool::Ellipse;
         });
+        cx.notify();
+    }
 
-        // Mark project as dirty after deleting nodes
-        self.project_state.update(cx, |state, _| {
-            state.mark_dirty();
+    fn activate_frame_tool(
+        &mut self,
+        _: &FrameTool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.canvas.update(cx, |canvas, _| {
+            canvas.tool = Tool::Frame;
+        });
+        cx.notify();
+    }
+
+    fn delete_selected(&mut self, _: &Delete, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.delete_selected(cx);
+        });
+    }
+
+    fn duplicate_selected(&mut self, _: &Duplicate, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.duplicate_selected(cx);
         });
     }
 
     fn handle_cancel(&mut self, _: &Cancel, _window: &mut Window, cx: &mut Context<Self>) {
-        let active_tool = *cx.active_tool().clone();
-
-        if active_tool == Tool::Selection {
-            self.canvas.update(cx, |canvas, cx| {
-                canvas.deselect_all_nodes(cx);
-                canvas.mark_dirty(cx);
-            });
-        } else {
-            cx.dispatch_action(&SelectionTool);
-        }
-    }
-
-    fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
-        // Clear the canvas and create a new project
-        self.project_state.update(cx, |state, _| {
-            *state = ProjectState::new();
-        });
-
         self.canvas.update(cx, |canvas, cx| {
-            canvas.clear_all(cx);
+            if canvas.tool != Tool::Select {
+                canvas.tool = Tool::Select;
+            } else {
+                canvas.clear_selection(cx);
+            }
         });
-
         cx.notify();
     }
 
-    fn open_file(&mut self, _: &OpenFile, _window: &mut Window, cx: &mut Context<Self>) {
-        let weak_project = self.project_state.downgrade();
-        let weak_canvas = self.canvas.downgrade();
-        let weak_scene = self.scene_graph.downgrade();
-        let weak_app_state = self.app_state.downgrade();
+    fn new_file(&mut self, _: &NewFile, _window: &mut Window, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |canvas, cx| {
+            canvas.load_shapes(Vec::new(), cx);
+        });
+        self.project_path = None;
+    }
 
-        cx.spawn(async move |_, cx| {
+    fn save_project(&mut self, _: &SaveProject, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(path) = &self.project_path {
+            // Save to existing path
+            self.save_to_path(path.clone(), cx);
+        } else {
+            // No path yet, prompt for one
+            self.save_project_as(&SaveProjectAs, _window, cx);
+        }
+    }
+
+    fn save_project_as(&mut self, _: &SaveProjectAs, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let path = cx
+                .update(|cx| {
+                    cx.prompt_for_new_path(
+                        &std::env::current_dir().unwrap_or_default(),
+                        Some("untitled.luna"),
+                    )
+                })?
+                .await??;
+
+            if let Some(path) = path {
+                this.update(cx, |this, cx| {
+                    this.project_path = Some(path.clone());
+                    this.save_to_path(path, cx);
+                })?;
+            }
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+    }
+
+    fn save_to_path(&self, path: PathBuf, cx: &mut Context<Self>) {
+        let shapes: Vec<Shape> = self.canvas.read(cx).shapes.clone();
+        let doc = Document::new(shapes);
+        let project = Project::from_document("Untitled", doc);
+
+        if let Err(e) = project.save(&path) {
+            eprintln!("Failed to save project: {}", e);
+        } else {
+            eprintln!("Saved to {}", path.display());
+        }
+    }
+
+    fn open_project(&mut self, _: &OpenProject, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
             let paths = cx
                 .update(|cx| {
-                    cx.prompt_for_paths(gpui::PathPromptOptions {
+                    cx.prompt_for_paths(PathPromptOptions {
                         files: true,
-                        directories: false,
+                        directories: true,
                         multiple: false,
-                        prompt: None,
+                        prompt: Some("Open Luna Project".into()),
                     })
                 })?
                 .await??;
 
             if let Some(paths) = paths {
                 if let Some(path) = paths.first() {
-                    let project_data = project::LunaProject::load_from_file(path).await?;
-
-                    cx.update(|cx| {
-                        if let (Some(project_state), Some(canvas), Some(scene), Some(app_state)) = (
-                            weak_project.upgrade(),
-                            weak_canvas.upgrade(),
-                            weak_scene.upgrade(),
-                            weak_app_state.upgrade(),
-                        ) {
-                            project_state.update(cx, |state, _| {
-                                state.project = project_data.clone();
-                                state.file_path = Some(path.to_path_buf());
-                                state.mark_clean();
-                            });
-
-                            deserialize_canvas(&project_data, &canvas, &scene, &app_state, cx)?;
-
-                            // Force canvas to update and repaint
-                            canvas.update(cx, |canvas, cx| {
-                                canvas.mark_dirty(cx);
-                                cx.notify();
-                            });
-                        }
-                        anyhow::Ok(())
-                    })??;
+                    this.update(cx, |this, cx| {
+                        this.load_from_path(path.clone(), cx);
+                    })?;
                 }
             }
-            Ok::<(), anyhow::Error>(())
+            anyhow::Ok(())
         })
         .detach_and_log_err(cx);
     }
 
-    fn save_file(&mut self, _: &SaveFile, window: &mut Window, cx: &mut Context<Self>) {
-        let file_path = self.project_state.read(cx).file_path.clone();
-
-        if let Some(path) = file_path {
-            self.save_to_path(path, window, cx);
-        } else {
-            self.save_file_as(&SaveFileAs, window, cx);
-        }
-    }
-
-    fn save_file_as(&mut self, _: &SaveFileAs, _window: &mut Window, cx: &mut Context<Self>) {
-        let weak_project = self.project_state.downgrade();
-        let weak_canvas = self.canvas.downgrade();
-        let weak_scene = self.scene_graph.downgrade();
-        let weak_app_state = self.app_state.downgrade();
-
-        cx.spawn(async move |_, cx| {
-            let path = cx
-                .update(|cx| {
-                    let home_dir = std::env::var("HOME")
-                        .ok()
-                        .map(std::path::PathBuf::from)
-                        .unwrap_or_else(|| std::path::PathBuf::from("/"));
-                    cx.prompt_for_new_path(&home_dir, Some("untitled.luna"))
-                })?
-                .await??;
-
-            if let Some(mut path) = path {
-                // Ensure the file has a .luna extension
-                if path.extension().is_none()
-                    || path.extension() != Some(std::ffi::OsStr::new("luna"))
-                {
-                    path.set_extension("luna");
+    fn load_from_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        match Project::load(&path) {
+            Ok(project) => {
+                if let Some(doc) = project.default_page() {
+                    self.canvas.update(cx, |canvas, cx| {
+                        canvas.load_shapes(doc.shapes.clone(), cx);
+                    });
+                    self.project_path = Some(path.clone());
+                    eprintln!("Loaded project from {}", path.display());
                 }
-
-                cx.update(|cx| {
-                    if let (Some(project_state), Some(canvas), Some(scene), Some(app_state)) = (
-                        weak_project.upgrade(),
-                        weak_canvas.upgrade(),
-                        weak_scene.upgrade(),
-                        weak_app_state.upgrade(),
-                    ) {
-                        let project = serialize_canvas(&canvas, &scene, &app_state, cx)?;
-
-                        project_state.update(cx, |state, cx| {
-                            state.project = project.clone();
-                            state.file_path = Some(path.to_path_buf());
-                            state.mark_clean();
-                            cx.notify();
-                        });
-
-                        // Save to disk
-                        let executor = cx.background_executor().clone();
-                        executor
-                            .spawn(async move { project.save_to_file(&path).await })
-                            .detach_and_log_err(cx);
-                    }
-                    anyhow::Ok(())
-                })??;
             }
-            Ok::<(), anyhow::Error>(())
-        })
-        .detach_and_log_err(cx);
-    }
-
-    fn save_to_path(&mut self, mut path: PathBuf, _window: &mut Window, cx: &mut Context<Self>) {
-        // Ensure the file has a .luna extension
-        if path.extension().is_none() || path.extension() != Some(std::ffi::OsStr::new("luna")) {
-            path.set_extension("luna");
+            Err(e) => {
+                eprintln!("Failed to load project: {}", e);
+            }
         }
-
-        let project = serialize_canvas(&self.canvas, &self.scene_graph, &self.app_state, cx)
-            .unwrap_or_else(|_e| {
-                // Failed to serialize canvas - return empty project
-                LunaProject::new()
-            });
-
-        self.project_state.update(cx, |state, _| {
-            state.project = project.clone();
-            state.mark_clean();
-        });
-
-        cx.background_executor()
-            .spawn(async move { project.save_to_file(&path).await })
-            .detach_and_log_err(cx);
     }
 }
 
 impl Render for Luna {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = Theme::get_global(cx);
+        // Process any pending debug server requests
+        if let Some(ref server) = self.debug_server {
+            server.process_pending(&self.canvas, cx);
+        }
 
         div()
             .id("Luna")
@@ -382,33 +329,54 @@ impl Render for Luna {
             .left_0()
             .size_full()
             .flex()
+            .flex_row()
             .font_family("Berkeley Mono")
             .text_xs()
-            .bg(theme.tokens.background)
-            .text_color(theme.tokens.text)
+            .bg(self.theme.ui_background)
+            .text_color(self.theme.ui_text)
             .border_1()
             .border_color(gpui::white().alpha(0.08))
             .rounded(px(16.))
             .overflow_hidden()
-            .map(|div| match *cx.active_tool().clone() {
-                Tool::Hand => div.cursor_grab(),
-                Tool::Frame | Tool::Line | Tool::TextCursor => div.cursor_crosshair(),
-                _ => div.cursor_default(),
-            })
             .on_action(cx.listener(Self::activate_hand_tool))
             .on_action(cx.listener(Self::activate_selection_tool))
             .on_action(cx.listener(Self::activate_rectangle_tool))
+            .on_action(cx.listener(Self::activate_ellipse_tool))
             .on_action(cx.listener(Self::activate_frame_tool))
-            .on_action(cx.listener(Self::select_all_nodes))
-            .on_action(cx.listener(Self::delete_selected_nodes))
+            .on_action(cx.listener(Self::delete_selected))
+            .on_action(cx.listener(Self::duplicate_selected))
             .on_action(cx.listener(Self::handle_cancel))
             .on_action(cx.listener(Self::new_file))
-            .on_action(cx.listener(Self::open_file))
-            .on_action(cx.listener(Self::save_file))
-            .on_action(cx.listener(Self::save_file_as))
-            .child(CanvasElement::new(&self.canvas, &self.scene_graph, cx))
-            .child(self.inspector.clone())
-            .child(self.sidebar.clone())
+            .on_action(cx.listener(Self::save_project))
+            .on_action(cx.listener(Self::save_project_as))
+            .on_action(cx.listener(Self::open_project))
+            // Far left: Tool rail
+            .child(
+                div()
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.tool_rail.clone()),
+            )
+            // Left: Layer list
+            .child(
+                div()
+                    .p(px(8.0))
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.layer_list.clone()),
+            )
+            // Center: Canvas (takes remaining space)
+            .child(
+                div()
+                    .flex_1()
+                    .h_full()
+                    .child(CanvasElement::new(self.canvas.clone())),
+            )
+            // Right: Properties panel
+            .child(
+                div()
+                    .p(px(8.0))
+                    .pt(px(32.0)) // Space for traffic lights
+                    .child(self.properties.clone()),
+            )
     }
 }
 
@@ -421,52 +389,31 @@ impl Focusable for Luna {
 fn init_keymap(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("h", HandTool, None),
-        KeyBinding::new("a", SelectionTool, None),
+        KeyBinding::new("v", SelectionTool, None),
         KeyBinding::new("r", RectangleTool, None),
+        KeyBinding::new("o", EllipseTool, None),
         KeyBinding::new("f", FrameTool, None),
         KeyBinding::new("escape", Cancel, None),
         KeyBinding::new("cmd-n", NewFile, None),
-        KeyBinding::new("cmd-o", OpenFile, None),
-        KeyBinding::new("cmd-s", SaveFile, None),
-        KeyBinding::new("cmd-shift-s", SaveFileAs, None),
-        KeyBinding::new("cmd-a", SelectAll, None),
-        KeyBinding::new("cmd-v", Paste, None),
-        KeyBinding::new("cmd-c", Copy, None),
-        KeyBinding::new("cmd-x", Cut, None),
+        KeyBinding::new("cmd-s", SaveProject, None),
+        KeyBinding::new("cmd-shift-s", SaveProjectAs, None),
+        KeyBinding::new("cmd-o", OpenProject, None),
+        KeyBinding::new("cmd-d", Duplicate, None),
         KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-\\", ToggleUI, None),
-        KeyBinding::new("x", SwapCurrentColors, None),
-        KeyBinding::new("d", ResetCurrentColors, None),
-        // Canvas
         KeyBinding::new("delete", Delete, None),
         KeyBinding::new("backspace", Delete, None),
-        // Layer List
-        KeyBinding::new("delete", Delete, Some("LayerList")),
-        KeyBinding::new("backspace", Delete, Some("LayerList")),
     ]);
 }
 
-fn init_globals(cx: &mut App) {
-    cx.set_global(GlobalTheme(Arc::new(Theme::default())));
-    cx.set_global(GlobalTool(Arc::new(Tool::default())));
-}
-
-/// Application entry point
-///
-/// Initializes the GPUI application, sets up global state, defines menus,
-/// and opens the main application window. This function is the starting point
-/// for the entire Luna application.
 fn main() {
     Application::new().with_assets(Assets).run(|cx: &mut App| {
-        // Register global action handlers
         cx.on_action(quit);
 
-        // Set up menus with File menu
         cx.set_menus(vec![
             Menu {
                 name: "Luna".into(),
                 items: vec![
-                    MenuItem::action("About Luna", Quit), // TODO: Add About action
+                    MenuItem::action("About Luna", Quit),
                     MenuItem::separator(),
                     MenuItem::action("Quit", Quit),
                 ],
@@ -475,42 +422,39 @@ fn main() {
                 name: "File".into(),
                 items: vec![
                     MenuItem::action("New", NewFile),
-                    MenuItem::action("Open...", OpenFile),
+                    MenuItem::action("Open...", OpenProject),
                     MenuItem::separator(),
-                    MenuItem::action("Save", SaveFile),
-                    MenuItem::action("Save As...", SaveFileAs),
+                    MenuItem::action("Save", SaveProject),
+                    MenuItem::action("Save As...", SaveProjectAs),
                 ],
             },
             Menu {
                 name: "Edit".into(),
                 items: vec![
-                    MenuItem::action("Copy", Copy),
-                    MenuItem::action("Cut", Cut),
-                    MenuItem::action("Paste", Paste),
-                    MenuItem::separator(),
-                    MenuItem::action("Select All", SelectAll),
+                    MenuItem::action("Duplicate", Duplicate),
                     MenuItem::action("Delete", Delete),
                 ],
             },
             Menu {
                 name: "Tools".into(),
                 items: vec![
-                    MenuItem::action("Selection Tool", SelectionTool),
-                    MenuItem::action("Hand Tool", HandTool),
-                    MenuItem::action("Rectangle Tool", RectangleTool),
-                    MenuItem::action("Frame Tool", FrameTool),
+                    MenuItem::action("Selection (V)", SelectionTool),
+                    MenuItem::action("Hand (H)", HandTool),
+                    MenuItem::action("Rectangle (R)", RectangleTool),
+                    MenuItem::action("Ellipse (O)", EllipseTool),
+                    MenuItem::action("Frame (F)", FrameTool),
                 ],
             },
         ]);
 
         init_keymap(cx);
-        init_globals(cx);
+        bind_input_keys(cx, None);
 
         let window = cx
             .open_window(
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
-                        title: Some("Luna".into()),
+                        title: Some("Luna 2".into()),
                         appears_transparent: true,
                         traffic_light_position: Some(point(px(8.0), px(8.0))),
                     }),
@@ -520,13 +464,6 @@ fn main() {
                 |window, cx| cx.new(|cx| Luna::new(window, cx)),
             )
             .unwrap();
-
-        cx.on_keyboard_layout_change({
-            move |cx| {
-                window.update(cx, |_, _, cx| cx.notify()).ok();
-            }
-        })
-        .detach();
 
         window
             .update(cx, |view, window, cx| {

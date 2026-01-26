@@ -2,12 +2,12 @@
 //!
 //! A vertical toolbar inspired by Adobe-style design tools.
 
-use canvas_2::{Canvas, Tool};
+use canvas::{Canvas, Tool};
 use gpui::{
     div, px, svg, Context, Div, ElementId, Entity, InteractiveElement, IntoElement, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Window,
 };
-use theme_2::Theme;
+use theme::Theme;
 
 /// Tool rail panel showing available tools.
 pub struct ToolRail {
