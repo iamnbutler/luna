@@ -248,7 +248,16 @@ mod tests {
     use super::*;
     use crate::layout::Padding;
 
-    fn make_child(id: u128, width: f32, height: f32) -> LayoutInput {
+    // === Test Helpers ===
+    // These helpers create LayoutInput with explicit sizing modes.
+    // The naming convention makes the sizing mode clear:
+    // - fixed_child: both width and height are Fixed (won't stretch)
+    // - fill_width_child: width is Fill (stretches horizontally), height is Fixed
+    // - fill_height_child: width is Fixed, height is Fill (stretches vertically)
+
+    /// Create a child with Fixed sizing on both axes.
+    /// The child will maintain its specified size regardless of layout alignment.
+    fn fixed_child(id: u128, width: f32, height: f32) -> LayoutInput {
         LayoutInput {
             id: ShapeId::from_u128(id),
             size: CanvasSize::new(width, height),
@@ -257,7 +266,9 @@ mod tests {
         }
     }
 
-    fn make_fill_child(id: u128, width: f32, height: f32) -> LayoutInput {
+    /// Create a child that fills available width (stretches horizontally).
+    /// Height remains fixed at the specified value.
+    fn fill_width_child(id: u128, width: f32, height: f32) -> LayoutInput {
         LayoutInput {
             id: ShapeId::from_u128(id),
             size: CanvasSize::new(width, height),
@@ -266,10 +277,22 @@ mod tests {
         }
     }
 
+    /// Create a child that fills available height (stretches vertically).
+    /// Width remains fixed at the specified value.
+    #[allow(dead_code)]
+    fn fill_height_child(id: u128, width: f32, height: f32) -> LayoutInput {
+        LayoutInput {
+            id: ShapeId::from_u128(id),
+            size: CanvasSize::new(width, height),
+            width_mode: SizingMode::Fixed,
+            height_mode: SizingMode::Fill,
+        }
+    }
+
     #[test]
     fn test_row_layout_start() {
         let layout = FrameLayout::default();
-        let children = vec![make_child(1, 50.0, 30.0), make_child(2, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0), fixed_child(2, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -281,7 +304,7 @@ mod tests {
     #[test]
     fn test_row_layout_with_gap() {
         let layout = FrameLayout::row().with_gap(10.0);
-        let children = vec![make_child(1, 50.0, 30.0), make_child(2, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0), fixed_child(2, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -292,7 +315,7 @@ mod tests {
     #[test]
     fn test_row_layout_center() {
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::Center);
-        let children = vec![make_child(1, 50.0, 30.0), make_child(2, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0), fixed_child(2, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -304,7 +327,7 @@ mod tests {
     #[test]
     fn test_row_layout_end() {
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::End);
-        let children = vec![make_child(1, 50.0, 30.0), make_child(2, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0), fixed_child(2, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -317,9 +340,9 @@ mod tests {
     fn test_row_layout_space_between() {
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::SpaceBetween);
         let children = vec![
-            make_child(1, 50.0, 30.0),
-            make_child(2, 50.0, 30.0),
-            make_child(3, 50.0, 30.0),
+            fixed_child(1, 50.0, 30.0),
+            fixed_child(2, 50.0, 30.0),
+            fixed_child(3, 50.0, 30.0),
         ];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
@@ -333,7 +356,7 @@ mod tests {
     #[test]
     fn test_column_layout() {
         let layout = FrameLayout::column().with_gap(10.0);
-        let children = vec![make_child(1, 50.0, 30.0), make_child(2, 50.0, 40.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0), fixed_child(2, 50.0, 40.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 200.0), &layout, &children);
 
@@ -344,7 +367,7 @@ mod tests {
     #[test]
     fn test_cross_axis_center() {
         let layout = FrameLayout::row().with_cross_axis(CrossAxisAlignment::Center);
-        let children = vec![make_child(1, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -355,7 +378,7 @@ mod tests {
     #[test]
     fn test_cross_axis_end() {
         let layout = FrameLayout::row().with_cross_axis(CrossAxisAlignment::End);
-        let children = vec![make_child(1, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -366,7 +389,7 @@ mod tests {
     #[test]
     fn test_cross_axis_stretch() {
         let layout = FrameLayout::row().with_cross_axis(CrossAxisAlignment::Stretch);
-        let children = vec![make_child(1, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -381,7 +404,7 @@ mod tests {
             padding: Padding::all(20.0),
             ..Default::default()
         };
-        let children = vec![make_child(1, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -393,9 +416,9 @@ mod tests {
     fn test_fill_children() {
         let layout = FrameLayout::row().with_gap(10.0);
         let children = vec![
-            make_child(1, 50.0, 30.0),       // Fixed 50
-            make_fill_child(2, 50.0, 30.0),  // Fill
-            make_child(3, 50.0, 30.0),       // Fixed 50
+            fixed_child(1, 50.0, 30.0),       // Fixed 50
+            fill_width_child(2, 50.0, 30.0),  // Fill
+            fixed_child(3, 50.0, 30.0),       // Fixed 50
         ];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
@@ -415,8 +438,8 @@ mod tests {
     fn test_multiple_fill_children() {
         let layout = FrameLayout::row();
         let children = vec![
-            make_fill_child(1, 0.0, 30.0),
-            make_fill_child(2, 0.0, 30.0),
+            fill_width_child(1, 0.0, 30.0),
+            fill_width_child(2, 0.0, 30.0),
         ];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
@@ -439,7 +462,7 @@ mod tests {
     #[test]
     fn test_single_child_space_between() {
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::SpaceBetween);
-        let children = vec![make_child(1, 50.0, 30.0)];
+        let children = vec![fixed_child(1, 50.0, 30.0)];
 
         let result = compute_layout(CanvasSize::new(200.0, 100.0), &layout, &children);
 
@@ -452,8 +475,8 @@ mod tests {
         // When children are larger than frame, should not have negative positions
         let layout = FrameLayout::column().with_main_axis(MainAxisAlignment::SpaceBetween);
         let children = vec![
-            make_child(1, 50.0, 300.0),  // 300 tall
-            make_child(2, 50.0, 300.0),  // 300 tall - total 600, frame only 100
+            fixed_child(1, 50.0, 300.0),  // 300 tall
+            fixed_child(2, 50.0, 300.0),  // 300 tall - total 600, frame only 100
         ];
 
         let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
@@ -469,7 +492,7 @@ mod tests {
     fn test_overflow_center() {
         // When children are larger than frame, should clamp to 0
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::Center);
-        let children = vec![make_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
+        let children = vec![fixed_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
 
         let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
 
@@ -481,7 +504,7 @@ mod tests {
     fn test_overflow_end() {
         // When children are larger than frame, should clamp to 0
         let layout = FrameLayout::row().with_main_axis(MainAxisAlignment::End);
-        let children = vec![make_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
+        let children = vec![fixed_child(1, 300.0, 30.0)]; // 300 wide, frame only 100
 
         let result = compute_layout(CanvasSize::new(100.0, 100.0), &layout, &children);
 
