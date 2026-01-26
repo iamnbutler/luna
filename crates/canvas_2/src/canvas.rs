@@ -679,7 +679,7 @@ impl Canvas {
         if let Some(DragState::ResizingShapes { shape_ids, .. }) = self.drag.take() {
             // If any resized shapes are frames with layout, reapply their layout
             for shape_id in &shape_ids {
-                if self.shapes.iter().any(|s| s.id == *shape_id && s.has_layout()) {
+                if self.get_shape(*shape_id).map(|s| s.has_layout()).unwrap_or(false) {
                     self.apply_layout_for_frame(*shape_id);
                 }
             }
@@ -718,9 +718,7 @@ impl Canvas {
 
     /// Check if a shape is a child of a layout-enabled frame.
     pub fn is_in_autolayout(&self, shape_id: ShapeId) -> bool {
-        self.shapes
-            .iter()
-            .find(|s| s.id == shape_id)
+        self.get_shape(shape_id)
             .map(|s| s.is_in_layout(&self.shapes))
             .unwrap_or(false)
     }
