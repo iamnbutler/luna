@@ -237,19 +237,26 @@ impl Canvas {
         point: CanvasPoint,
         parent_id: Option<ShapeId>,
     ) -> Option<ShapeId> {
-        // Get shapes at this level (matching parent)
-        let shapes_at_level: Vec<_> = self
-            .shapes
-            .iter()
-            .filter(|s| s.parent == parent_id)
-            .collect();
+        // Get shape IDs at this level
+        let shape_ids: Vec<ShapeId> = match parent_id {
+            // Root level: filter shapes with no parent
+            None => self.shapes.iter().filter(|s| s.parent.is_none()).map(|s| s.id).collect(),
+            // Child level: use parent's children list (already in z-order)
+            Some(pid) => self.get_shape(pid).map(|p| p.children.clone()).unwrap_or_default(),
+        };
 
         // Iterate in reverse for z-order (top to bottom)
-        for shape in shapes_at_level.iter().rev() {
-            // Calculate world position for hit testing
-            let world_pos = shape.world_position(&self.shapes);
+        for shape_id in shape_ids.iter().rev() {
+            let Some(shape) = self.get_shape(*shape_id) else { continue };
+
+            // Get world position from cache (O(1)) or compute if not cached
+            let world_pos = self
+                .world_position_cache
+                .get(&shape.id)
+                .copied()
+                .unwrap_or_else(|| shape.world_position(&self.shapes));
             let world_bounds_min = world_pos;
-            let world_bounds_max = CanvasPoint(world_pos.0 + shape.size.0);
+            let world_bounds_max = CanvasPoint(world_pos.0 + shape.effective_size().0);
 
             let hit = point.0.x >= world_bounds_min.0.x
                 && point.0.x <= world_bounds_max.0.x
