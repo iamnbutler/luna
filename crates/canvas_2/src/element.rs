@@ -88,8 +88,8 @@ impl Element for CanvasElement {
         // Read canvas state for rendering
         // Layout is already applied to canvas state when children are added,
         // so we don't need to recompute it here.
-        let (shapes, selection, hovered, viewport, theme, drag) =
-            self.canvas.read(cx).clone_render_state();
+        let (shapes, selection, hovered, viewport, theme, drag, world_positions) =
+            self.canvas.update(cx, |canvas, _| canvas.clone_render_state());
 
         // Paint background
         window.paint_quad(gpui::fill(bounds, theme.canvas_background));
@@ -102,6 +102,7 @@ impl Element for CanvasElement {
                 paint_shape_recursive(
                     shape,
                     &shapes,
+                    &world_positions,
                     &selection,
                     hovered,
                     &viewport,
@@ -472,6 +473,7 @@ fn handle_scroll(
 fn paint_shape_recursive(
     shape: &Shape,
     all_shapes: &[Shape],
+    world_positions: &std::collections::HashMap<ShapeId, CanvasPoint>,
     selection: &HashSet<ShapeId>,
     hovered: Option<ShapeId>,
     viewport: &crate::Viewport,
@@ -479,8 +481,11 @@ fn paint_shape_recursive(
     canvas_bounds: Bounds<Pixels>,
     window: &mut Window,
 ) {
-    // Calculate world position for this shape
-    let world_pos = shape.world_position(all_shapes);
+    // Get cached world position (O(1) lookup)
+    let world_pos = world_positions
+        .get(&shape.id)
+        .copied()
+        .unwrap_or_else(|| shape.world_position(all_shapes));
 
     // Convert to screen coordinates
     let screen_rect = viewport.canvas_to_screen_bounds(world_pos, shape.size);
@@ -582,6 +587,7 @@ fn paint_shape_recursive(
                     paint_shape_recursive(
                         child,
                         all_shapes,
+                        world_positions,
                         selection,
                         hovered,
                         viewport,
@@ -598,7 +604,7 @@ fn paint_shape_recursive(
 // Helper trait for Canvas to clone state for rendering
 trait CloneRenderState {
     fn clone_render_state(
-        &self,
+        &mut self,
     ) -> (
         Vec<node_2::Shape>,
         std::collections::HashSet<node_2::ShapeId>,
@@ -606,12 +612,13 @@ trait CloneRenderState {
         crate::Viewport,
         theme_2::Theme,
         Option<DragState>,
+        std::collections::HashMap<node_2::ShapeId, node_2::CanvasPoint>,
     );
 }
 
 impl CloneRenderState for Canvas {
     fn clone_render_state(
-        &self,
+        &mut self,
     ) -> (
         Vec<node_2::Shape>,
         std::collections::HashSet<node_2::ShapeId>,
@@ -619,7 +626,10 @@ impl CloneRenderState for Canvas {
         crate::Viewport,
         theme_2::Theme,
         Option<DragState>,
+        std::collections::HashMap<node_2::ShapeId, node_2::CanvasPoint>,
     ) {
+        // Compute world positions before cloning
+        self.compute_world_positions();
         (
             self.shapes.clone(),
             self.selection.clone(),
@@ -627,6 +637,7 @@ impl CloneRenderState for Canvas {
             self.viewport.clone(),
             self.theme.clone(),
             self.drag.clone(),
+            self.world_position_cache().clone(),
         )
     }
 }

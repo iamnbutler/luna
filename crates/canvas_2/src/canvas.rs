@@ -79,6 +79,9 @@ pub struct Canvas {
     /// Index from ShapeId to position in shapes vec for O(1) lookup.
     shape_index: HashMap<ShapeId, usize>,
 
+    /// Cached world positions for all shapes. Computed once per frame.
+    world_position_cache: HashMap<ShapeId, CanvasPoint>,
+
     /// Currently selected shape IDs.
     pub selection: HashSet<ShapeId>,
 
@@ -112,6 +115,7 @@ impl Canvas {
         Self {
             shapes: Vec::new(),
             shape_index: HashMap::new(),
+            world_position_cache: HashMap::new(),
             selection: HashSet::new(),
             hovered: None,
             viewport: Viewport::new(),
@@ -122,6 +126,58 @@ impl Canvas {
             theme,
             focus_handle: cx.focus_handle(),
         }
+    }
+
+    /// Compute and cache world positions for all shapes.
+    /// Call this once per frame before rendering.
+    pub fn compute_world_positions(&mut self) {
+        self.world_position_cache.clear();
+        self.world_position_cache.reserve(self.shapes.len());
+
+        // Process shapes in order - parents before children ensures cache hits
+        // when computing child positions
+        for shape in &self.shapes {
+            let world_pos = self.compute_world_position_cached(shape.id, shape.parent, shape.effective_position());
+            self.world_position_cache.insert(shape.id, world_pos);
+        }
+    }
+
+    /// Compute world position using the cache for parent lookups.
+    fn compute_world_position_cached(
+        &self,
+        _id: ShapeId,
+        parent: Option<ShapeId>,
+        effective_pos: CanvasPoint,
+    ) -> CanvasPoint {
+        match parent {
+            None => effective_pos,
+            Some(parent_id) => {
+                // Look up parent's world position from cache (O(1))
+                // If not cached yet, fall back to computing (shouldn't happen with proper ordering)
+                let parent_world = self
+                    .world_position_cache
+                    .get(&parent_id)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        // Fallback: compute parent's world position
+                        self.get_shape(parent_id)
+                            .map(|p| p.world_position(&self.shapes))
+                            .unwrap_or(CanvasPoint::new(0.0, 0.0))
+                    });
+                CanvasPoint(effective_pos.0 + parent_world.0)
+            }
+        }
+    }
+
+    /// Get cached world position for a shape.
+    /// Returns None if not cached (call compute_world_positions first).
+    pub fn get_cached_world_position(&self, id: ShapeId) -> Option<CanvasPoint> {
+        self.world_position_cache.get(&id).copied()
+    }
+
+    /// Get the world position cache for rendering.
+    pub fn world_position_cache(&self) -> &HashMap<ShapeId, CanvasPoint> {
+        &self.world_position_cache
     }
 
     /// Add a shape to the canvas.
