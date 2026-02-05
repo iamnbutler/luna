@@ -224,6 +224,34 @@ fn execute_command_inner(canvas: &mut Canvas, command: Command, cx: &mut Context
             CommandResult::modified(modified)
         }
 
+        Command::SetTextContent { target, content } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Text {
+                    shape.text_content = Some(content.clone());
+                    modified.push(shape.id);
+                }
+            }
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
+        Command::SetFontSize { target, size } => {
+            let ids = resolve_target(canvas, &target);
+            let mut modified = Vec::new();
+            for shape in &mut canvas.shapes {
+                if ids.contains(&shape.id) && shape.kind == ShapeKind::Text {
+                    if size > 0.0 {
+                        shape.font_size = Some(size);
+                        modified.push(shape.id);
+                    }
+                }
+            }
+            cx.notify();
+            CommandResult::modified(modified)
+        }
+
         Command::AddChild { child, parent } => {
             canvas.add_child(child, parent, cx);
             CommandResult::modified(vec![child, parent])

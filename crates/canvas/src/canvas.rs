@@ -17,6 +17,7 @@ pub enum Tool {
     Rectangle,
     Ellipse,
     Frame,
+    Text,
 }
 
 /// Events emitted by the canvas.
@@ -466,11 +467,22 @@ impl Canvas {
     /// Start drawing a new shape.
     pub fn start_draw(&mut self, kind: ShapeKind, start: CanvasPoint, cx: &mut Context<Self>) {
         let mut shape = Shape::new(kind, start, CanvasSize::new(0.0, 0.0));
-        shape.stroke = Some(self.default_stroke);
-        shape.fill = self.default_fill.map(|c| node::Fill::new(c));
-        // Frames clip children by default
-        if kind == ShapeKind::Frame {
-            shape.clip_children = true;
+        
+        // Set defaults based on shape type
+        if kind == ShapeKind::Text {
+            // Text shapes have special defaults
+            shape.text_content = Some("Text".to_string());
+            shape.font_size = Some(16.0);
+            shape.fill = Some(node::Fill::new(gpui::black()));
+            shape.stroke = None;
+            shape.size = CanvasSize::new(100.0, 24.0); // Default text size
+        } else {
+            shape.stroke = Some(self.default_stroke);
+            shape.fill = self.default_fill.map(|c| node::Fill::new(c));
+            // Frames clip children by default
+            if kind == ShapeKind::Frame {
+                shape.clip_children = true;
+            }
         }
 
         let id = shape.id;

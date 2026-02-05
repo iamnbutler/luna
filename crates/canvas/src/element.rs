@@ -344,6 +344,9 @@ fn handle_mouse_down(
             Tool::Frame => {
                 canvas.start_draw(ShapeKind::Frame, canvas_pos, cx);
             }
+            Tool::Text => {
+                canvas.start_draw(ShapeKind::Text, canvas_pos, cx);
+            }
         }
     });
 }
@@ -522,6 +525,9 @@ fn paint_shape_recursive(
                     gpui::fill(screen_bounds, fill.color).corner_radii(radius),
                 );
             }
+            ShapeKind::Text => {
+                // Text shapes render text, not fill
+            }
         }
     }
 
@@ -552,6 +558,25 @@ fn paint_shape_recursive(
                     border_style: BorderStyle::Solid,
                 });
             }
+            ShapeKind::Text => {
+                // Text shapes usually don't have stroke
+            }
+        }
+    }
+
+    // Paint text content
+    if shape.kind == ShapeKind::Text {
+        if let Some(text_content) = &shape.text_content {
+            let font_size = shape.font_size.unwrap_or(16.0);
+            let text_color = shape.fill.map(|f| f.color).unwrap_or(gpui::black());
+            
+            // Use GPUI's text rendering
+            window.paint_text(
+                screen_bounds.origin,
+                text_content.clone().into(),
+                px(font_size * viewport.zoom),
+                text_color,
+            );
         }
     }
 

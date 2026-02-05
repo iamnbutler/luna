@@ -115,6 +115,21 @@ pub enum Command {
         radius: f32,
     },
 
+    // === Text ===
+    /// Set text content (text shapes).
+    SetTextContent {
+        #[serde(default)]
+        target: Target,
+        content: String,
+    },
+
+    /// Set font size (text shapes).
+    SetFontSize {
+        #[serde(default)]
+        target: Target,
+        size: f32,
+    },
+
     // === Hierarchy ===
     /// Add a shape as a child of a frame.
     /// Converts the child's position to relative coordinates.

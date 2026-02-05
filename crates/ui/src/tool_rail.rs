@@ -37,7 +37,8 @@ impl Render for ToolRail {
                 ToolButton::new("pan", Tool::Pan, "svg/hand.svg", current_tool, theme.clone(), canvas.clone()),
                 ToolButton::new("rectangle", Tool::Rectangle, "svg/square.svg", current_tool, theme.clone(), canvas.clone()),
                 ToolButton::new("ellipse", Tool::Ellipse, "svg/shapes.svg", current_tool, theme.clone(), canvas.clone()),
-                ToolButton::new("frame", Tool::Frame, "svg/frame.svg", current_tool, theme.clone(), canvas),
+                ToolButton::new("frame", Tool::Frame, "svg/frame.svg", current_tool, theme.clone(), canvas.clone()),
+                ToolButton::new("text", Tool::Text, "svg/text_cursor.svg", current_tool, theme.clone(), canvas),
             ])
     }
 }

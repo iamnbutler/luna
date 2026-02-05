@@ -82,6 +82,7 @@ The project follows a workspace-based architecture with 9 crates:
 - ✅ Rectangle
 - ✅ Ellipse
 - ✅ Frame (container with clipping)
+- ✅ Text
 
 #### Selection & Transform
 - ✅ Single selection
@@ -122,6 +123,7 @@ The project follows a workspace-based architecture with 9 crates:
 - ✅ Rectangle tool
 - ✅ Ellipse tool
 - ✅ Frame tool
+- ✅ Text tool
 
 #### File Operations
 - ✅ Save (.luna format using KDL)
@@ -134,7 +136,7 @@ The project follows a workspace-based architecture with 9 crates:
 - ✅ Autolayout inspector
 
 #### API & Extensibility
-- ✅ Command API (25+ commands)
+- ✅ Command API (27+ commands)
 - ✅ Query API
 
 ### 🚧 In Progress / Partial
@@ -144,7 +146,6 @@ The project follows a workspace-based architecture with 9 crates:
 ### ❌ Not Yet Implemented
 
 #### Shapes
-- ❌ Text
 - ❌ Vector path (pen tool)
 - ❌ Line
 - ❌ Polygon/Star
@@ -182,7 +183,6 @@ The project follows a workspace-based architecture with 9 crates:
 - ❌ Smart guides (alignment hints)
 
 #### Tools
-- ❌ Text tool
 - ❌ Pen tool
 - ❌ Line tool
 
@@ -308,7 +308,7 @@ Based on the MVP checklist, the next critical features to implement are:
 
 ### High Priority (Core Functionality)
 1. **Canvas Undo/Redo** - Essential editing feature
-2. **Text Support** - Basic text nodes and text tool
+2. **Text Enhancements** - In-place editing, wrapping, alignment
 3. **Marquee Selection** - Drag selection box
 4. **Export** - PNG/SVG export capabilities
 
@@ -347,12 +347,14 @@ Luna leverages GPUI's element system:
 ```
 Shape
 ├── id: UUID (8-char display format)
-├── kind: Rectangle | Ellipse | Frame
+├── kind: Rectangle | Ellipse | Frame | Text
 ├── position: (x, y)
 ├── size: (width, height)
 ├── fill: Option<Color>
 ├── stroke: Option<{color, width}>
 ├── corner_radius: f32
+├── text_content: Option<String>  # Text shapes only
+├── font_size: Option<f32>         # Text shapes only
 └── layout: Option<AutoLayout>
 
 Color: HSLA (h: 0-1, s: 0-1, l: 0-1, a: 0-1)
@@ -360,10 +362,11 @@ Color: HSLA (h: 0-1, s: 0-1, l: 0-1, a: 0-1)
 
 ### Command API
 
-The API crate exposes 25+ commands including:
-- Shape creation (create_rectangle, create_ellipse, create_frame)
+The API crate exposes 27+ commands including:
+- Shape creation (create_rectangle, create_ellipse, create_frame, create_text)
 - Manipulation (move_shape, resize_shape, delete_shape)
 - Styling (set_fill, set_stroke, set_corner_radius)
+- Text (set_text_content, set_font_size)
 - Layout (set_autolayout, set_gap, set_padding)
 - Selection (select_shape, deselect_all)
 
@@ -372,11 +375,11 @@ The API crate exposes 25+ commands including:
 ## Known Limitations
 
 1. **No Undo/Redo** for canvas operations (only text input)
-2. **Limited Shape Types** - Only Rectangle, Ellipse, Frame
-3. **No Text Support** - Critical for a design tool
+2. **Limited Shape Types** - Only Rectangle, Ellipse, Frame, Text
+3. **Basic Text Support** - No in-place editing, wrapping, or rich formatting
 4. **No Export** - Cannot output to PNG/SVG
 5. **Performance Unoptimized** - No spatial indexing or caching
-6. **Limited File Format** - Basic shapes only, no groups/text/paths
+6. **Limited File Format** - Basic shapes only, no groups/paths
 7. **Basic UI** - Missing many expected panels and controls
 
 ---

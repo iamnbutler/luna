@@ -33,6 +33,9 @@ pub struct PropertiesPanel {
     // Layout inputs (for frames)
     layout_gap_input: Entity<InputState>,
     layout_padding_input: Entity<InputState>,
+    // Text inputs (for text shapes)
+    text_content_input: Entity<InputState>,
+    font_size_input: Entity<InputState>,
     // Track current selection and values to know when to update inputs
     last_selection_id: Option<ShapeId>,
     last_position: CanvasPoint,
@@ -62,6 +65,8 @@ impl PropertiesPanel {
         let corner_radius_input = cx.new(|cx| InputState::new_singleline(cx));
         let layout_gap_input = cx.new(|cx| InputState::new_singleline(cx));
         let layout_padding_input = cx.new(|cx| InputState::new_singleline(cx));
+        let text_content_input = cx.new(|cx| InputState::new_singleline(cx));
+        let font_size_input = cx.new(|cx| InputState::new_singleline(cx));
 
         // Subscribe to input changes
         let x_sub = cx.subscribe(&x_input, Self::on_x_changed);
@@ -75,6 +80,8 @@ impl PropertiesPanel {
             cx.subscribe(&corner_radius_input, Self::on_corner_radius_changed);
         let layout_gap_sub = cx.subscribe(&layout_gap_input, Self::on_layout_gap_changed);
         let layout_padding_sub = cx.subscribe(&layout_padding_input, Self::on_layout_padding_changed);
+        let text_content_sub = cx.subscribe(&text_content_input, Self::on_text_content_changed);
+        let font_size_sub = cx.subscribe(&font_size_input, Self::on_font_size_changed);
 
         // Subscribe to canvas changes to update inputs
         let canvas_sub = cx.subscribe(&canvas, Self::on_canvas_changed);
@@ -92,6 +99,8 @@ impl PropertiesPanel {
             corner_radius_input,
             layout_gap_input,
             layout_padding_input,
+            text_content_input,
+            font_size_input,
             last_selection_id: None,
             last_position: CanvasPoint::default(),
             last_size: CanvasSize::default(),
@@ -114,6 +123,8 @@ impl PropertiesPanel {
                 corner_radius_sub,
                 layout_gap_sub,
                 layout_padding_sub,
+                text_content_sub,
+                font_size_sub,
                 canvas_sub,
             ],
         }
@@ -140,6 +151,7 @@ impl PropertiesPanel {
                 .map(|shape| {
                     (
                         shape.id,
+                        shape.kind,
                         shape.effective_position(), // Use computed position if available
                         shape.effective_size(),     // Use computed size if available
                         shape.fill.clone(),
@@ -152,11 +164,14 @@ impl PropertiesPanel {
                         // Store user-set values
                         shape.position,
                         shape.size,
+                        // Text properties
+                        shape.text_content.clone(),
+                        shape.font_size,
                     )
                 })
         };
 
-        if let Some((shape_id, position, size, fill, stroke, corner_radius, layout, pos_computed, size_computed, user_pos, user_sz)) = shape_data {
+        if let Some((shape_id, kind, position, size, fill, stroke, corner_radius, layout, pos_computed, size_computed, user_pos, user_sz, text_content, font_size)) = shape_data {
             // Update computed state tracking
             self.position_is_computed = pos_computed;
             self.size_is_computed = (size_computed, size_computed);
@@ -272,6 +287,22 @@ impl PropertiesPanel {
                     if !self.layout_padding_input.focus_handle(cx).is_focused(window) {
                         self.layout_padding_input.update(cx, |input, cx| {
                             input.set_content("0".to_string(), cx);
+                        });
+                    }
+                }
+            }
+
+            // Sync text inputs
+            if kind == ShapeKind::Text {
+                if selection_changed {
+                    if !self.text_content_input.focus_handle(cx).is_focused(window) {
+                        self.text_content_input.update(cx, |input, cx| {
+                            input.set_content(text_content.unwrap_or_default(), cx);
+                        });
+                    }
+                    if !self.font_size_input.focus_handle(cx).is_focused(window) {
+                        self.font_size_input.update(cx, |input, cx| {
+                            input.set_content(format!("{:.0}", font_size.unwrap_or(16.0)), cx);
                         });
                     }
                 }
@@ -702,6 +733,66 @@ impl PropertiesPanel {
         }
     }
 
+    fn on_text_content_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_text_content(cx);
+        }
+    }
+
+    fn on_font_size_changed(
+        &mut self,
+        _input: Entity<InputState>,
+        event: &InputStateEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputStateEvent::TextChanged) {
+            self.apply_font_size(cx);
+        }
+    }
+
+    fn apply_text_content(&mut self, cx: &mut Context<Self>) {
+        let value = self.text_content_input.read(cx).content().to_string();
+        self.canvas.update(cx, |canvas, cx| {
+            if let Some(shape) = canvas
+                .shapes
+                .iter_mut()
+                .find(|s| canvas.selection.contains(&s.id))
+            {
+                if shape.kind == ShapeKind::Text {
+                    shape.text_content = Some(value);
+                    cx.emit(CanvasEvent::ContentChanged);
+                    cx.notify();
+                }
+            }
+        });
+    }
+
+    fn apply_font_size(&mut self, cx: &mut Context<Self>) {
+        let value = self.font_size_input.read(cx).content().to_string();
+        if let Ok(size) = value.parse::<f32>() {
+            if size > 0.0 {
+                self.canvas.update(cx, |canvas, cx| {
+                    if let Some(shape) = canvas
+                        .shapes
+                        .iter_mut()
+                        .find(|s| canvas.selection.contains(&s.id))
+                    {
+                        if shape.kind == ShapeKind::Text {
+                            shape.font_size = Some(size);
+                            cx.emit(CanvasEvent::ContentChanged);
+                            cx.notify();
+                        }
+                    }
+                });
+            }
+        }
+    }
+
     /// Toggle autolayout on/off for selected frame
     pub fn toggle_autolayout(&mut self, cx: &mut Context<Self>) {
         // Returns (should_apply_layout, frame_id_to_clear)
@@ -861,6 +952,7 @@ impl Render for PropertiesPanel {
                 ShapeKind::Rectangle => "Rectangle",
                 ShapeKind::Ellipse => "Ellipse",
                 ShapeKind::Frame => "Frame",
+                ShapeKind::Text => "Text",
             };
 
             v_stack()
@@ -956,6 +1048,49 @@ impl Render for PropertiesPanel {
                                 &colors,
                                 cx,
                             )),
+                    )
+                } else {
+                    None
+                })
+                // Text properties (only for text shapes)
+                .children(if shape.kind == ShapeKind::Text {
+                    Some(
+                        v_stack()
+                            .gap(px(12.0))
+                            .child(
+                                v_stack()
+                                    .gap(px(4.0))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.ui_text_muted)
+                                            .child("Content"),
+                                    )
+                                    .child(input_field(
+                                        "",
+                                        &self.text_content_input,
+                                        theme,
+                                        &colors,
+                                        cx,
+                                    )),
+                            )
+                            .child(
+                                v_stack()
+                                    .gap(px(4.0))
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.ui_text_muted)
+                                            .child("Font Size"),
+                                    )
+                                    .child(input_field(
+                                        "",
+                                        &self.font_size_input,
+                                        theme,
+                                        &colors,
+                                        cx,
+                                    )),
+                            )
                     )
                 } else {
                     None

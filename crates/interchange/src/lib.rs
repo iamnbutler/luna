@@ -125,6 +125,7 @@ fn shape_to_kdl(shape: &Shape, all_shapes: &[Shape]) -> KdlNode {
         ShapeKind::Rectangle => "rect",
         ShapeKind::Ellipse => "ellipse",
         ShapeKind::Frame => "frame",
+        ShapeKind::Text => "text",
     };
 
     let mut node = KdlNode::new(type_name);
@@ -175,6 +176,22 @@ fn shape_to_kdl(shape: &Shape, all_shapes: &[Shape]) -> KdlNode {
         has_children = true;
     }
 
+    // Text-specific properties
+    if shape.kind == ShapeKind::Text {
+        if let Some(ref content) = shape.text_content {
+            let mut text_node = KdlNode::new("content");
+            text_node.push(KdlEntry::new(content.clone()));
+            children.nodes_mut().push(text_node);
+            has_children = true;
+        }
+        if let Some(font_size) = shape.font_size {
+            let mut font_size_node = KdlNode::new("font-size");
+            font_size_node.push(KdlEntry::new(font_size as f64));
+            children.nodes_mut().push(font_size_node);
+            has_children = true;
+        }
+    }
+
     // Recursively serialize child shapes (for frames)
     for child_id in &shape.children {
         if let Some(child) = all_shapes.iter().find(|s| s.id == *child_id) {
@@ -202,6 +219,7 @@ fn parse_shape_recursive(
         "rect" => ShapeKind::Rectangle,
         "ellipse" => ShapeKind::Ellipse,
         "frame" => ShapeKind::Frame,
+        "text" => ShapeKind::Text,
         other => {
             return Err(InterchangeError::InvalidValue(format!(
                 "Unknown shape type: {}",
@@ -269,8 +287,22 @@ fn parse_shape_recursive(
                         }
                     }
                 }
-                // Nested shapes (rect, ellipse, frame)
-                "rect" | "ellipse" | "frame" => {
+                "content" => {
+                    if let Some(entry) = child.entries().first() {
+                        if let Some(v) = entry.value().as_string() {
+                            shape.text_content = Some(v.to_string());
+                        }
+                    }
+                }
+                "font-size" => {
+                    if let Some(entry) = child.entries().first() {
+                        if let Some(v) = entry.value().as_float() {
+                            shape.font_size = Some(v as f32);
+                        }
+                    }
+                }
+                // Nested shapes (rect, ellipse, frame, text)
+                "rect" | "ellipse" | "frame" | "text" => {
                     // We'll parse these after adding the parent shape
                     // Just note we have child nodes to process
                 }
@@ -286,7 +318,7 @@ fn parse_shape_recursive(
     if let Some(children) = node.children() {
         for child in children.nodes() {
             match child.name().value() {
-                "rect" | "ellipse" | "frame" => {
+                "rect" | "ellipse" | "frame" | "text" => {
                     let child_id = parse_shape_recursive(child, Some(id), shapes)?;
                     child_ids.push(child_id);
                 }

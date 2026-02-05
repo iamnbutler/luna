@@ -11,6 +11,7 @@ pub enum ShapeKind {
     Rectangle,
     Ellipse,
     Frame,
+    Text,
 }
 
 impl Default for ShapeKind {
@@ -101,6 +102,14 @@ pub struct Shape {
     pub fill: Option<Fill>,
     pub stroke: Option<Stroke>,
     pub corner_radius: f32,
+
+    // Text (only for Text shapes)
+    /// Text content (only meaningful for Text shapes)
+    pub text_content: Option<String>,
+    /// Font size in points (only meaningful for Text shapes)
+    pub font_size: Option<f32>,
+    /// Font family (only meaningful for Text shapes)
+    pub font_family: Option<String>,
 }
 
 impl Shape {
@@ -120,6 +129,9 @@ impl Shape {
             fill: None,
             stroke: Some(Stroke::default()),
             corner_radius: 0.0,
+            text_content: None,
+            font_size: None,
+            font_family: None,
         }
     }
 
@@ -160,6 +172,15 @@ impl Shape {
     pub fn frame(position: Vec2, size: Vec2) -> Self {
         let mut shape = Self::new(ShapeKind::Frame, CanvasPoint(position), CanvasSize(size));
         shape.clip_children = true; // Frames clip by default
+        shape
+    }
+
+    pub fn text(position: Vec2, content: impl Into<String>) -> Self {
+        let mut shape = Self::new(ShapeKind::Text, CanvasPoint(position), CanvasSize(Vec2::new(100.0, 24.0)));
+        shape.text_content = Some(content.into());
+        shape.font_size = Some(16.0);
+        shape.fill = Some(Fill::new(gpui::black())); // Default to black text
+        shape.stroke = None; // Text usually doesn't have stroke by default
         shape
     }
 
