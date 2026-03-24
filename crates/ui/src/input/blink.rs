@@ -99,8 +99,7 @@ impl CursorBlink {
                     if this.generation == generation {
                         this.tick(cx);
                     }
-                })
-                .ok();
+                });
             }
         })
         .detach();

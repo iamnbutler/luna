@@ -16,6 +16,7 @@ canvas = { path = "../canvas" }
 interchange = { path = "../interchange" }
 glam = { workspace = true }
 gpui = { workspace = true }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["wayland", "x11"] }
 node = { path = "../node" }
 serde = { workspace = true }
 serde_json = { workspace = true }
