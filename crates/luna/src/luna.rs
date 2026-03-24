@@ -242,8 +242,8 @@ impl Luna {
                     &std::env::current_dir().unwrap_or_default(),
                     Some("untitled.luna"),
                 )
-            })?;
-            let path: Option<PathBuf> = receiver.await??;
+            }).await?;
+            let path: Option<PathBuf> = receiver?;
 
             if let Some(path) = path {
                 this.update(cx, |this, cx| {
@@ -277,8 +277,8 @@ impl Luna {
                     multiple: false,
                     prompt: Some("Open Luna Project".into()),
                 })
-            })?;
-            let paths: Option<Vec<PathBuf>> = receiver.await??;
+            }).await?;
+            let paths: Option<Vec<PathBuf>> = receiver?;
 
             if let Some(paths) = paths {
                 if let Some(path) = paths.first() {
