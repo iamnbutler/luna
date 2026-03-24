@@ -735,7 +735,10 @@ impl Canvas {
         self.selection.iter().any(|id| self.is_in_autolayout(*id))
     }
 
-    /// Get the bounding box of selected shapes in canvas coordinates.
+    /// Get the bounding box of selected shapes in world (canvas) coordinates.
+    ///
+    /// Uses world positions so that child shapes inside frames are correctly
+    /// positioned in absolute canvas space.
     pub fn selection_bounds(&self) -> Option<(CanvasPoint, CanvasPoint)> {
         let selected: Vec<_> = self
             .shapes
@@ -751,9 +754,15 @@ impl Canvas {
         let mut max = Vec2::new(f32::MIN, f32::MIN);
 
         for shape in selected {
-            let (shape_min, shape_max) = shape.bounds();
-            min = min.min(shape_min.0);
-            max = max.max(shape_max.0);
+            // Use world position for correct bounds of child shapes
+            let world_pos = self
+                .world_position_cache
+                .get(&shape.id)
+                .copied()
+                .unwrap_or_else(|| shape.world_position(&self.shapes));
+            let world_max = CanvasPoint(world_pos.0 + shape.effective_size().0);
+            min = min.min(world_pos.0);
+            max = max.max(world_max.0);
         }
 
         Some((CanvasPoint(min), CanvasPoint(max)))
