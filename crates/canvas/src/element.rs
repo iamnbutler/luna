@@ -493,8 +493,11 @@ fn paint_shape_recursive(
         .copied()
         .unwrap_or_else(|| shape.world_position(all_shapes));
 
+    // Use effective_size for consistent rendering with selection bounds
+    let effective_size = shape.effective_size();
+
     // Convert to screen coordinates
-    let screen_rect = viewport.canvas_to_screen_bounds(world_pos, shape.size);
+    let screen_rect = viewport.canvas_to_screen_bounds(world_pos, effective_size);
     let screen_bounds = Bounds {
         origin: point(
             canvas_bounds.origin.x + px(screen_rect.origin.x),
@@ -509,7 +512,7 @@ fn paint_shape_recursive(
     }
 
     // Clamp corner radius to half the smaller dimension
-    let max_radius = shape.size.width().min(shape.size.height()) / 2.0;
+    let max_radius = effective_size.width().min(effective_size.height()) / 2.0;
     let corner_radius = px(shape.corner_radius.min(max_radius) * viewport.zoom);
 
     // Paint fill

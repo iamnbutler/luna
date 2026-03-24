@@ -588,11 +588,19 @@ impl Canvas {
         };
 
         let shape_ids: Vec<_> = self.selection.iter().copied().collect();
+        // Capture world positions and effective sizes for consistency with selection_bounds
         let start_shape_data: Vec<_> = self
             .shapes
             .iter()
             .filter(|s| self.selection.contains(&s.id))
-            .map(|s| (s.id, s.position, s.size))
+            .map(|s| {
+                let world_pos = self
+                    .world_position_cache
+                    .get(&s.id)
+                    .copied()
+                    .unwrap_or_else(|| s.world_position(&self.shapes));
+                (s.id, world_pos, s.effective_size())
+            })
             .collect();
 
         self.drag = Some(DragState::ResizingShapes {
@@ -658,10 +666,20 @@ impl Canvas {
         );
 
         // Update each shape proportionally
-        for (id, orig_pos, orig_size) in start_shape_data {
+        for (id, orig_world_pos, orig_size) in start_shape_data {
+            // Get parent info before mutable borrow
+            let parent_world_pos = self.shapes.iter()
+                .find(|s| s.id == id)
+                .and_then(|s| s.parent)
+                .and_then(|parent_id| {
+                    self.world_position_cache
+                        .get(&parent_id)
+                        .copied()
+                });
+
             if let Some(shape) = self.get_shape_mut(id) {
-                // Extract raw values
-                let orig_pos = orig_pos.0;
+                // Extract raw values (orig_world_pos is now in world coordinates)
+                let orig_pos = orig_world_pos.0;
                 let orig_size = orig_size.0;
 
                 // Calculate relative position within original bounds (0 to 1)
@@ -673,9 +691,18 @@ impl Canvas {
                     if flip_y { start_size.y - rel_pos.y - orig_size.y } else { rel_pos.y },
                 );
 
-                // Scale position and size
-                shape.position = CanvasPoint(new_min + rel_pos * scale);
-                shape.size = CanvasSize(orig_size * scale);
+                // Calculate new world position and size
+                let new_world_pos = new_min + rel_pos * scale;
+                let new_size = orig_size * scale;
+
+                // Convert world position back to local if shape has a parent
+                let new_local_pos = match parent_world_pos {
+                    Some(parent_pos) => new_world_pos - parent_pos.0,
+                    None => new_world_pos, // Root shape, world = local
+                };
+
+                shape.position = CanvasPoint(new_local_pos);
+                shape.size = CanvasSize(new_size);
             }
         }
         cx.notify();
