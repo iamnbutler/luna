@@ -6,7 +6,7 @@ use gpui::{
     HitboxBehavior, Hsla, InspectorElementId, InteractiveElement, Interactivity, IntoElement,
     LayoutId, Length, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     ScrollWheelEvent, SharedString, StyleRefinement, Styled, TextAlign, TextRun, TextStyle, Window,
-    WrappedLine, size,
+    size,
 };
 
 use super::bindings::Escape;
@@ -473,64 +473,72 @@ fn paint_multiline(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let input_state = input.read(cx);
-    let content = input_state.content().to_string();
-    let selected_range = input_state.selected_range().clone();
-    let marked_range = input_state.marked_range().cloned();
-    let cursor_offset = input_state.cursor_offset();
-    let line_layouts = input_state.line_layouts.clone();
-    let scroll_offset = input_state.scroll_offset;
-    let line_height = input_state.line_height;
     let is_focused = focus_handle.is_focused(window);
+    let selection_color = colors.selection;
+    let cursor_color = colors.cursor;
+    let placeholder_color = colors.placeholder;
+    let placeholder_str = placeholder.cloned();
+    let text_style = text_style.clone();
 
-    if !selected_range.is_empty() {
-        paint_multiline_selection(
-            &line_layouts,
-            &selected_range,
-            bounds,
-            scroll_offset,
-            line_height,
-            colors.selection,
-            window,
-        );
-    }
+    // Use update to get both state access and mutable cx in the same scope
+    input.update(cx, |input_state, cx| {
+        let content = input_state.content().to_string();
+        let selected_range = input_state.selected_range().clone();
+        let marked_range = input_state.marked_range().cloned();
+        let cursor_offset = input_state.cursor_offset();
+        let line_layouts = &input_state.line_layouts;
+        let scroll_offset = input_state.scroll_offset;
+        let line_height = input_state.line_height;
 
-    if content.is_empty() {
-        if let Some(placeholder_str) = placeholder {
-            if !placeholder_str.is_empty() {
-                paint_multiline_placeholder(placeholder_str, bounds, text_style, colors.placeholder, window, cx);
-            }
-        }
-    } else {
-        paint_multiline_text(&line_layouts, bounds, scroll_offset, line_height, window, cx);
-    }
-
-    if let Some(marked_range) = &marked_range {
-        if !marked_range.is_empty() {
-            paint_multiline_marked_underline(
-                &line_layouts,
-                marked_range,
+        if !selected_range.is_empty() {
+            paint_multiline_selection(
+                line_layouts,
+                &selected_range,
                 bounds,
                 scroll_offset,
                 line_height,
-                colors.cursor,
+                selection_color,
                 window,
             );
         }
-    }
 
-    if is_focused && selected_range.is_empty() && cursor_visible {
-        paint_multiline_cursor(
-            &line_layouts,
-            cursor_offset,
-            &content,
-            bounds,
-            scroll_offset,
-            line_height,
-            colors.cursor,
-            window,
-        );
-    }
+        if content.is_empty() {
+            if let Some(placeholder_str) = &placeholder_str {
+                if !placeholder_str.is_empty() {
+                    paint_multiline_placeholder(placeholder_str, bounds, &text_style, placeholder_color, window, cx);
+                }
+            }
+        } else {
+            paint_multiline_text(line_layouts, bounds, scroll_offset, line_height, window, cx);
+        }
+
+        if let Some(marked_range) = &marked_range {
+            if !marked_range.is_empty() {
+                paint_multiline_marked_underline(
+                    line_layouts,
+                    marked_range,
+                    bounds,
+                    scroll_offset,
+                    line_height,
+                    cursor_color,
+                    window,
+                );
+            }
+        }
+
+        if is_focused && selected_range.is_empty() && cursor_visible {
+            paint_multiline_cursor(
+                line_layouts,
+                cursor_offset,
+                &content,
+                bounds,
+                scroll_offset,
+                line_height,
+                cursor_color,
+                window,
+            );
+        }
+    });
 }
 
 fn is_line_visible(
@@ -711,7 +719,7 @@ fn paint_multiline_placeholder(
         .text_system()
         .shape_line(placeholder.clone(), font_size, &[run], None);
     let line_height = text_style.line_height_in_pixels(window.rem_size());
-    let _ = shaped_line.paint(bounds.origin, line_height, window, cx);
+    let _ = shaped_line.paint(bounds.origin, line_height, TextAlign::Left, Some(bounds.size.width), window, cx);
 }
 
 fn paint_multiline_text(
@@ -874,7 +882,6 @@ struct SingleLinePaintState {
     text_width: Pixels,
     is_focused: bool,
     char_positions: Vec<Pixels>,
-    wrapped_line: Option<WrappedLine>,
     direction: TextDirection,
 }
 
@@ -907,11 +914,6 @@ impl SingleLinePaintState {
             }
         }
 
-        let wrapped_line = input_state
-            .line_layouts
-            .first()
-            .and_then(|l| l.wrapped_line.clone());
-
         let direction = input_state
             .line_layouts
             .first()
@@ -928,7 +930,6 @@ impl SingleLinePaintState {
             text_width,
             is_focused: focus_handle.is_focused(window),
             char_positions,
-            wrapped_line,
             direction,
         }
     }
@@ -975,7 +976,7 @@ fn paint_singleline(
             }
         }
     } else {
-        paint_singleline_text(&state, bounds, window, cx);
+        paint_singleline_text(&state, input, bounds, window, cx);
     }
 
     if let Some(marked_range) = &state.marked_range {
@@ -1036,19 +1037,16 @@ fn paint_singleline_placeholder(
     let y_offset = (bounds.size.height - line_height).max(px(0.)) / 2.0;
     let paint_origin = point(bounds.origin.x, bounds.origin.y + y_offset);
 
-    let _ = shaped_line.paint(paint_origin, line_height, window, cx);
+    let _ = shaped_line.paint(paint_origin, line_height, TextAlign::Left, Some(bounds.size.width), window, cx);
 }
 
 fn paint_singleline_text(
     state: &SingleLinePaintState,
+    input: &Entity<InputState>,
     bounds: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut App,
 ) {
-    let Some(wrapped_line) = &state.wrapped_line else {
-        return;
-    };
-
     let y_offset = (bounds.size.height - state.line_height).max(px(0.)) / 2.0;
     let paint_origin = point(bounds.origin.x - state.scroll_offset, bounds.origin.y + y_offset);
 
@@ -1056,7 +1054,17 @@ fn paint_singleline_text(
         TextDirection::Ltr => TextAlign::Left,
         TextDirection::Rtl => TextAlign::Right,
     };
-    let _ = wrapped_line.paint(paint_origin, state.line_height, text_align, Some(bounds), window, cx);
+
+    let line_height = state.line_height;
+
+    // Use update to get both state access and mutable cx in the same scope
+    input.update(cx, |input_state, cx| {
+        if let Some(line_layout) = input_state.line_layouts.first() {
+            if let Some(wrapped_line) = &line_layout.wrapped_line {
+                let _ = wrapped_line.paint(paint_origin, line_height, text_align, Some(bounds), window, cx);
+            }
+        }
+    });
 }
 
 fn paint_singleline_marked_underline(

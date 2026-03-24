@@ -98,7 +98,7 @@ pub struct InputState {
 }
 
 /// Layout information for a single logical line of text.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct InputLineLayout {
     pub text_range: Range<usize>,
     pub wrapped_line: Option<WrappedLine>,
@@ -693,7 +693,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus(&self.focus_handle);
+        window.focus(&self.focus_handle, cx);
         self.is_selecting = true;
 
         let is_same_position = self

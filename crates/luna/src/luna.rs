@@ -7,7 +7,7 @@ use assets::Assets;
 use canvas::{Canvas, CanvasElement, CanvasEvent, Tool};
 use glam::Vec2;
 use gpui::{
-    actions, div, point, prelude::*, px, App, Application, Entity, FocusHandle, Focusable,
+    actions, div, point, prelude::*, px, App, Entity, FocusHandle, Focusable,
     IntoElement, KeyBinding, Menu, MenuItem, ParentElement, PathPromptOptions, Styled, Subscription,
     TitlebarOptions, Window, WindowBackgroundAppearance, WindowOptions,
 };
@@ -92,10 +92,9 @@ impl Luna {
 
                     // If there are pending requests, trigger a re-render
                     if server_clone.has_pending() {
-                        this.update(cx, |_, cx| {
+                        let _ = this.update(cx, |_, cx| {
                             cx.notify();
-                        })
-                        .ok();
+                        });
                     }
                 }
             })
@@ -238,14 +237,13 @@ impl Luna {
 
     fn save_project_as(&mut self, _: &SaveProjectAs, _window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let path = cx
-                .update(|cx| {
-                    cx.prompt_for_new_path(
-                        &std::env::current_dir().unwrap_or_default(),
-                        Some("untitled.luna"),
-                    )
-                })?
-                .await??;
+            let receiver = cx.update(|cx| {
+                cx.prompt_for_new_path(
+                    &std::env::current_dir().unwrap_or_default(),
+                    Some("untitled.luna"),
+                )
+            })?;
+            let path: Option<PathBuf> = receiver.await??;
 
             if let Some(path) = path {
                 this.update(cx, |this, cx| {
@@ -272,16 +270,15 @@ impl Luna {
 
     fn open_project(&mut self, _: &OpenProject, _window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            let paths = cx
-                .update(|cx| {
-                    cx.prompt_for_paths(PathPromptOptions {
-                        files: true,
-                        directories: true,
-                        multiple: false,
-                        prompt: Some("Open Luna Project".into()),
-                    })
-                })?
-                .await??;
+            let receiver = cx.update(|cx| {
+                cx.prompt_for_paths(PathPromptOptions {
+                    files: true,
+                    directories: true,
+                    multiple: false,
+                    prompt: Some("Open Luna Project".into()),
+                })
+            })?;
+            let paths: Option<Vec<PathBuf>> = receiver.await??;
 
             if let Some(paths) = paths {
                 if let Some(path) = paths.first() {
@@ -406,7 +403,7 @@ fn init_keymap(cx: &mut App) {
 }
 
 fn main() {
-    Application::new().with_assets(Assets).run(|cx: &mut App| {
+    gpui_platform::application().with_assets(Assets).run(|cx: &mut App| {
         cx.on_action(quit);
 
         cx.set_menus(vec![
@@ -417,6 +414,7 @@ fn main() {
                     MenuItem::separator(),
                     MenuItem::action("Quit", Quit),
                 ],
+                disabled: false,
             },
             Menu {
                 name: "File".into(),
@@ -427,6 +425,7 @@ fn main() {
                     MenuItem::action("Save", SaveProject),
                     MenuItem::action("Save As...", SaveProjectAs),
                 ],
+                disabled: false,
             },
             Menu {
                 name: "Edit".into(),
@@ -434,6 +433,7 @@ fn main() {
                     MenuItem::action("Duplicate", Duplicate),
                     MenuItem::action("Delete", Delete),
                 ],
+                disabled: false,
             },
             Menu {
                 name: "Tools".into(),
@@ -444,6 +444,7 @@ fn main() {
                     MenuItem::action("Ellipse (O)", EllipseTool),
                     MenuItem::action("Frame (F)", FrameTool),
                 ],
+                disabled: false,
             },
         ]);
 
@@ -467,7 +468,7 @@ fn main() {
 
         window
             .update(cx, |view, window, cx| {
-                window.focus(&view.focus_handle(cx));
+                window.focus(&view.focus_handle(cx), cx);
                 cx.activate(true);
             })
             .unwrap();
