@@ -327,7 +327,7 @@ impl Render for Luna {
             .size_full()
             .flex()
             .flex_row()
-            .font_family("Berkeley Mono")
+            .font_family(".SystemUIFont")
             .text_xs()
             .bg(self.theme.ui_background)
             .text_color(self.theme.ui_text)
